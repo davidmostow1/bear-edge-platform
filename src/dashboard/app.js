@@ -3170,9 +3170,9 @@ function renderBestTargets(payload) {
             <p class="sources">${escapeHtml(odds?.bookmaker?.title ?? "No verified odds yet")} ${odds?.bookmaker?.lastUpdate ? `/ ${escapeHtml(shortTimestamp(odds.bookmaker.lastUpdate))}` : ""}${odds?.match ? ` / ${escapeHtml(odds.match.method)} ${escapeHtml(Math.round((odds.match.confidence ?? 0) * 100))}%` : ""}</p>
             ${renderRiskFlags(evaluation?.riskFlags ?? target.riskFlags)}
             <footer>
-              <button type="button" class="secondary load-best-target-button" data-target-id="${escapeHtml(target.id)}" ${target.ticketDraft ? "" : "disabled"}>Load Single</button>
+              <button type="button" class="secondary load-best-target-button" data-target-id="${escapeHtml(target.id)}" ${target.ticketDraft ? "" : "disabled"}>${target.odds ? "Load Single" : "Load Draft"}</button>
               <button type="button" class="evaluate-best-target-button" data-target-id="${escapeHtml(target.id)}" ${target.ticketDraft && evaluation?.verdict === "BET" ? "" : "disabled"}>Evaluate</button>
-              <button type="button" class="secondary add-best-target-to-parlay-button" data-target-id="${escapeHtml(target.id)}" ${target.ticketDraft ? "" : "disabled"}>Add To Parlay</button>
+              <button type="button" class="secondary add-best-target-to-parlay-button" data-target-id="${escapeHtml(target.id)}" ${target.ticketDraft && target.odds ? "" : "disabled"}>Add To Parlay</button>
             </footer>
           </article>
         `;

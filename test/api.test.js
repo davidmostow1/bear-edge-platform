@@ -220,6 +220,7 @@ test("HTTP API serves the local dashboard", async () => {
     assert.match(dashboardScript, /load-best-target-button/);
     assert.match(dashboardScript, /evaluate-best-target-button/);
     assert.match(dashboardScript, /add-best-target-to-parlay-button/);
+    assert.match(dashboardScript, /Load Draft/);
     assert.match(dashboardScript, /Load With Odds/);
     assert.match(dashboardScript, /parseAmericanOddsInput/);
     assert.match(dashboardScript, /updateCandidateEdgePreview/);
