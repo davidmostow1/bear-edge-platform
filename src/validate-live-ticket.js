@@ -35,6 +35,11 @@ const LIVE_TICKET_SCHEMA = Object.freeze({
           maxStake: { type: "number", exclusiveMinimum: 0 },
           maxBankrollFraction: { type: "number", minimum: 0, maximum: 1 },
           maxSourceAgeMinutes: { type: "number", minimum: 0 },
+          maxMarketAgeMinutes: { type: "number", minimum: 0 },
+          marketContext: {
+            type: "object",
+            additionalProperties: true
+          },
           riskFlags: {
             type: "array",
             items: { type: "object" }
@@ -169,7 +174,12 @@ function validateLiveLeg(leg, index, issues) {
     maxSourceAgeMinutes:
       leg.maxSourceAgeMinutes === undefined
         ? undefined
-        : readNumber(leg.maxSourceAgeMinutes, `legs[${index}].maxSourceAgeMinutes`, issues, { min: 0 })
+        : readNumber(leg.maxSourceAgeMinutes, `legs[${index}].maxSourceAgeMinutes`, issues, { min: 0 }),
+    maxMarketAgeMinutes:
+      leg.maxMarketAgeMinutes === undefined
+        ? undefined
+        : readNumber(leg.maxMarketAgeMinutes, `legs[${index}].maxMarketAgeMinutes`, issues, { min: 0 }),
+    marketContext: isPlainObject(leg.marketContext) ? leg.marketContext : undefined
   };
 }
 

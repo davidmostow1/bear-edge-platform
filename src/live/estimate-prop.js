@@ -1,9 +1,15 @@
+const {
+  analyzeMarketIntelligence,
+  applyMarketAdjustments
+} = require("./market-intelligence.js");
+
 const DEFAULT_LIVE_POLICY = Object.freeze({
   marketWeight: 0.35,
   recentWeight: 0.45,
   maxParlayLegs: 3,
   maxAltPropLegs: 2,
   maxSourceAgeMinutes: 20,
+  maxMarketAgeMinutes: 10,
   correlationPenalty: 0.92,
   allowCorrelatedLegs: false,
   kellyMultiplier: 0.2,
@@ -237,10 +243,16 @@ function evaluateLiveLeg(leg, snapshot, context = {}) {
   const selection = leg.label || leg.selection || leg.id;
   const marketOdds = leg.marketOdds;
   const oppositeOdds = leg.oppositeOdds ?? null;
-  const marketReferenceProbability =
-    oppositeOdds === null
-      ? americanToImpliedProbability(marketOdds)
-      : getTwoWayNoVigProbability(marketOdds, oppositeOdds);
+  const marketIntelligence = analyzeMarketIntelligence({
+    marketOdds,
+    oppositeOdds,
+    marketContext: leg.marketContext,
+    baseMarketWeight: leg.marketWeight ?? policy.marketWeight,
+    policy: {
+      maxMarketAgeMinutes: leg.maxMarketAgeMinutes ?? policy.maxMarketAgeMinutes
+    }
+  });
+  const marketReferenceProbability = marketIntelligence.referenceProbability;
   const recentWeight = leg.recentWeight ?? policy.recentWeight;
   const blendedMean = snapshot.season.perGame * (1 - recentWeight) + snapshot.recent.perGame * recentWeight;
   const liveEstimate = leg.modelProbabilityOverride === undefined
@@ -248,16 +260,17 @@ function evaluateLiveLeg(leg, snapshot, context = {}) {
     : null;
   const baseProbability = leg.modelProbabilityOverride ?? liveEstimate?.probability ?? estimateCountProbability({
     mean: blendedMean,
-    line: leg.line,
-    side: leg.side
-  });
+      line: leg.line,
+      side: leg.side
+    });
+  const marketAdjustedBaseProbability = applyMarketAdjustments(baseProbability, marketIntelligence);
   const adjustedProbability =
     liveEstimate?.resolved
       ? baseProbability
       : shrinkProbabilityTowardMarket(
-          baseProbability,
+          marketAdjustedBaseProbability,
           marketReferenceProbability,
-          leg.marketWeight ?? policy.marketWeight
+          marketIntelligence.marketWeight
         );
   const expectedValue = calculateExpectedValue({
     winProbability: adjustedProbability,
@@ -285,6 +298,7 @@ function evaluateLiveLeg(leg, snapshot, context = {}) {
         message: flag.message ?? flag.code
       }))
     : [];
+  riskFlags.push(...marketIntelligence.riskFlags);
   const reasons = [];
   let verdict = "BET";
 
@@ -359,10 +373,12 @@ function evaluateLiveLeg(leg, snapshot, context = {}) {
       recentWeight,
       blendedMean,
       baseProbability,
+      marketAdjustedBaseProbability,
       adjustedProbability,
       marketReferenceProbability,
       fairEdge,
       priceEdge,
+      marketIntelligence,
       sourceAgeMinutes,
       currentGameValue: liveEstimate?.currentValue ?? null,
       remainingMean: liveEstimate?.remainingMean ?? null,

@@ -795,9 +795,12 @@ test("HTTP API prices and evaluates best MLB targets with a configured odds key"
       assert.ok(payload.best.length >= 1);
       assert.equal(payload.best[0].status, "priced");
       assert.equal(payload.best[0].odds.bookmaker.key, "draftkings");
+      assert.ok(payload.best[0].odds.marketContext.consensus.length >= 2);
+      assert.equal(payload.best[0].evaluation.marketIntelligence.consensus.bookCount >= 2, true);
       assert.equal(typeof payload.best[0].odds.marketOdds, "number");
       assert.equal(payload.best[0].odds.match.confidence, 1);
       assert.equal(payload.best[0].ticketDraft.legs[0].marketOdds, payload.best[0].odds.marketOdds);
+      assert.ok(payload.best[0].ticketDraft.legs[0].marketContext.consensus.length >= 2);
       assert.equal(payload.best[0].riskFlags.some((flag) => flag.code === "MISSING_MARKET_ODDS"), false);
       assert.ok(["BET", "PASS", "WAIT"].includes(payload.best[0].evaluation.verdict));
       assert.equal(typeof payload.best[0].evaluation.expectedValueRoi, "number");

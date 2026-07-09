@@ -1,5 +1,9 @@
 const { generateResearchCandidates } = require("./candidates.js");
 const { fetchOddsApiEventMarkets, fetchOddsApiMarkets, resolveOddsApiKey } = require("./odds-api.js");
+const {
+  analyzeMarketIntelligence,
+  applyMarketAdjustments
+} = require("./market-intelligence.js");
 const { safeErrorMessage } = require("../config/secrets.js");
 
 const MLB_PROP_MARKETS = Object.freeze({
@@ -74,11 +78,24 @@ function kellyFraction(winProbability, americanOdds) {
 function evaluatePrice(candidate, price, options = {}) {
   const bankroll = options.bankroll ?? candidate.ticketDraft.bankroll ?? 1000;
   const marketWeight = candidate.ticketDraft.livePolicy?.marketWeight ?? 0.35;
-  const marketProbability = noVigProbability(price.marketOdds, price.oppositeOdds);
-  const adjustedProbability = shrinkProbability(
+  const marketIntelligence = analyzeMarketIntelligence({
+    marketOdds: price.marketOdds,
+    oppositeOdds: price.oppositeOdds,
+    marketContext: price.marketContext,
+    baseMarketWeight: marketWeight,
+    policy: options.maxMarketAgeMinutes === undefined
+      ? {}
+      : { maxMarketAgeMinutes: options.maxMarketAgeMinutes }
+  });
+  const marketProbability = marketIntelligence.referenceProbability;
+  const adjustedModelProbability = applyMarketAdjustments(
     candidate.prediction.modelProbability,
+    marketIntelligence
+  );
+  const adjustedProbability = shrinkProbability(
+    adjustedModelProbability,
     marketProbability,
-    marketWeight
+    marketIntelligence.marketWeight
   );
   const impliedProbability = americanToImpliedProbability(price.marketOdds);
   const priceEdge = adjustedProbability - impliedProbability;
@@ -101,6 +118,7 @@ function evaluatePrice(candidate, price, options = {}) {
       riskFlags.push(flag);
     }
   }
+  riskFlags.push(...marketIntelligence.riskFlags);
 
   let verdict = "BET";
 
@@ -146,6 +164,8 @@ function evaluatePrice(candidate, price, options = {}) {
   return {
     verdict,
     reasons,
+    marketIntelligence,
+    adjustedModelProbability,
     adjustedProbability,
     marketProbability,
     impliedProbability,
@@ -224,9 +244,12 @@ function pointMatches(outcomePoint, line) {
   return Number.isFinite(Number(outcomePoint)) && Math.abs(Number(outcomePoint) - Number(line)) < 0.001;
 }
 
-function findCandidatePrice(candidate, event) {
+function isSharpBookmaker(bookmakerKey) {
+  return ["pinnacle", "circa", "bookmaker", "betonlineag"].includes(String(bookmakerKey ?? "").toLowerCase());
+}
+
+function findOutcomePair(candidate, bookmaker) {
   const marketKey = mappedMarketKey(candidate);
-  const bookmaker = event?.bookmaker;
   const market = bookmaker?.markets?.find((entry) => entry.key === marketKey);
 
   if (!market) {
@@ -253,25 +276,64 @@ function findCandidatePrice(candidate, event) {
   const playerMatch = playerMatchDetail(marketOutcome, candidate.player?.name);
 
   return {
+    market,
+    marketOutcome,
+    oppositeOutcome,
+    playerMatch
+  };
+}
+
+function findCandidatePrice(candidate, event) {
+  const marketKey = mappedMarketKey(candidate);
+  const candidateBookmakers = Array.isArray(event?.bookmakers) && event.bookmakers.length > 0
+    ? event.bookmakers
+    : [event?.bookmaker].filter(Boolean);
+  const bookmakerPairs = candidateBookmakers
+    .map((bookmaker) => ({
+      bookmaker,
+      pair: findOutcomePair(candidate, bookmaker)
+    }))
+    .filter((entry) => entry.pair);
+  const preferredPair = bookmakerPairs.find((entry) => entry.bookmaker.key === event?.bookmaker?.key);
+  const primary = preferredPair ?? bookmakerPairs[0] ?? null;
+
+  if (!primary) {
+    return null;
+  }
+
+  const consensus = bookmakerPairs.map(({ bookmaker, pair }) => ({
+    bookmaker: bookmaker.key,
+    title: bookmaker.title,
+    marketOdds: pair.marketOutcome.price,
+    oppositeOdds: pair.oppositeOutcome?.price ?? null,
+    lastUpdate: pair.market.lastUpdate ?? bookmaker.lastUpdate ?? null,
+    isSharp: isSharpBookmaker(bookmaker.key)
+  }));
+
+  return {
     marketKey,
-    bookmaker: bookmaker
+    bookmaker: primary.bookmaker
       ? {
-          key: bookmaker.key,
-          title: bookmaker.title,
-          lastUpdate: bookmaker.lastUpdate
+          key: primary.bookmaker.key,
+          title: primary.bookmaker.title,
+          lastUpdate: primary.bookmaker.lastUpdate
         }
       : null,
-    marketLastUpdate: market.lastUpdate,
-    marketOdds: marketOutcome.price,
-    oppositeOdds: oppositeOutcome?.price ?? null,
-    point: marketOutcome.point,
-    outcomeName: marketOutcome.name,
-    outcomeDescription: marketOutcome.description,
+    marketLastUpdate: primary.pair.market.lastUpdate,
+    marketOdds: primary.pair.marketOutcome.price,
+    oppositeOdds: primary.pair.oppositeOutcome?.price ?? null,
+    point: primary.pair.marketOutcome.point,
+    outcomeName: primary.pair.marketOutcome.name,
+    outcomeDescription: primary.pair.marketOutcome.description,
+    marketContext: {
+      offeredLastUpdate: primary.pair.market.lastUpdate ?? primary.bookmaker.lastUpdate ?? null,
+      consensus
+    },
     match: {
       playerName: candidate.player?.name ?? null,
-      outcomeDescription: marketOutcome.description ?? null,
-      confidence: playerMatch.confidence,
-      method: playerMatch.method
+      outcomeDescription: primary.pair.marketOutcome.description ?? null,
+      confidence: primary.pair.playerMatch.confidence,
+      method: primary.pair.playerMatch.method
     }
   };
 }
@@ -424,6 +486,7 @@ function evaluatePricedCandidate(candidate, price, options = {}) {
   leg.marketOdds = price.marketOdds;
   leg.correlationKey = `${candidate.sport}:${candidate.gameId}`;
   leg.riskFlags = legRiskFlags;
+  leg.marketContext = price.marketContext;
 
   if (price.oppositeOdds === null || price.oppositeOdds === undefined) {
     delete leg.oppositeOdds;
@@ -450,6 +513,8 @@ function evaluatePricedCandidate(candidate, price, options = {}) {
     evaluation: {
       verdict: evaluation.verdict,
       reasons: evaluation.reasons,
+      marketIntelligence: evaluation.marketIntelligence,
+      adjustedModelProbability: evaluation.adjustedModelProbability,
       adjustedProbability: evaluation.adjustedProbability,
       priceEdge: evaluation.priceEdge,
       expectedValueRoi: evaluation.expectedValueRoi,
