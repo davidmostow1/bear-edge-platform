@@ -27,6 +27,10 @@ const LIVE_TICKET_SCHEMA = Object.freeze({
           line: { type: "number", minimum: 0 },
           marketOdds: { type: "number" },
           oppositeOdds: { type: "number" },
+          riskFlags: {
+            type: "array",
+            items: { type: "object" }
+          },
           source: { type: "object" }
         }
       }
@@ -116,6 +120,15 @@ function validateLiveLeg(leg, index, issues) {
     line,
     marketOdds,
     oppositeOdds,
+    riskFlags: Array.isArray(leg.riskFlags)
+      ? leg.riskFlags
+          .filter((flag) => isPlainObject(flag))
+          .map((flag) => ({
+            code: typeof flag.code === "string" && flag.code.trim() ? flag.code : "UNKNOWN",
+            severity: typeof flag.severity === "string" ? flag.severity : "info",
+            message: typeof flag.message === "string" ? flag.message : String(flag.code ?? "Risk flag")
+          }))
+      : [],
     source: leg.source,
     correlationKey: typeof leg.correlationKey === "string" ? leg.correlationKey : undefined,
     recentWeight:

@@ -1,5 +1,6 @@
 const { generateResearchCandidates } = require("./candidates.js");
 const { fetchOddsApiEventMarkets, fetchOddsApiMarkets, resolveOddsApiKey } = require("./odds-api.js");
+const { safeErrorMessage } = require("../config/secrets.js");
 
 const MLB_PROP_MARKETS = Object.freeze({
   strikeOuts: "pitcher_strikeouts",
@@ -187,12 +188,36 @@ function sideMatches(outcomeName, lean) {
   return normalizeName(outcomeName) === normalizeName(lean);
 }
 
-function playerMatches(outcome, playerName) {
+function playerMatchDetail(outcome, playerName) {
   const player = normalizeName(playerName);
   const description = normalizeName(outcome.description);
   const name = normalizeName(outcome.name);
 
-  return description === player || name === player || description.includes(player) || name.includes(player);
+  if (!player) {
+    return {
+      matches: false,
+      confidence: 0,
+      method: "missing_player_name"
+    };
+  }
+
+  if (description) {
+    return {
+      matches: description === player,
+      confidence: description === player ? 1 : 0,
+      method: description === player ? "exact_description" : "description_mismatch"
+    };
+  }
+
+  return {
+    matches: name === player,
+    confidence: name === player ? 0.9 : 0,
+    method: name === player ? "exact_name" : "name_mismatch"
+  };
+}
+
+function playerMatches(outcome, playerName) {
+  return playerMatchDetail(outcome, playerName).matches;
 }
 
 function pointMatches(outcomePoint, line) {
@@ -208,11 +233,13 @@ function findCandidatePrice(candidate, event) {
     return null;
   }
 
-  const marketOutcome = market.outcomes.find((outcome) =>
-    sideMatches(outcome.name, candidate.lean) &&
-    playerMatches(outcome, candidate.player?.name) &&
-    pointMatches(outcome.point, candidate.line)
-  );
+  const marketOutcome = market.outcomes.find((outcome) => {
+    const playerMatch = playerMatchDetail(outcome, candidate.player?.name);
+
+    return sideMatches(outcome.name, candidate.lean) &&
+      playerMatch.matches &&
+      pointMatches(outcome.point, candidate.line);
+  });
 
   if (!marketOutcome) {
     return null;
@@ -223,6 +250,7 @@ function findCandidatePrice(candidate, event) {
     playerMatches(outcome, candidate.player?.name) &&
     pointMatches(outcome.point, candidate.line)
   );
+  const playerMatch = playerMatchDetail(marketOutcome, candidate.player?.name);
 
   return {
     marketKey,
@@ -238,7 +266,13 @@ function findCandidatePrice(candidate, event) {
     oppositeOdds: oppositeOutcome?.price ?? null,
     point: marketOutcome.point,
     outcomeName: marketOutcome.name,
-    outcomeDescription: marketOutcome.description
+    outcomeDescription: marketOutcome.description,
+    match: {
+      playerName: candidate.player?.name ?? null,
+      outcomeDescription: marketOutcome.description ?? null,
+      confidence: playerMatch.confidence,
+      method: playerMatch.method
+    }
   };
 }
 
@@ -269,12 +303,20 @@ function unpricedRankValue(candidate) {
   return probability + pitcherBoost - riskScore(candidate) * 0.025;
 }
 
+function cloneJson(value) {
+  return JSON.parse(JSON.stringify(value));
+}
+
 function serializeCandidate(candidate, extra = {}) {
   return {
     id: candidate.id,
     status: extra.status ?? "price_check",
-    matchup: candidate.matchup,
+    sport: candidate.sport,
+    provider: candidate.provider,
+    gameId: candidate.gameId,
     gameDate: candidate.gameDate,
+    matchup: candidate.matchup,
+    selection: extra.selection ?? candidate.ticketDraft?.selection ?? null,
     player: candidate.player,
     marketType: candidate.marketType,
     statKey: candidate.statKey,
@@ -287,10 +329,11 @@ function serializeCandidate(candidate, extra = {}) {
       ? americanToImpliedProbability(candidate.prediction.fairAmericanOdds)
       : null,
     rankValue: extra.rankValue ?? unpricedRankValue(candidate),
-    riskFlags: candidate.riskFlags ?? [],
     stats: candidate.stats,
     odds: extra.odds ?? null,
     evaluation: extra.evaluation ?? null,
+    ticketDraft: extra.ticketDraft ?? candidate.ticketDraft ?? null,
+    riskFlags: extra.riskFlags ?? candidate.riskFlags ?? [],
     notes: extra.notes ?? candidate.prediction?.notes ?? []
   };
 }
@@ -374,6 +417,21 @@ async function fetchPricedEventsForCandidates(candidates, options) {
 
 function evaluatePricedCandidate(candidate, price, options = {}) {
   const evaluation = evaluatePrice(candidate, price, options);
+  const ticketDraft = cloneJson(candidate.ticketDraft);
+  const leg = ticketDraft.legs[0];
+  const legRiskFlags = (candidate.riskFlags ?? []).filter((flag) => flag.code !== "MISSING_MARKET_ODDS");
+
+  leg.marketOdds = price.marketOdds;
+  leg.correlationKey = `${candidate.sport}:${candidate.gameId}`;
+  leg.riskFlags = legRiskFlags;
+
+  if (price.oppositeOdds === null || price.oppositeOdds === undefined) {
+    delete leg.oppositeOdds;
+  } else {
+    leg.oppositeOdds = price.oppositeOdds;
+  }
+
+  ticketDraft.selection = `${candidate.ticketDraft.selection} at ${price.marketOdds > 0 ? "+" : ""}${price.marketOdds}`;
 
   const rankValue =
     (evaluation.verdict === "BET" ? 10 : evaluation.verdict === "WAIT" ? 4 : 0) +
@@ -384,8 +442,11 @@ function evaluatePricedCandidate(candidate, price, options = {}) {
 
   return serializeCandidate(candidate, {
     status: "priced",
+    selection: ticketDraft.selection,
     rankValue,
     odds: price,
+    ticketDraft,
+    riskFlags: evaluation.riskFlags,
     evaluation: {
       verdict: evaluation.verdict,
       reasons: evaluation.reasons,
@@ -436,12 +497,36 @@ async function getBestMlbTargets(options = {}) {
     };
   }
 
-  const pricing = await fetchPricedEventsForCandidates(eligibleCandidates, {
-    ...options,
-    oddsApiKey,
-    bookmakers: options.bookmakers ?? "draftkings",
-    regions: options.regions ?? "us"
-  });
+  let pricing;
+
+  try {
+    pricing = await fetchPricedEventsForCandidates(eligibleCandidates, {
+      ...options,
+      oddsApiKey,
+      bookmakers: options.bookmakers ?? "draftkings",
+      regions: options.regions ?? "us"
+    });
+  } catch (error) {
+    return {
+      status: "odds_error",
+      fetchedAt: new Date().toISOString(),
+      sourceMode: "official_stats_with_odds_provider_error",
+      summary: {
+        candidates: eligibleCandidates.length,
+        pricedCandidates: 0,
+        bestReturned: Math.min(limit, eligibleCandidates.length),
+        oddsApiConfigured: true,
+        eventsMatched: 0,
+        eventsPriced: 0
+      },
+      best: rankUnpricedCandidates(eligibleCandidates, limit),
+      candidates: candidatesResult,
+      warnings: [
+        `Verified odds provider failed: ${safeErrorMessage(error)}`,
+        "Showing price-check targets from official stats instead of priced BET calls."
+      ]
+    };
+  }
   const priced = [];
   const unmatched = [];
 
@@ -465,6 +550,7 @@ async function getBestMlbTargets(options = {}) {
   const best = priced
     .sort((a, b) => b.rankValue - a.rankValue)
     .slice(0, limit);
+  const fallbackBest = best.length > 0 ? best : rankUnpricedCandidates(eligibleCandidates, limit);
 
   return {
     status: priced.length > 0 ? "priced" : "odds_unmatched",
@@ -474,12 +560,12 @@ async function getBestMlbTargets(options = {}) {
       candidates: eligibleCandidates.length,
       pricedCandidates: priced.length,
       unmatchedCandidates: unmatched.length,
-      bestReturned: best.length,
+      bestReturned: fallbackBest.length,
       oddsApiConfigured: true,
       eventsMatched: pricing.candidateEvents.size,
       eventsPriced: pricing.pricedEvents.size
     },
-    best,
+    best: fallbackBest,
     unmatched: unmatched.slice(0, 25),
     oddsSources: {
       eventsSourceUrl: pricing.eventsResult.sourceUrl,
@@ -489,6 +575,7 @@ async function getBestMlbTargets(options = {}) {
     candidates: candidatesResult,
     warnings: Array.from(new Set([
       ...pricing.warnings,
+      ...(priced.length === 0 ? ["No exact player/side/line prop prices matched; showing price-check targets instead."] : []),
       "Priced outputs are still decision support; verify live book screen before wagering."
     ]))
   };

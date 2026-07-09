@@ -83,6 +83,53 @@ test("evaluateLiveTicket prices a cross-sport live parlay from official-source s
   assert.equal(parlayResult.researchPacket.sources.length, 2);
 });
 
+test("evaluateLiveTicket carries contextual leg risk flags into parlay output", async () => {
+  const ticket = validateLiveTicket({
+    kind: "parlay",
+    selection: "Risk-visible parlay",
+    bankroll: 1000,
+    legs: [
+      {
+        id: "leg-a",
+        label: "Sample hitter over 1.5 total bases",
+        provider: "mlb",
+        marketType: "prop",
+        side: "over",
+        line: 1.5,
+        marketOdds: 120,
+        riskFlags: [
+          {
+            code: "LINEUP_NOT_CONFIRMED",
+            severity: "medium",
+            message: "Lineup must be confirmed before betting."
+          }
+        ],
+        source: { playerId: 1, statGroup: "hitting", statKey: "totalBases", recentLimit: 10 }
+      },
+      {
+        id: "leg-b",
+        label: "Sample skater over 1.5 points",
+        provider: "nhl",
+        marketType: "prop",
+        side: "over",
+        line: 1.5,
+        marketOdds: 125,
+        source: { playerId: 2, statKey: "points", recentLimit: 5 }
+      }
+    ]
+  });
+
+  const result = await evaluateLiveTicket(ticket, {
+    fetchJsonImpl: fetchJson
+  });
+  const parlayResult = /** @type {any} */ (result);
+
+  assert.equal(parlayResult.kind, "parlay");
+  assert.equal(parlayResult.verdict, "BET");
+  assert.ok(parlayResult.legs[0].riskFlags.some((flag) => flag.code === "LINEUP_NOT_CONFIRMED"));
+  assert.ok(parlayResult.riskFlags.some((flag) => flag.code === "LEG_LINEUP_NOT_CONFIRMED"));
+});
+
 test("evaluateLiveTicket uses official current-game MLB stats when gamePk is supplied", async () => {
   const ticket = validateLiveTicket({
     kind: "single",

@@ -252,6 +252,7 @@ const templates = Object.freeze({
 });
 
 window.__bearEdgeCandidates = [];
+window.__bearEdgeBestTargets = [];
 window.__bearEdgeComparisonRows = [];
 window.__bearEdgeParlayLegs = [];
 window.__bearEdgeLoadedSummary = null;
@@ -3111,10 +3112,22 @@ function renderCandidates(payload) {
   applyCandidateFilters();
 }
 
+function summaryLabelForOdds(summary = {}) {
+  return summary?.oddsApiConfigured ? "odds key connected" : "odds key missing";
+}
+
 function renderBestTargets(payload) {
   const targets = Array.isArray(payload?.best) ? payload.best : [];
-  const modeLabel = payload?.status === "priced" ? "priced" : "price check";
   const summary = payload?.summary ?? {};
+  const modeLabel = payload?.status === "priced"
+    ? "priced"
+    : payload?.status === "odds_error"
+      ? "odds error"
+      : "price check";
+  const providerLabel = payload?.status === "odds_error"
+    ? "odds provider error"
+    : summaryLabelForOdds(summary);
+  window.__bearEdgeBestTargets = targets;
 
   els.bestTargetsTimestamp.textContent = payload?.fetchedAt
     ? `Updated ${shortTimestamp(payload.fetchedAt)}`
@@ -3129,7 +3142,7 @@ function renderBestTargets(payload) {
     <div class="best-targets-summary">
       <span class="tag ${payload.status === "priced" ? "low" : "medium"}">${escapeHtml(modeLabel)}</span>
       <span>${escapeHtml(summary.pricedCandidates ?? 0)} priced / ${escapeHtml(summary.candidates ?? 0)} candidates</span>
-      <span>${escapeHtml(summary.oddsApiConfigured ? "odds key connected" : "odds key missing")}</span>
+      <span>${escapeHtml(providerLabel)}</span>
     </div>
     <div class="best-targets-grid">
       ${targets.map((target, index) => {
@@ -3154,8 +3167,13 @@ function renderBestTargets(payload) {
               <div><span>Kelly</span><strong>${formatPercent(evaluation?.kellyFraction)}</strong></div>
               <div><span>Stake</span><strong>${formatMoney(evaluation?.recommendedStake)}</strong></div>
             </div>
-            <p class="sources">${escapeHtml(odds?.bookmaker?.title ?? "No verified odds yet")} ${odds?.bookmaker?.lastUpdate ? `/ ${escapeHtml(shortTimestamp(odds.bookmaker.lastUpdate))}` : ""}</p>
+            <p class="sources">${escapeHtml(odds?.bookmaker?.title ?? "No verified odds yet")} ${odds?.bookmaker?.lastUpdate ? `/ ${escapeHtml(shortTimestamp(odds.bookmaker.lastUpdate))}` : ""}${odds?.match ? ` / ${escapeHtml(odds.match.method)} ${escapeHtml(Math.round((odds.match.confidence ?? 0) * 100))}%` : ""}</p>
             ${renderRiskFlags(evaluation?.riskFlags ?? target.riskFlags)}
+            <footer>
+              <button type="button" class="secondary load-best-target-button" data-target-id="${escapeHtml(target.id)}" ${target.ticketDraft ? "" : "disabled"}>Load Single</button>
+              <button type="button" class="evaluate-best-target-button" data-target-id="${escapeHtml(target.id)}" ${target.ticketDraft && evaluation?.verdict === "BET" ? "" : "disabled"}>Evaluate</button>
+              <button type="button" class="secondary add-best-target-to-parlay-button" data-target-id="${escapeHtml(target.id)}" ${target.ticketDraft ? "" : "disabled"}>Add To Parlay</button>
+            </footer>
           </article>
         `;
       }).join("")}
@@ -3399,6 +3417,52 @@ function findCandidate(candidateId) {
   return window.__bearEdgeCandidates.find((entry) => entry.id === candidateId);
 }
 
+function findBestTarget(targetId) {
+  return window.__bearEdgeBestTargets.find((entry) => entry.id === targetId);
+}
+
+function bestTargetTicket(target) {
+  if (!target?.ticketDraft) {
+    throw new Error("This best target does not have a priced ticket draft.");
+  }
+
+  return applyBankrollPolicyToTicket(cloneJson(target.ticketDraft));
+}
+
+function parlayEntryFromBestTarget(target) {
+  const ticket = bestTargetTicket(target);
+  const leg = cloneJson(ticket.legs[0]);
+
+  return {
+    candidateId: target.id,
+    leg,
+    label: leg.label,
+    matchup: target.matchup,
+    sport: target.sport,
+    statLabel: target.statLabel ?? target.statKey,
+    modelProbability: target.modelProbability ?? null,
+    evRoi: target.evaluation?.expectedValueRoi ?? null,
+    correlationKey: leg.correlationKey ?? `${target.sport}:${target.gameId}`
+  };
+}
+
+function addBestTargetToParlay(target) {
+  const entry = parlayEntryFromBestTarget(target);
+  const existingIndex = window.__bearEdgeParlayLegs.findIndex((item) => item.candidateId === target.id);
+
+  if (existingIndex >= 0) {
+    window.__bearEdgeParlayLegs[existingIndex] = entry;
+  } else {
+    if (window.__bearEdgeParlayLegs.length >= 3) {
+      throw new Error("Parlay builder supports a maximum of 3 legs.");
+    }
+
+    window.__bearEdgeParlayLegs.push(entry);
+  }
+
+  renderParlayBuilder();
+}
+
 function buildLegFromCandidate(candidate, card) {
   const marketOdds = parseAmericanOddsInput(card.querySelector(".candidate-market-odds")?.value);
   const oppositeOdds = parseAmericanOddsInput(card.querySelector(".candidate-opposite-odds")?.value);
@@ -3412,6 +3476,7 @@ function buildLegFromCandidate(candidate, card) {
   leg.marketOdds = marketOdds;
   leg.marketType = marketType;
   leg.correlationKey = `${candidate.sport}:${candidate.gameId}`;
+  leg.riskFlags = (candidate.riskFlags ?? []).filter((flag) => flag.code !== "MISSING_MARKET_ODDS");
 
   if (oppositeOdds === null) {
     delete leg.oppositeOdds;
@@ -3809,6 +3874,46 @@ els.ticketInput.addEventListener("input", renderTicketPreflightFromText);
   });
 });
 els.historyBody.addEventListener("submit", settleEvaluation);
+els.bestTargetsBoard.addEventListener("click", async (event) => {
+  const loadButton = event.target.closest(".load-best-target-button");
+  const evaluateButton = event.target.closest(".evaluate-best-target-button");
+  const parlayButton = event.target.closest(".add-best-target-to-parlay-button");
+  const button = loadButton ?? evaluateButton ?? parlayButton;
+
+  if (!button) {
+    return;
+  }
+
+  const target = findBestTarget(button.dataset.targetId);
+
+  if (!target) {
+    setStatus("Best target is no longer available. Refresh best targets.", true);
+    return;
+  }
+
+  try {
+    if (parlayButton) {
+      addBestTargetToParlay(target);
+      setStatus("Best target added to the parlay builder.");
+      return;
+    }
+
+    const ticket = bestTargetTicket(target);
+    setTicketInputValue(ticket);
+    setStatus("Best target loaded into the ticket evaluator.");
+
+    if (evaluateButton) {
+      if (target.evaluation?.verdict !== "BET") {
+        throw new Error("Only BET verdict best targets can be evaluated from the quick action.");
+      }
+
+      setStatus("Evaluating best target...");
+      await submitTicket(ticket);
+    }
+  } catch (error) {
+    setStatus(error.message, true);
+  }
+});
 els.recordingComparisonResult.addEventListener("click", async (event) => {
   const loadButton = event.target.closest(".load-comparison-ticket-button");
   const evaluateButton = event.target.closest(".evaluate-comparison-ticket-button");

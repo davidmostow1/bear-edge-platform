@@ -5,6 +5,7 @@ const os = require("node:os");
 const path = require("node:path");
 
 const { createServer } = require("../src/server.js");
+const { getBestMlbTargets } = require("../src/live/best-mlb-targets.js");
 const {
   createAutoUpdateService,
   readAutoUpdateHistory,
@@ -215,6 +216,10 @@ test("HTTP API serves the local dashboard", async () => {
     assert.match(dashboardScript, /DraftKings Network Editorial Context/);
     assert.match(dashboardScript, /Cross-sport 2-leg alt prop parlay/);
     assert.match(dashboardScript, /loadCandidates/);
+    assert.match(dashboardScript, /findBestTarget/);
+    assert.match(dashboardScript, /load-best-target-button/);
+    assert.match(dashboardScript, /evaluate-best-target-button/);
+    assert.match(dashboardScript, /add-best-target-to-parlay-button/);
     assert.match(dashboardScript, /Load With Odds/);
     assert.match(dashboardScript, /parseAmericanOddsInput/);
     assert.match(dashboardScript, /updateCandidateEdgePreview/);
@@ -740,11 +745,49 @@ test("HTTP API prices and evaluates best MLB targets with a configured odds key"
       assert.equal(payload.best[0].status, "priced");
       assert.equal(payload.best[0].odds.bookmaker.key, "draftkings");
       assert.equal(typeof payload.best[0].odds.marketOdds, "number");
+      assert.equal(payload.best[0].odds.match.confidence, 1);
+      assert.equal(payload.best[0].ticketDraft.legs[0].marketOdds, payload.best[0].odds.marketOdds);
+      assert.equal(payload.best[0].riskFlags.some((flag) => flag.code === "MISSING_MARKET_ODDS"), false);
       assert.ok(["BET", "PASS", "WAIT"].includes(payload.best[0].evaluation.verdict));
       assert.equal(typeof payload.best[0].evaluation.expectedValueRoi, "number");
       assert.equal(payload.oddsSources.eventsSourceUrl?.includes("test-odds-key"), false);
       assert.equal(JSON.stringify(payload).includes("test-odds-key"), false);
     });
+  } finally {
+    if (previousOddsApiKey === undefined) {
+      delete process.env.THE_ODDS_API_KEY;
+    } else {
+      process.env.THE_ODDS_API_KEY = previousOddsApiKey;
+    }
+  }
+});
+
+test("best MLB targets fall back to price checks when verified odds provider fails", async () => {
+  const previousOddsApiKey = process.env.THE_ODDS_API_KEY;
+
+  process.env.THE_ODDS_API_KEY = "test-odds-key";
+
+  try {
+    const payload = await getBestMlbTargets({
+      date: "2026-06-17",
+      days: 1,
+      limit: 3,
+      bankroll: 1000,
+      fetchJsonImpl: async (url) => {
+        if (String(url).includes("/odds?")) {
+          throw new Error("Provider failed for apiKey=test-odds-key");
+        }
+
+        return fetchJson(url);
+      }
+    });
+
+    assert.equal(payload.status, "odds_error");
+    assert.equal(payload.summary.pricedCandidates, 0);
+    assert.equal(payload.best[0].status, "price_check");
+    assert.equal(payload.best[0].odds, null);
+    assert.ok(payload.warnings.some((warning) => warning.includes("price-check targets")));
+    assert.equal(JSON.stringify(payload).includes("test-odds-key"), false);
   } finally {
     if (previousOddsApiKey === undefined) {
       delete process.env.THE_ODDS_API_KEY;

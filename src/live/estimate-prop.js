@@ -278,7 +278,13 @@ function evaluateLiveLeg(leg, snapshot, context = {}) {
   const fairEdge = adjustedProbability - marketReferenceProbability;
   const priceEdge = adjustedProbability - americanToImpliedProbability(marketOdds);
   const sourceAgeMinutes = computeSourceAgeMinutes(snapshot);
-  const riskFlags = [];
+  const riskFlags = Array.isArray(leg.riskFlags)
+    ? leg.riskFlags.map((flag) => ({
+        code: flag.code,
+        severity: flag.severity ?? "info",
+        message: flag.message ?? flag.code
+      }))
+    : [];
   const reasons = [];
   let verdict = "BET";
 
@@ -306,6 +312,9 @@ function evaluateLiveLeg(leg, snapshot, context = {}) {
       message: "Leg stake falls below the configured minimum."
     });
     reasons.push("Leg stake is below minimum.");
+  } else if (riskFlags.some((flag) => flag.severity === "high")) {
+    verdict = "WAIT";
+    reasons.push("High-severity carried leg risk flags require manual confirmation.");
   } else {
     reasons.push("Live stats, EV, and stake sizing pass.");
   }
@@ -420,7 +429,16 @@ function combineParlayLegs(ticket, legResults) {
     maxStake: ticket.maxStake ?? Infinity,
     maxBankrollFraction: ticket.maxBankrollFraction ?? livePolicy.maxBankrollFraction
   });
-  const riskFlags = [];
+  const carriedLegRiskFlags = legResults.flatMap((leg) =>
+    (leg.riskFlags ?? []).map((flag) => ({
+      code: `LEG_${flag.code}`,
+      severity: flag.severity ?? "info",
+      message: `${leg.selection}: ${flag.message ?? flag.code}`,
+      legId: leg.id,
+      originalCode: flag.code
+    }))
+  );
+  const riskFlags = [...carriedLegRiskFlags];
   const reasons = [];
   let verdict = "BET";
 
@@ -450,9 +468,19 @@ function combineParlayLegs(ticket, legResults) {
     reasons.push("Correlated legs were detected.");
   } else if (hasPassLeg) {
     verdict = "PASS";
+    riskFlags.push({
+      code: "PARLAY_LEG_PASS",
+      severity: "high",
+      message: "At least one parlay leg failed its own gate."
+    });
     reasons.push("At least one leg failed its own gate.");
   } else if (hasWaitLeg) {
     verdict = "WAIT";
+    riskFlags.push({
+      code: "PARLAY_LEG_WAIT",
+      severity: "medium",
+      message: "At least one parlay leg is waiting on fresher or safer data."
+    });
     reasons.push("At least one leg is waiting on fresher live data.");
   } else if (expectedValue.roi < (ticket.minEvRoi ?? 0)) {
     verdict = "PASS";

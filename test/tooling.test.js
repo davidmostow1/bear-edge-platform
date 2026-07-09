@@ -12,6 +12,7 @@ const {
 } = require("../src/index.js");
 const { loadEnvFiles, parseEnv } = require("../src/config/env.js");
 const { redactSecrets } = require("../src/config/secrets.js");
+const { fetchJson: liveFetchJson } = require("../src/live/fetch-json.js");
 const { saveOddsApiKey, upsertEnvValue, validateOddsApiKey } = require("../src/config/odds-key-settings.js");
 const { parseArgs: parseLaunchArgs } = require("../src/cli/launch.js");
 const { parseArgs: parseServeArgs } = require("../src/cli/serve.js");
@@ -252,6 +253,31 @@ test("odds API key validation rejects placeholders and env upsert preserves comm
   assert.match(updated, /^# config/m);
   assert.match(updated, /^THE_ODDS_API_KEY=new-key/m);
   assert.match(updated, /^ODDS_API_KEY=alias/m);
+});
+
+test("live fetch errors redact API keys from URLs", async () => {
+  const originalFetch = globalThis.fetch;
+
+  globalThis.fetch = /** @type {any} */ (async () => ({
+    ok: false,
+    status: 401,
+    statusText: "Unauthorized"
+  }));
+
+  try {
+    await assert.rejects(
+      () => liveFetchJson("https://example.test/v1?apiKey=super-secret-provider-key&market=mlb"),
+      (error) => {
+        const message = error instanceof Error ? error.message : String(error);
+
+        assert.match(message, /apiKey=\[REDACTED\]/);
+        assert.equal(message.includes("super-secret-provider-key"), false);
+        return true;
+      }
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
 });
 
 test("appendDecisionLog writes JSONL output to the requested path", async () => {
