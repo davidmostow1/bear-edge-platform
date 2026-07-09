@@ -16,6 +16,7 @@ const { generateResearchCandidates } = require("./live/candidates.js");
 const { getBestMlbTargets } = require("./live/best-mlb-targets.js");
 const { matchCandidateOdds } = require("./live/candidate-odds-import.js");
 const { fetchGamesForWindow } = require("./live/schedule.js");
+const { getLiveDataHealth } = require("./live/live-data-health.js");
 const { getSourceStatusDashboard } = require("./live/source-status.js");
 const { parseDraftKingsSnapshot } = require("./live/draftkings-snapshot.js");
 const { parseDkPredictionsBoardSnapshot } = require("./live/dk-predictions-board-snapshot.js");
@@ -337,6 +338,23 @@ function createServer(options = {}) {
           fetchJsonImpl: process.env.BEAR_EDGE_TEST_MODE ? fetchJson : options.fetchJsonImpl,
           fetchTextImpl: process.env.BEAR_EDGE_TEST_MODE ? fetchText : options.fetchTextImpl,
           oddsApiKey: process.env.THE_ODDS_API_KEY ?? process.env.ODDS_API_KEY
+        });
+
+        return jsonResponse(response, 200, result);
+      }
+
+      if (request.method === "GET" && url.pathname === "/api/live-data-health") {
+        const result = await getLiveDataHealth({
+          date: url.searchParams.get("date") ?? "today",
+          days: Number(url.searchParams.get("days") ?? 2),
+          maxRosterTeams: Number(url.searchParams.get("maxRosterTeams") ?? 6),
+          fetchJsonImpl: process.env.BEAR_EDGE_TEST_MODE ? fetchJson : options.fetchJsonImpl,
+          fetchTextImpl: process.env.BEAR_EDGE_TEST_MODE ? fetchText : options.fetchTextImpl,
+          oddsApiKey: process.env.THE_ODDS_API_KEY ?? process.env.ODDS_API_KEY,
+          autoUpdateStatus: typeof options.autoUpdateService?.getStatus === "function"
+            ? options.autoUpdateService.getStatus()
+            : null,
+          autoUpdateSnapshotPath: options.autoUpdateSnapshotPath
         });
 
         return jsonResponse(response, 200, result);

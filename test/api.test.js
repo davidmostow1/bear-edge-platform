@@ -119,6 +119,29 @@ test("HTTP API simulates a verified betting card", async () => {
   });
 });
 
+test("HTTP API reports live data health with provider freshness", async () => {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "bear-edge-live-health-"));
+
+  await withServer(
+    async (baseUrl) => {
+      const response = await fetch(`${baseUrl}/api/live-data-health?date=2026-06-17&days=1`);
+      const payload = await response.json();
+
+      assert.equal(response.status, 200);
+      assert.ok(["live", "live-with-warnings", "stale", "blocked"].includes(payload.status));
+      assert.equal(payload.heartbeatMs, 60000);
+      assert.equal(typeof payload.requirements.officialScoreboards, "boolean");
+      assert.ok(payload.providers.some((provider) => provider.provider === "ESPN"));
+      assert.ok(payload.providers.every((provider) => typeof provider.liveStatus === "string"));
+      assert.equal(JSON.stringify(payload).includes("apiKey="), false);
+      assert.ok(Array.isArray(payload.actions));
+    },
+    {
+      autoUpdateSnapshotPath: path.join(tempDir, "snapshot.json")
+    }
+  );
+});
+
 test("HTTP API serves the local dashboard", async () => {
   await withServer(async (baseUrl) => {
     const dashboardResponse = await fetch(`${baseUrl}/dashboard`);
@@ -141,6 +164,9 @@ test("HTTP API serves the local dashboard", async () => {
     assert.match(dashboardHtml, /worldcup-goalscorer/);
     assert.match(dashboardHtml, /screenshotDropZone/);
     assert.match(dashboardHtml, /Auto Update/);
+    assert.match(dashboardHtml, /Live Data Heartbeat/);
+    assert.match(dashboardHtml, /liveDataHealthBoard/);
+    assert.match(dashboardHtml, /liveDataHealthRefreshButton/);
     assert.match(dashboardHtml, /System Audit/);
     assert.match(dashboardHtml, /systemAuditRefreshButton/);
     assert.match(dashboardHtml, /Release Readiness/);
@@ -178,6 +204,9 @@ test("HTTP API serves the local dashboard", async () => {
     assert.match(dashboardScript, /applyBankrollPolicyToTicket/);
     assert.match(dashboardScript, /Ticket preflight blocked evaluation/);
     assert.match(dashboardScript, /loadAutoUpdateStatus/);
+    assert.match(dashboardScript, /LIVE_DATA_HEARTBEAT_MS/);
+    assert.match(dashboardScript, /loadLiveDataHealth/);
+    assert.match(dashboardScript, /\/api\/live-data-health/);
     assert.match(dashboardScript, /loadSystemAudit/);
     assert.match(dashboardScript, /loadReleaseReadiness/);
     assert.match(dashboardScript, /\/api\/release-readiness/);
@@ -603,7 +632,7 @@ test("HTTP API reports live source freshness and blocked market feeds", async ()
 
     assert.equal(response.status, 200);
     assert.deepEqual(payload.dates, ["2026-06-17"]);
-    assert.equal(payload.refreshPolicy.autoRefreshMs, 300000);
+    assert.equal(payload.refreshPolicy.autoRefreshMs, 60000);
 
     const espn = payload.providers.find((provider) => provider.provider === "ESPN");
     const draftKings = payload.providers.find((provider) => provider.provider === "DraftKings");

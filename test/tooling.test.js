@@ -69,7 +69,7 @@ test("serve CLI parses auto-update controls", () => {
 
     assert.deepEqual(parseServeArgs(["--port", "3030"]), {
       autoUpdate: true,
-      autoUpdateIntervalMs: 300000,
+      autoUpdateIntervalMs: 60000,
       host: "127.0.0.1",
       port: 3030
     });
@@ -114,7 +114,7 @@ test("launch CLI parses local app controls", () => {
 
     assert.deepEqual(parseLaunchArgs([]), {
       autoUpdate: true,
-      autoUpdateIntervalMs: 300000,
+      autoUpdateIntervalMs: 60000,
       host: "127.0.0.1",
       openBrowser: true,
       port: 3000,

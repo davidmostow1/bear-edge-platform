@@ -14,7 +14,7 @@ function parseArgs(argv) {
   let port = Number(process.env.PORT ?? 3000);
   let host = process.env.BEAR_EDGE_HOST ?? "127.0.0.1";
   let autoUpdate = process.env.BEAR_EDGE_AUTO_UPDATE === "0" ? false : true;
-  let autoUpdateIntervalMs = Number(process.env.BEAR_EDGE_AUTO_UPDATE_INTERVAL_MS ?? 5 * 60 * 1000);
+  let autoUpdateIntervalMs = Number(process.env.BEAR_EDGE_AUTO_UPDATE_INTERVAL_MS ?? 60 * 1000);
 
   for (let index = 0; index < args.length; index += 1) {
     const value = args[index];

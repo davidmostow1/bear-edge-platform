@@ -27,6 +27,9 @@ const els = {
   autoUpdateBoard: document.querySelector("#autoUpdateBoard"),
   autoUpdateRunButton: document.querySelector("#autoUpdateRunButton"),
   autoUpdateTimestamp: document.querySelector("#autoUpdateTimestamp"),
+  liveDataHealthBoard: document.querySelector("#liveDataHealthBoard"),
+  liveDataHealthRefreshButton: document.querySelector("#liveDataHealthRefreshButton"),
+  liveDataHealthTimestamp: document.querySelector("#liveDataHealthTimestamp"),
   systemAuditBoard: document.querySelector("#systemAuditBoard"),
   systemAuditRefreshButton: document.querySelector("#systemAuditRefreshButton"),
   systemAuditTimestamp: document.querySelector("#systemAuditTimestamp"),
@@ -103,6 +106,7 @@ const els = {
 };
 
 const AUTO_REFRESH_MS = 5 * 60 * 1000;
+const LIVE_DATA_HEARTBEAT_MS = 60 * 1000;
 
 const percentFormatter = new Intl.NumberFormat(undefined, {
   style: "percent",
@@ -1237,6 +1241,120 @@ function formatDurationMs(value) {
   return `${(value / 1000).toFixed(1)}s`;
 }
 
+function liveDataStatusClass(status) {
+  if (status === "live") {
+    return "ok";
+  }
+
+  if (status === "live-with-warnings") {
+    return "medium";
+  }
+
+  return "high";
+}
+
+function renderRequirementPill(label, ok) {
+  return `
+    <article class="live-requirement ${ok ? "ok" : "blocked"}">
+      <span>${escapeHtml(label)}</span>
+      <strong>${ok ? "usable" : "blocked"}</strong>
+    </article>
+  `;
+}
+
+function renderLiveDataHealth(payload) {
+  const providers = Array.isArray(payload?.providers) ? payload.providers : [];
+  const actions = Array.isArray(payload?.actions) ? payload.actions : [];
+  const requirements = payload?.requirements ?? {};
+  const summary = payload?.summary ?? {};
+  const coverage = payload?.coverage ?? {};
+  const autoUpdate = payload?.autoUpdate ?? {};
+  const snapshot = payload?.snapshot ?? {};
+
+  els.liveDataHealthTimestamp.textContent = payload?.generatedAt
+    ? `Checked ${shortTimestamp(payload.generatedAt)}`
+    : "Checked";
+
+  els.liveDataHealthBoard.innerHTML = `
+    <div class="live-data-hero edge-${liveDataStatusClass(payload?.status)}">
+      <div>
+        <h3>${escapeHtml(payload?.status ?? "unknown")}</h3>
+        <p>${escapeHtml(summary.manualOddsRequired ? "Live stats are available, but verified sportsbook odds still need manual entry or a fixed odds key." : "Live stats and verified odds are usable.")}</p>
+      </div>
+      <strong>${escapeHtml((coverage.officialScoreboardSports ?? []).join(", ") || "no sports")}</strong>
+    </div>
+    <div class="live-data-grid">
+      ${[
+        ["Heartbeat", formatDurationMs(payload?.heartbeatMs)],
+        ["Source age", formatDurationMs(payload?.sourceStatusAgeMs)],
+        ["Snapshot age", formatDurationMs(snapshot.ageMs)],
+        ["Auto update", autoUpdate.started ? "on" : "off"],
+        ["Next run", autoUpdate.nextRunAt ? shortTimestamp(autoUpdate.nextRunAt) : "-"],
+        ["Events", coverage.eventCount ?? 0],
+        ["Live providers", (summary.liveProviders ?? []).length],
+        ["Blocked", (summary.blockedProviders ?? []).join(", ") || "none"]
+      ]
+        .map(([label, value]) => `<article class="metric compact"><span>${escapeHtml(label)}</span><strong>${escapeHtml(value)}</strong></article>`)
+        .join("")}
+    </div>
+    <div class="live-requirement-grid">
+      ${renderRequirementPill("Official scoreboards", Boolean(requirements.officialScoreboards))}
+      ${renderRequirementPill("Research pages", Boolean(requirements.researchPages))}
+      ${renderRequirementPill("Verified odds", Boolean(requirements.verifiedOdds))}
+      ${renderRequirementPill("Tennis automation", Boolean(requirements.tennisAutomation))}
+    </div>
+    <div class="live-provider-grid">
+      ${providers
+        .map((provider) => `
+          <article class="live-provider-card edge-${liveDataStatusClass(provider.liveStatus === "live" ? "live" : provider.liveStatus === "degraded" ? "live-with-warnings" : "blocked")}">
+            <header>
+              <div>
+                <strong>${escapeHtml(provider.provider)}</strong>
+                <p class="sources">${escapeHtml(provider.sourceType)} / ${escapeHtml(shortTimestamp(provider.fetchedAt))}</p>
+              </div>
+              <span class="tag ${provider.liveStatus === "live" ? "ok" : provider.liveStatus === "degraded" ? "medium" : "high"}">${escapeHtml(provider.liveStatus)}</span>
+            </header>
+            <p>${escapeHtml(provider.status)} / age ${escapeHtml(formatDurationMs(provider.ageMs))}</p>
+            ${
+              provider.warnings?.length
+                ? `<p class="sources">${escapeHtml(provider.warnings[0])}</p>`
+                : ""
+            }
+          </article>
+        `)
+        .join("")}
+    </div>
+    ${
+      actions.length > 0
+        ? `<div class="live-action-list">
+            <h3>Next Live-Data Actions</h3>
+            ${actions.map((action) => `<p>${escapeHtml(action)}</p>`).join("")}
+          </div>`
+        : '<p class="muted auto-update-empty">No live-data actions required right now.</p>'
+    }
+  `;
+}
+
+async function loadLiveDataHealth({ quiet = false } = {}) {
+  if (!quiet) {
+    els.liveDataHealthBoard.innerHTML = '<p class="muted auto-update-empty">Checking live data heartbeat...</p>';
+  }
+
+  try {
+    const response = await fetch("/api/live-data-health?date=today&days=2");
+    const payload = await response.json();
+
+    if (!response.ok) {
+      throw new Error(payload.error ?? "Unable to load live data health.");
+    }
+
+    renderLiveDataHealth(payload);
+  } catch (error) {
+    els.liveDataHealthBoard.innerHTML = `<p class="muted auto-update-empty">${escapeHtml(error.message)}</p>`;
+    els.liveDataHealthTimestamp.textContent = "Live data check failed";
+  }
+}
+
 function renderAutoUpdateStatus(payload, history = null, snapshotPayload = null) {
   window.__bearEdgeAutoUpdate = payload;
   const result = payload?.lastResult ?? null;
@@ -1935,7 +2053,7 @@ async function runAutoUpdateNow() {
       throw new Error(payload.error ?? "Auto-update run failed.");
     }
 
-    await Promise.all([loadDashboard(), loadAutoUpdateStatus(), loadSystemAudit(), loadSourceStatus("today"), loadGames("today"), loadCandidates("today")]);
+    await Promise.all([loadDashboard(), loadAutoUpdateStatus(), loadLiveDataHealth(), loadSystemAudit(), loadSourceStatus("today"), loadGames("today"), loadCandidates("today")]);
     setStatus("Auto-update run completed.");
   } catch (error) {
     setStatus(error.message, true);
@@ -4491,6 +4609,9 @@ els.parlayBuilderBoard.addEventListener("click", (event) => {
 els.sourceStatusRefreshButton.addEventListener("click", () => {
   loadSourceStatus("today");
 });
+els.liveDataHealthRefreshButton.addEventListener("click", () => {
+  loadLiveDataHealth();
+});
 els.oddsKeyForm.addEventListener("submit", saveOddsApiKey);
 els.oddsKeyTestButton.addEventListener("click", testSavedOddsApiKey);
 els.onlineOpportunitiesRefreshButton.addEventListener("click", () => {
@@ -4750,12 +4871,15 @@ renderOperatorBoards();
 
 loadHealth()
   .then(async () => {
-    await Promise.all([loadDashboard(), loadAutoUpdateStatus(), loadSystemAudit(), loadReleaseReadiness(), loadProviderSetup(), loadOddsKeyStatus(), loadSourceStatus("today"), loadOnlineOpportunities(), loadGames("today"), loadBestTargets("today"), loadCandidates("today")]);
+    await Promise.all([loadDashboard(), loadAutoUpdateStatus(), loadLiveDataHealth(), loadSystemAudit(), loadReleaseReadiness(), loadProviderSetup(), loadOddsKeyStatus(), loadSourceStatus("today"), loadOnlineOpportunities(), loadGames("today"), loadBestTargets("today"), loadCandidates("today")]);
     window.setInterval(() => {
       Promise.all([loadDashboard(), loadAutoUpdateStatus(), loadSystemAudit(), loadReleaseReadiness(), loadProviderSetup(), loadOddsKeyStatus(), loadSourceStatus("today"), loadOnlineOpportunities(), loadGames("today"), loadBestTargets("today"), loadCandidates("today")]).catch(
         (error) => setStatus(error.message, true)
       );
     }, AUTO_REFRESH_MS);
+    window.setInterval(() => {
+      loadLiveDataHealth({ quiet: true }).catch((error) => setStatus(error.message, true));
+    }, LIVE_DATA_HEARTBEAT_MS);
   })
   .catch((error) => {
     els.healthDot.classList.remove("ok");

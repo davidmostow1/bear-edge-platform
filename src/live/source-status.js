@@ -2,7 +2,7 @@ const { fetchJson } = require("./fetch-json.js");
 const { safeErrorMessage } = require("../config/secrets.js");
 const { formatDate } = require("./schedule.js");
 
-const AUTO_REFRESH_MS = 5 * 60 * 1000;
+const AUTO_REFRESH_MS = 60 * 1000;
 const ESPN_SPORTS = Object.freeze([
   { id: "mlb", label: "MLB", path: "baseball/mlb" },
   { id: "nhl", label: "NHL", path: "hockey/nhl" },

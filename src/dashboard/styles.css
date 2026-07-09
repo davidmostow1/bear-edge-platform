@@ -660,7 +660,8 @@ main {
   margin-bottom: 18px;
 }
 
-.auto-update-panel {
+.auto-update-panel,
+.live-data-panel {
   margin-bottom: 18px;
   overflow: hidden;
 }
@@ -735,10 +736,127 @@ main {
   padding: 16px;
 }
 
-.auto-update-grid {
+.auto-update-grid,
+.live-data-grid {
   display: grid;
   grid-template-columns: repeat(8, minmax(110px, 1fr));
   gap: 10px;
+}
+
+.live-data-health-board {
+  display: grid;
+  gap: 12px;
+  padding: 16px;
+}
+
+.live-data-hero {
+  align-items: center;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  display: flex;
+  gap: 16px;
+  justify-content: space-between;
+  padding: 14px;
+}
+
+.live-data-hero h3 {
+  font-size: clamp(22px, 3vw, 38px);
+  letter-spacing: -0.04em;
+  margin: 0 0 4px;
+}
+
+.live-data-hero p {
+  color: var(--muted);
+  line-height: 1.35;
+  margin: 0;
+}
+
+.live-data-hero strong {
+  background: rgba(255, 255, 255, 0.7);
+  border: 1px solid rgba(216, 223, 217, 0.9);
+  border-radius: 999px;
+  font-size: 13px;
+  padding: 8px 10px;
+  text-align: right;
+}
+
+.live-requirement-grid,
+.live-provider-grid {
+  display: grid;
+  gap: 10px;
+}
+
+.live-requirement-grid {
+  grid-template-columns: repeat(4, minmax(140px, 1fr));
+}
+
+.live-provider-grid {
+  grid-template-columns: repeat(5, minmax(170px, 1fr));
+}
+
+.live-requirement,
+.live-provider-card {
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  display: grid;
+  gap: 7px;
+  padding: 10px;
+}
+
+.live-requirement.ok {
+  border-color: rgba(15, 123, 95, 0.25);
+}
+
+.live-requirement.blocked {
+  border-color: rgba(180, 51, 46, 0.22);
+}
+
+.live-requirement span {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.live-requirement strong {
+  font-size: 16px;
+}
+
+.live-provider-card header {
+  align-items: start;
+  display: flex;
+  gap: 8px;
+  justify-content: space-between;
+}
+
+.live-provider-card p {
+  font-size: 13px;
+  line-height: 1.35;
+  margin: 0;
+}
+
+.live-action-list {
+  background: var(--amber-soft);
+  border: 1px solid rgba(169, 104, 0, 0.24);
+  border-radius: 12px;
+  display: grid;
+  gap: 7px;
+  padding: 12px;
+}
+
+.live-action-list h3 {
+  color: var(--amber);
+  font-size: 14px;
+  margin: 0;
+  text-transform: uppercase;
+}
+
+.live-action-list p {
+  color: var(--ink);
+  font-size: 13px;
+  line-height: 1.35;
+  margin: 0;
 }
 
 .system-audit-board {
@@ -2454,6 +2572,9 @@ th {
   .article-grid,
   .auto-update-grid,
   .auto-update-detail,
+  .live-data-grid,
+  .live-requirement-grid,
+  .live-provider-grid,
   .system-audit-grid,
   .release-summary-grid,
   .release-lane-grid,
@@ -2498,6 +2619,9 @@ th {
   .article-grid,
   .auto-update-grid,
   .auto-update-detail,
+  .live-data-grid,
+  .live-requirement-grid,
+  .live-provider-grid,
   .system-audit-grid,
   .release-summary-grid,
   .release-lane-grid,
@@ -2555,6 +2679,7 @@ th {
 
   .unit-pressure,
   .operator-state-card,
+  .live-data-hero,
   .release-hero {
     align-items: start;
     flex-direction: column;

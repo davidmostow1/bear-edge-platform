@@ -10,7 +10,7 @@ const { loadEnvFiles } = require("../config/env.js");
 const PROJECT_ROOT = path.resolve(__dirname, "../..");
 const DEFAULT_PORT = 3000;
 const DEFAULT_HEALTH_TIMEOUT_MS = 20_000;
-const DEFAULT_AUTO_UPDATE_INTERVAL_MS = 5 * 60 * 1000;
+const DEFAULT_AUTO_UPDATE_INTERVAL_MS = 60 * 1000;
 
 loadEnvFiles({ rootDir: PROJECT_ROOT });
 
