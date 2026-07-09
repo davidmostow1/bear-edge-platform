@@ -38,7 +38,11 @@ data/reports/release_readiness.md
 
 These files are generated local artifacts and should not contain API secrets.
 
-The release audit loads `.env.local` so saved provider keys are recognized without printing the secret. The dashboard version reports three separate lanes:
+The release audit loads `.env.local` so saved provider keys are recognized without printing the secret. The top-level score is a software/product readiness score: runtime, local safety, tests, docs, provider wiring, and release hygiene.
+
+It deliberately separates betting proof into `Evidence Gates`. Missing settled-bet evidence, missing licensed injury feeds, or locked tennis automation must stay visible, but they should not make the local software look broken.
+
+The dashboard version reports three separate lanes:
 
 - `Local App`: runtime, verification, dashboard assets, localhost binding, and tracked-secret safety.
 - `Data Edge`: verified odds, stats/injury feeds, tennis data gates, decision-log quality, and validation status.

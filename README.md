@@ -140,7 +140,7 @@ Generate a product-readiness audit for GitHub/CI/secrets/provider/data-quality c
 npm run audit:release
 ```
 
-The local dashboard also includes a `Release Readiness` panel. The report is split into `Local App`, `Data Edge`, and `Commercial Readiness` lanes, with exact next actions for each warning or blocker. Generated reports are written to `data/reports/`.
+The local dashboard also includes a `Release Readiness` panel. The report is split into `Local App`, `Data Edge`, and `Commercial Readiness` lanes, with exact next actions for each warning or blocker. Betting-proof items such as settled-bet quality, three-win validation, and licensed tennis/injury feeds are shown as `Evidence Gates` instead of being hidden or mislabeled as app-build failures. Generated reports are written to `data/reports/`.
 
 ## Live Ticket Verification
 

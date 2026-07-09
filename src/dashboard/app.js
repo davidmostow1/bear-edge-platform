@@ -1480,7 +1480,7 @@ function releaseStatusClass(status) {
     return "ok";
   }
 
-  if (status === "shippable-with-warnings" || status === "needs-work") {
+  if (status === "shippable-with-warnings" || status === "needs-work" || status === "needs-evidence" || status === "ready-with-evidence-gates") {
     return "medium";
   }
 
@@ -1491,6 +1491,7 @@ function renderReleaseReadiness(payload) {
   const checks = Array.isArray(payload?.checks) ? payload.checks : [];
   const lanes = Array.isArray(payload?.lanes) ? payload.lanes : [];
   const nextActions = Array.isArray(payload?.nextActions) ? payload.nextActions : [];
+  const evidenceGates = Array.isArray(payload?.evidenceGates) ? payload.evidenceGates : [];
   const importantChecks = checks
     .filter((entry) => entry.status !== "pass")
     .concat(checks.filter((entry) => entry.status === "pass").slice(0, 5));
@@ -1524,6 +1525,7 @@ function renderReleaseReadiness(payload) {
         ["Passed", summary.passed ?? 0],
         ["Warnings", summary.warnings ?? 0],
         ["Failed", summary.failed ?? 0],
+        ["Info gates", summary.info ?? 0],
         ["Tracked files", payload?.trackedFiles?.count ?? 0],
         ["BET calls", payload?.decisionLog?.betCalls ?? 0],
         ["3-win gate", payload?.decisionLog?.validationGate?.complete ? "complete" : `${payload?.decisionLog?.validationGate?.currentWinStreak ?? 0}/${payload?.decisionLog?.validationGate?.requiredWinStreak ?? 3}`]
@@ -1545,6 +1547,24 @@ function renderReleaseReadiness(payload) {
             .join("")}
         </div>`
       : ""}
+    ${evidenceGates.length > 0
+      ? `<div class="release-evidence">
+          <h3>Evidence Gates</h3>
+          <p>These are betting-proof and licensed-data gates. They stay visible, but they do not count as local software-release failures.</p>
+          <div class="release-evidence-grid">
+            ${evidenceGates
+              .map((gate) => `
+                <article class="${gate.complete ? "complete" : "incomplete"}">
+                  <span class="tag ${gate.complete ? "ok" : "medium"}">${gate.complete ? "complete" : "needed"}</span>
+                  <strong>${escapeHtml(gate.label)}</strong>
+                  <small>${escapeHtml(gate.status)}${gate.current !== undefined ? ` / ${escapeHtml(gate.current)}/${escapeHtml(gate.required)}` : ""}</small>
+                  <p>${escapeHtml(gate.action)}</p>
+                </article>
+              `)
+              .join("")}
+          </div>
+        </div>`
+      : ""}
     ${nextActions.length > 0
       ? `<div class="release-actions">
           <h3>Next Actions</h3>
@@ -1552,7 +1572,7 @@ function renderReleaseReadiness(payload) {
             .slice(0, 6)
             .map((entry) => `
               <article>
-                <span class="tag ${entry.status === "fail" ? "high" : "medium"}">${escapeHtml(entry.status)}</span>
+                <span class="tag ${entry.status === "fail" ? "high" : entry.status === "info" ? "low" : "medium"}">${escapeHtml(entry.status)}</span>
                 <div>
                   <strong>${escapeHtml(entry.area)}: ${escapeHtml(entry.check)}</strong>
                   <p>${escapeHtml(entry.action)}</p>
@@ -1566,7 +1586,7 @@ function renderReleaseReadiness(payload) {
       ${importantChecks
         .map((entry) => `
           <article class="release-check ${escapeHtml(entry.status)}">
-            <span class="tag ${entry.status === "pass" ? "ok" : entry.status === "warn" ? "medium" : "high"}">${escapeHtml(entry.status)}</span>
+            <span class="tag ${entry.status === "pass" ? "ok" : entry.status === "warn" ? "medium" : entry.status === "info" ? "low" : "high"}">${escapeHtml(entry.status)}</span>
             <div>
               <strong>${escapeHtml(entry.area)}</strong>
               <p>${escapeHtml(entry.message)}</p>

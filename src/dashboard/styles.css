@@ -800,7 +800,7 @@ main {
 
 .release-summary-grid {
   display: grid;
-  grid-template-columns: repeat(6, minmax(110px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
   gap: 10px;
 }
 
@@ -882,6 +882,53 @@ main {
 .release-actions p {
   color: var(--muted);
   font-size: 13px;
+}
+
+.release-evidence {
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.82), rgba(255, 248, 232, 0.86));
+  border: 1px solid rgba(169, 104, 0, 0.18);
+  border-radius: 14px;
+  display: grid;
+  gap: 10px;
+  padding: 14px;
+}
+
+.release-evidence h3 {
+  margin: 0;
+}
+
+.release-evidence > p {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.release-evidence-grid {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(4, minmax(150px, 1fr));
+}
+
+.release-evidence-grid article {
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  display: grid;
+  gap: 5px;
+  padding: 10px;
+}
+
+.release-evidence-grid article.complete {
+  border-color: rgba(15, 123, 95, 0.22);
+}
+
+.release-evidence-grid article.incomplete {
+  border-color: rgba(169, 104, 0, 0.2);
+}
+
+.release-evidence-grid small,
+.release-evidence-grid p {
+  color: var(--muted);
+  font-size: 12px;
 }
 
 .release-check-list {
@@ -2373,6 +2420,7 @@ th {
   .system-audit-grid,
   .release-summary-grid,
   .release-lane-grid,
+  .release-evidence-grid,
   .history-run-grid,
   .online-source-strip,
   .online-card-grid,
@@ -2416,6 +2464,7 @@ th {
   .system-audit-grid,
   .release-summary-grid,
   .release-lane-grid,
+  .release-evidence-grid,
   .history-run-grid,
   .online-source-strip,
   .online-card-grid,

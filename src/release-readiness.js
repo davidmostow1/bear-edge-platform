@@ -103,16 +103,20 @@ async function gitReadiness(rootDir) {
 }
 
 function scoreChecks(checks) {
+  const scoreableChecks = checks.filter((check) => check.status !== "info");
   const passed = checks.filter((check) => check.status === "pass").length;
   const warnings = checks.filter((check) => check.status === "warn").length;
   const failed = checks.filter((check) => check.status === "fail").length;
-  const score = Math.max(0, Math.round((passed / Math.max(checks.length, 1)) * 100) - failed * 12 - warnings * 2);
+  const info = checks.filter((check) => check.status === "info").length;
+  const scoreablePassed = scoreableChecks.filter((check) => check.status === "pass").length;
+  const score = Math.max(0, Math.round((scoreablePassed / Math.max(scoreableChecks.length, 1)) * 100) - failed * 12 - warnings * 2);
 
   return {
     score,
     passed,
     warnings,
     failed,
+    info,
     total: checks.length
   };
 }
@@ -134,6 +138,10 @@ function laneStatus(summary) {
 
   if (summary.warnings > 0) {
     return "needs-work";
+  }
+
+  if (summary.info > 0) {
+    return "needs-evidence";
   }
 
   return "ready";
@@ -167,6 +175,10 @@ function readinessStatus(summary) {
     return "shippable-with-warnings";
   }
 
+  if (summary.info > 0) {
+    return "ready-with-evidence-gates";
+  }
+
   return "ready";
 }
 
@@ -183,6 +195,8 @@ async function getReleaseReadiness(options = {}) {
     serveCliExists,
     launchCliExists,
     releaseScriptExists,
+    publicMlbProviderExists,
+    publicNhlProviderExists,
     serverText,
     serveText
   ] = await Promise.all([
@@ -195,6 +209,8 @@ async function getReleaseReadiness(options = {}) {
     fileExists(path.join(rootDir, "src", "cli", "serve.js")),
     fileExists(path.join(rootDir, "src", "cli", "launch.js")),
     fileExists(path.join(rootDir, "script", "build_release_readiness.js")),
+    fileExists(path.join(rootDir, "src", "live", "providers", "mlb.js")),
+    fileExists(path.join(rootDir, "src", "live", "providers", "nhl.js")),
     readTextFile(path.join(rootDir, "src", "server.js")),
     readTextFile(path.join(rootDir, "src", "cli", "serve.js"))
   ]);
@@ -230,6 +246,38 @@ async function getReleaseReadiness(options = {}) {
     "/api/best-mlb-targets",
     "/api/auto-update"
   ].every((endpoint) => serverText.includes(endpoint));
+  const evidenceGates = [
+    {
+      id: "decision-log-quality",
+      label: "Decision-log quality",
+      status: dataQualityStatus,
+      complete: dataQualityStatus === "ok",
+      action: "Settle every logged BET call with result, closing line, and false-positive notes."
+    },
+    {
+      id: "three-win-validation",
+      label: "Three-win validation",
+      status: validationGate.complete ? "complete" : "incomplete",
+      complete: Boolean(validationGate.complete),
+      current: validationGate.currentWinStreak ?? 0,
+      required: validationGate.requiredWinStreak ?? 3,
+      action: "Keep the app in validation mode until three logged BET calls win consecutively with complete CLV records."
+    },
+    {
+      id: "licensed-stats-provider",
+      label: "Licensed injury/stat feed",
+      status: statsReady ? "configured" : "not_configured",
+      complete: statsReady,
+      action: "Add SportsDataIO, Sportradar, or another licensed stats/injury feed before commercial injury automation."
+    },
+    {
+      id: "tennis-provider",
+      label: "Verified tennis feed",
+      status: tennisReady ? "configured" : "manual_only",
+      complete: tennisReady,
+      action: "Add a verified tennis provider before automated tennis picks are enabled."
+    }
+  ];
   const checks = [
     check(packageJson.scripts?.verify ? "pass" : "fail", "verification", "npm run verify script exists"),
     check(packageJson.scripts?.typecheck ? "pass" : "fail", "verification", "TypeScript typecheck script exists"),
@@ -245,6 +293,7 @@ async function getReleaseReadiness(options = {}) {
     check(serveCliExists && launchCliExists ? "pass" : "fail", "runtime", "Serve and launch CLIs exist"),
     check(apiSurfaceReady ? "pass" : "fail", "runtime", "Operational API surface exists"),
     check(releaseScriptExists ? "pass" : "warn", "runtime", "Release-readiness audit script exists"),
+    check(publicMlbProviderExists && publicNhlProviderExists ? "pass" : "warn", "providers", "Official public MLB/NHL stat adapters exist", null, "Restore src/live/providers/mlb.js and src/live/providers/nhl.js before generating sport stat candidates."),
     check(
       oddsReady ? "pass" : oddsSaved ? "warn" : "warn",
       "providers",
@@ -252,10 +301,10 @@ async function getReleaseReadiness(options = {}) {
       oddsProvider ? { id: oddsProvider.id, status: oddsProvider.status, secretReturned: false } : null,
       oddsSaved ? "Restart the Bear Edge server so the saved odds key is loaded into the running process." : "Add and verify THE_ODDS_API_KEY in the dashboard or .env.local."
     ),
-    check(statsReady ? "pass" : "warn", "providers", statsReady ? "Verified stats/injury provider is configured" : "Verified stats/injury provider is not configured", statsProvider ? { id: statsProvider.id, status: statsProvider.status, secretReturned: false } : null, "Add SportsDataIO, Sportradar, or another licensed stats/injury feed before relying on automated injury gates commercially."),
-    check(tennisReady ? "pass" : "warn", "providers", tennisReady ? "Verified tennis stats provider is configured" : "Tennis remains manual-only", tennisProvider ? { id: tennisProvider.id, status: tennisProvider.status, secretReturned: false } : null, "Add a verified tennis data provider before allowing automated tennis picks."),
-    check(dataQualityStatus === "ok" ? "pass" : "warn", "analytics", `Decision-log data quality is ${dataQualityStatus}`, null, "Settle logged BET calls with result, closing line, and false-positive notes until analytics quality is ok."),
-    check(validationGate.complete ? "pass" : "warn", "analytics", `Three-win validation gate is ${validationGate.currentWinStreak ?? 0}/${validationGate.requiredWinStreak ?? 3}`, null, "Keep the app in validation mode until three logged BET calls win consecutively with complete CLV records."),
+    check(statsReady ? "pass" : "info", "providers", statsReady ? "Licensed stats/injury provider is configured" : "Licensed stats/injury provider is an evidence gate, not a local app blocker", statsProvider ? { id: statsProvider.id, status: statsProvider.status, secretReturned: false } : null, "Add SportsDataIO, Sportradar, or another licensed stats/injury feed before relying on automated injury gates commercially."),
+    check(tennisReady ? "pass" : "info", "providers", tennisReady ? "Verified tennis stats provider is configured" : "Tennis automation is locked until a verified provider is configured", tennisProvider ? { id: tennisProvider.id, status: tennisProvider.status, secretReturned: false } : null, "Add a verified tennis data provider before allowing automated tennis picks."),
+    check(dataQualityStatus === "ok" ? "pass" : "info", "analytics", `Decision-log data quality is ${dataQualityStatus}`, null, "Settle logged BET calls with result, closing line, and false-positive notes until analytics quality is ok."),
+    check(validationGate.complete ? "pass" : "info", "analytics", `Three-win validation gate is ${validationGate.currentWinStreak ?? 0}/${validationGate.requiredWinStreak ?? 3}`, null, "Keep the app in validation mode until three logged BET calls win consecutively with complete CLV records."),
     check(docsExists ? "pass" : "warn", "documentation", "Production-readiness documentation exists"),
     check(providerDocsExists ? "pass" : "warn", "documentation", "API provider requirements documentation exists")
   ];
@@ -278,6 +327,7 @@ async function getReleaseReadiness(options = {}) {
     git,
     providerSummary: providerSetup.summary,
     lanes,
+    evidenceGates,
     nextActions: checks
       .filter((entry) => entry.status !== "pass")
       .map((entry) => ({
@@ -324,6 +374,14 @@ function renderReleaseReadinessMarkdown(report) {
     "| Lane | Status | Score | Passed | Warnings | Failed |",
     "| --- | --- | --- | --- | --- | --- |",
     ...report.lanes.map((lane) => `| ${lane.label} | ${lane.status} | ${lane.summary.score}/100 | ${lane.summary.passed} | ${lane.summary.warnings} | ${lane.summary.failed} |`),
+    "",
+    "## Evidence Gates",
+    "",
+    "These gates measure betting proof and licensed data coverage. They remain visible but do not count as local software-release failures.",
+    "",
+    "| Gate | Status | Complete | Action |",
+    "| --- | --- | --- | --- |",
+    ...report.evidenceGates.map((gate) => `| ${gate.label} | ${gate.status} | ${gate.complete ? "yes" : "no"} | ${gate.action} |`),
     "",
     "## Checks",
     "",

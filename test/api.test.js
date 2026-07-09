@@ -178,6 +178,8 @@ test("HTTP API serves the local dashboard", async () => {
     assert.match(dashboardScript, /loadReleaseReadiness/);
     assert.match(dashboardScript, /\/api\/release-readiness/);
     assert.match(dashboardScript, /release-lane/);
+    assert.match(dashboardScript, /release-evidence/);
+    assert.match(dashboardScript, /Evidence Gates/);
     assert.match(dashboardScript, /Next Actions/);
     assert.match(dashboardScript, /loadOddsKeyStatus/);
     assert.match(dashboardScript, /loadProviderSetup/);
@@ -366,10 +368,12 @@ test("HTTP API exposes release readiness checks", async () => {
 
     assert.equal(response.status, 200);
     assert.equal(payload.package.name, "betting-decision-engine");
-    assert.equal(["ready", "shippable-with-warnings", "blocked"].includes(payload.status), true);
+    assert.equal(["ready", "ready-with-evidence-gates", "shippable-with-warnings", "blocked"].includes(payload.status), true);
     assert.equal(typeof payload.summary.score, "number");
+    assert.equal(typeof payload.summary.info, "number");
     assert.equal(payload.lanes.some((entry) => entry.id === "local-app"), true);
     assert.equal(payload.lanes.some((entry) => entry.id === "data-edge"), true);
+    assert.equal(payload.evidenceGates.some((entry) => entry.id === "three-win-validation"), true);
     assert.equal(payload.nextActions.every((entry) => typeof entry.action === "string"), true);
     assert.equal(payload.checks.some((entry) => entry.area === "security"), true);
     assert.equal(payload.checks.some((entry) => entry.message === "GitHub Actions CI workflow exists"), true);
