@@ -68,6 +68,7 @@
         <a href="#parlay-builder">Parlay Builder</a>
         <a href="#screenshotIntakePanel">Screenshots</a>
         <a href="#sources">Sources</a>
+        <a href="#release">Release</a>
         <a href="#ticket">Evaluate</a>
         <a href="#history">Log</a>
       </nav>
@@ -165,6 +166,20 @@
           </div>
         </div>
         <div id="systemAuditBoard" class="system-audit-board"></div>
+      </section>
+
+      <section class="panel release-readiness-panel" id="release">
+        <div class="panel-title">
+          <div>
+            <h2>Release Readiness</h2>
+            <p class="panel-subtitle">Product-grade checks for CI, GitHub, tracked secrets, runtime, providers, analytics quality, and validation status.</p>
+          </div>
+          <div class="button-row">
+            <span id="releaseReadinessTimestamp" class="muted">Not checked yet</span>
+            <button id="releaseReadinessRefreshButton" type="button" class="secondary">Refresh Release Check</button>
+          </div>
+        </div>
+        <div id="releaseReadinessBoard" class="release-readiness-board"></div>
       </section>
 
       <section class="panel odds-key-panel" id="odds">

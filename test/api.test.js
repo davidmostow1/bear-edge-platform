@@ -141,6 +141,8 @@ test("HTTP API serves the local dashboard", async () => {
     assert.match(dashboardHtml, /Auto Update/);
     assert.match(dashboardHtml, /System Audit/);
     assert.match(dashboardHtml, /systemAuditRefreshButton/);
+    assert.match(dashboardHtml, /Release Readiness/);
+    assert.match(dashboardHtml, /releaseReadinessRefreshButton/);
     assert.match(dashboardHtml, /Verified Odds API/);
     assert.match(dashboardHtml, /oddsApiKeyInput/);
     assert.match(dashboardHtml, /Online Opportunities/);
@@ -173,6 +175,10 @@ test("HTTP API serves the local dashboard", async () => {
     assert.match(dashboardScript, /Ticket preflight blocked evaluation/);
     assert.match(dashboardScript, /loadAutoUpdateStatus/);
     assert.match(dashboardScript, /loadSystemAudit/);
+    assert.match(dashboardScript, /loadReleaseReadiness/);
+    assert.match(dashboardScript, /\/api\/release-readiness/);
+    assert.match(dashboardScript, /release-lane/);
+    assert.match(dashboardScript, /Next Actions/);
     assert.match(dashboardScript, /loadOddsKeyStatus/);
     assert.match(dashboardScript, /loadProviderSetup/);
     assert.match(dashboardScript, /saveProviderKey/);
@@ -349,6 +355,26 @@ test("HTTP API exposes local system audit without leaking key values", async () 
     assert.equal(payload.commands.some((entry) => entry.command === "git"), true);
     assert.ok(payload.nextActions.some((entry) => entry.area === "Live odds"));
     assert.equal(payload.environment.keys.some((entry) => entry.name === "THE_ODDS_API_KEY" && typeof entry.configured === "boolean"), true);
+    assert.equal(JSON.stringify(payload).includes(process.env.THE_ODDS_API_KEY ?? "unlikely-secret-marker"), false);
+  });
+});
+
+test("HTTP API exposes release readiness checks", async () => {
+  await withServer(async (baseUrl) => {
+    const response = await fetch(`${baseUrl}/api/release-readiness`);
+    const payload = await response.json();
+
+    assert.equal(response.status, 200);
+    assert.equal(payload.package.name, "betting-decision-engine");
+    assert.equal(["ready", "shippable-with-warnings", "blocked"].includes(payload.status), true);
+    assert.equal(typeof payload.summary.score, "number");
+    assert.equal(payload.lanes.some((entry) => entry.id === "local-app"), true);
+    assert.equal(payload.lanes.some((entry) => entry.id === "data-edge"), true);
+    assert.equal(payload.nextActions.every((entry) => typeof entry.action === "string"), true);
+    assert.equal(payload.checks.some((entry) => entry.area === "security"), true);
+    assert.equal(payload.checks.some((entry) => entry.message === "GitHub Actions CI workflow exists"), true);
+    assert.equal(payload.checks.some((entry) => entry.message === "Local dashboard binds to localhost by default" && entry.status === "pass"), true);
+    assert.deepEqual(payload.trackedFiles.blockedMatches, []);
     assert.equal(JSON.stringify(payload).includes(process.env.THE_ODDS_API_KEY ?? "unlikely-secret-marker"), false);
   });
 });

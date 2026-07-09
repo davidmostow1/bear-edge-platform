@@ -59,19 +59,23 @@ test("validateBetInput rejects unknown fields and invalid odds", () => {
 test("serve CLI parses auto-update controls", () => {
   const originalAutoUpdate = process.env.BEAR_EDGE_AUTO_UPDATE;
   const originalInterval = process.env.BEAR_EDGE_AUTO_UPDATE_INTERVAL_MS;
+  const originalHost = process.env.BEAR_EDGE_HOST;
 
   try {
     delete process.env.BEAR_EDGE_AUTO_UPDATE;
     delete process.env.BEAR_EDGE_AUTO_UPDATE_INTERVAL_MS;
+    delete process.env.BEAR_EDGE_HOST;
 
     assert.deepEqual(parseServeArgs(["--port", "3030"]), {
       autoUpdate: true,
       autoUpdateIntervalMs: 300000,
+      host: "127.0.0.1",
       port: 3030
     });
-    assert.deepEqual(parseServeArgs(["--port", "3031", "--no-auto-update", "--auto-update-interval-ms", "60000"]), {
+    assert.deepEqual(parseServeArgs(["--port", "3031", "--host", "localhost", "--no-auto-update", "--auto-update-interval-ms", "60000"]), {
       autoUpdate: false,
       autoUpdateIntervalMs: 60000,
+      host: "localhost",
       port: 3031
     });
   } finally {
@@ -86,6 +90,12 @@ test("serve CLI parses auto-update controls", () => {
     } else {
       process.env.BEAR_EDGE_AUTO_UPDATE_INTERVAL_MS = originalInterval;
     }
+
+    if (originalHost === undefined) {
+      delete process.env.BEAR_EDGE_HOST;
+    } else {
+      process.env.BEAR_EDGE_HOST = originalHost;
+    }
   }
 });
 
@@ -93,15 +103,18 @@ test("launch CLI parses local app controls", () => {
   const originalPort = process.env.PORT;
   const originalAutoUpdate = process.env.BEAR_EDGE_AUTO_UPDATE;
   const originalInterval = process.env.BEAR_EDGE_AUTO_UPDATE_INTERVAL_MS;
+  const originalHost = process.env.BEAR_EDGE_HOST;
 
   try {
     delete process.env.PORT;
     delete process.env.BEAR_EDGE_AUTO_UPDATE;
     delete process.env.BEAR_EDGE_AUTO_UPDATE_INTERVAL_MS;
+    delete process.env.BEAR_EDGE_HOST;
 
     assert.deepEqual(parseLaunchArgs([]), {
       autoUpdate: true,
       autoUpdateIntervalMs: 300000,
+      host: "127.0.0.1",
       openBrowser: true,
       port: 3000,
       timeoutMs: 20000
@@ -110,6 +123,8 @@ test("launch CLI parses local app controls", () => {
       parseLaunchArgs([
         "--port",
         "3032",
+        "--host",
+        "localhost",
         "--timeout-ms",
         "5000",
         "--no-open",
@@ -120,6 +135,7 @@ test("launch CLI parses local app controls", () => {
       {
         autoUpdate: false,
         autoUpdateIntervalMs: 60000,
+        host: "localhost",
         openBrowser: false,
         port: 3032,
         timeoutMs: 5000
@@ -142,6 +158,12 @@ test("launch CLI parses local app controls", () => {
       delete process.env.BEAR_EDGE_AUTO_UPDATE_INTERVAL_MS;
     } else {
       process.env.BEAR_EDGE_AUTO_UPDATE_INTERVAL_MS = originalInterval;
+    }
+
+    if (originalHost === undefined) {
+      delete process.env.BEAR_EDGE_HOST;
+    } else {
+      process.env.BEAR_EDGE_HOST = originalHost;
     }
   }
 });

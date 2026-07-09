@@ -28,6 +28,7 @@ const { parseWorldCupGoalscorerSnapshot } = require("./live/worldcup-goalscorer-
 const { fetchOddsApiMarkets, fetchOddsApiSports } = require("./live/odds-api.js");
 const { fetchJson, fetchText } = require("./live/fixture-fetch.js");
 const { getSystemAudit } = require("./system-audit.js");
+const { getReleaseReadiness } = require("./release-readiness.js");
 const { getOddsKeyStatus, saveOddsApiKey, validateOddsApiKey } = require("./config/odds-key-settings.js");
 const { getProviderSetupStatus } = require("./config/provider-requirements.js");
 const { saveProviderApiKey } = require("./config/provider-key-settings.js");
@@ -105,6 +106,14 @@ function createServer(options = {}) {
 
       if (request.method === "GET" && url.pathname === "/api/system-audit") {
         const result = await getSystemAudit();
+
+        return jsonResponse(response, 200, result);
+      }
+
+      if (request.method === "GET" && url.pathname === "/api/release-readiness") {
+        const result = await getReleaseReadiness({
+          rootDir: options.settingsRootDir ?? PROJECT_ROOT
+        });
 
         return jsonResponse(response, 200, result);
       }

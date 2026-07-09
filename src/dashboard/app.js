@@ -29,6 +29,9 @@ const els = {
   systemAuditBoard: document.querySelector("#systemAuditBoard"),
   systemAuditRefreshButton: document.querySelector("#systemAuditRefreshButton"),
   systemAuditTimestamp: document.querySelector("#systemAuditTimestamp"),
+  releaseReadinessBoard: document.querySelector("#releaseReadinessBoard"),
+  releaseReadinessRefreshButton: document.querySelector("#releaseReadinessRefreshButton"),
+  releaseReadinessTimestamp: document.querySelector("#releaseReadinessTimestamp"),
   oddsKeyForm: document.querySelector("#oddsKeyForm"),
   oddsApiKeyInput: document.querySelector("#oddsApiKeyInput"),
   oddsKeyStatus: document.querySelector("#oddsKeyStatus"),
@@ -1469,6 +1472,128 @@ async function loadSystemAudit() {
   } catch (error) {
     els.systemAuditBoard.innerHTML = `<p class="muted auto-update-empty">${escapeHtml(error.message)}</p>`;
     els.systemAuditTimestamp.textContent = "Audit failed";
+  }
+}
+
+function releaseStatusClass(status) {
+  if (status === "ready") {
+    return "ok";
+  }
+
+  if (status === "shippable-with-warnings" || status === "needs-work") {
+    return "medium";
+  }
+
+  return "high";
+}
+
+function renderReleaseReadiness(payload) {
+  const checks = Array.isArray(payload?.checks) ? payload.checks : [];
+  const lanes = Array.isArray(payload?.lanes) ? payload.lanes : [];
+  const nextActions = Array.isArray(payload?.nextActions) ? payload.nextActions : [];
+  const importantChecks = checks
+    .filter((entry) => entry.status !== "pass")
+    .concat(checks.filter((entry) => entry.status === "pass").slice(0, 5));
+  const summary = payload?.summary ?? {};
+  const formatDetail = (detail) => {
+    if (Array.isArray(detail)) {
+      return detail.join(" / ");
+    }
+
+    if (detail && typeof detail === "object") {
+      return JSON.stringify(detail);
+    }
+
+    return detail ?? "";
+  };
+
+  els.releaseReadinessTimestamp.textContent = payload?.generatedAt
+    ? `Checked ${shortTimestamp(payload.generatedAt)}`
+    : "Checked";
+
+  els.releaseReadinessBoard.innerHTML = `
+    <div class="release-hero edge-${releaseStatusClass(payload?.status)}">
+      <div>
+        <h3>${escapeHtml(payload?.status ?? "unknown")}</h3>
+        <p>${escapeHtml(payload?.package?.name ?? "package")} ${escapeHtml(payload?.package?.version ?? "")} / ${escapeHtml(payload?.git?.branch ?? "no branch")} / ${escapeHtml(payload?.git?.upstream ?? "no upstream")}</p>
+      </div>
+      <strong>${escapeHtml(summary.score ?? 0)}/100</strong>
+    </div>
+    <div class="release-summary-grid">
+      ${[
+        ["Passed", summary.passed ?? 0],
+        ["Warnings", summary.warnings ?? 0],
+        ["Failed", summary.failed ?? 0],
+        ["Tracked files", payload?.trackedFiles?.count ?? 0],
+        ["BET calls", payload?.decisionLog?.betCalls ?? 0],
+        ["3-win gate", payload?.decisionLog?.validationGate?.complete ? "complete" : `${payload?.decisionLog?.validationGate?.currentWinStreak ?? 0}/${payload?.decisionLog?.validationGate?.requiredWinStreak ?? 3}`]
+      ]
+        .map(([label, value]) => `<article class="metric compact"><span>${escapeHtml(label)}</span><strong>${escapeHtml(value)}</strong></article>`)
+        .join("")}
+    </div>
+    ${lanes.length > 0
+      ? `<div class="release-lane-grid">
+          ${lanes
+            .map((lane) => `
+              <article class="release-lane edge-${releaseStatusClass(lane.status)}">
+                <span>${escapeHtml(lane.label)}</span>
+                <strong>${escapeHtml(lane.status)}</strong>
+                <p>${escapeHtml(lane.description ?? "")}</p>
+                <small>${escapeHtml(lane.summary?.score ?? 0)}/100 / ${escapeHtml(lane.summary?.warnings ?? 0)} warnings / ${escapeHtml(lane.summary?.failed ?? 0)} failed</small>
+              </article>
+            `)
+            .join("")}
+        </div>`
+      : ""}
+    ${nextActions.length > 0
+      ? `<div class="release-actions">
+          <h3>Next Actions</h3>
+          ${nextActions
+            .slice(0, 6)
+            .map((entry) => `
+              <article>
+                <span class="tag ${entry.status === "fail" ? "high" : "medium"}">${escapeHtml(entry.status)}</span>
+                <div>
+                  <strong>${escapeHtml(entry.area)}: ${escapeHtml(entry.check)}</strong>
+                  <p>${escapeHtml(entry.action)}</p>
+                </div>
+              </article>
+            `)
+            .join("")}
+        </div>`
+      : ""}
+    <div class="release-check-list">
+      ${importantChecks
+        .map((entry) => `
+          <article class="release-check ${escapeHtml(entry.status)}">
+            <span class="tag ${entry.status === "pass" ? "ok" : entry.status === "warn" ? "medium" : "high"}">${escapeHtml(entry.status)}</span>
+            <div>
+              <strong>${escapeHtml(entry.area)}</strong>
+              <p>${escapeHtml(entry.message)}</p>
+              ${entry.detail ? `<p class="sources">${escapeHtml(formatDetail(entry.detail))}</p>` : ""}
+            </div>
+          </article>
+        `)
+        .join("")}
+    </div>
+  `;
+}
+
+async function loadReleaseReadiness() {
+  els.releaseReadinessBoard.innerHTML = '<p class="muted auto-update-empty">Checking release readiness...</p>';
+
+  try {
+    const response = await fetch("/api/release-readiness");
+    const payload = await response.json();
+
+    if (!response.ok) {
+      throw new Error(payload.error ?? "Unable to load release readiness.");
+    }
+
+    renderReleaseReadiness(payload);
+  } catch (error) {
+    els.releaseReadinessBoard.innerHTML = `<p class="muted auto-update-empty">${escapeHtml(error.message)}</p>`;
+    els.releaseReadinessTimestamp.textContent = "Release check failed";
   }
 }
 
@@ -3889,6 +4014,9 @@ els.refreshButton.addEventListener("click", () => {
 els.systemAuditRefreshButton.addEventListener("click", () => {
   loadSystemAudit();
 });
+els.releaseReadinessRefreshButton.addEventListener("click", () => {
+  loadReleaseReadiness();
+});
 els.providerSetupRefreshButton.addEventListener("click", () => {
   loadProviderSetup();
 });
@@ -4086,9 +4214,9 @@ renderOperatorBoards();
 
 loadHealth()
   .then(async () => {
-    await Promise.all([loadDashboard(), loadAutoUpdateStatus(), loadSystemAudit(), loadProviderSetup(), loadOddsKeyStatus(), loadSourceStatus("today"), loadOnlineOpportunities(), loadGames("today"), loadBestTargets("today"), loadCandidates("today")]);
+    await Promise.all([loadDashboard(), loadAutoUpdateStatus(), loadSystemAudit(), loadReleaseReadiness(), loadProviderSetup(), loadOddsKeyStatus(), loadSourceStatus("today"), loadOnlineOpportunities(), loadGames("today"), loadBestTargets("today"), loadCandidates("today")]);
     window.setInterval(() => {
-      Promise.all([loadDashboard(), loadAutoUpdateStatus(), loadSystemAudit(), loadProviderSetup(), loadOddsKeyStatus(), loadSourceStatus("today"), loadOnlineOpportunities(), loadGames("today"), loadBestTargets("today"), loadCandidates("today")]).catch(
+      Promise.all([loadDashboard(), loadAutoUpdateStatus(), loadSystemAudit(), loadReleaseReadiness(), loadProviderSetup(), loadOddsKeyStatus(), loadSourceStatus("today"), loadOnlineOpportunities(), loadGames("today"), loadBestTargets("today"), loadCandidates("today")]).catch(
         (error) => setStatus(error.message, true)
       );
     }, AUTO_REFRESH_MS);
