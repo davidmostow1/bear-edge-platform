@@ -1,0 +1,22 @@
+{
+  "selection": "Lakers ML",
+  "marketOdds": 120,
+  "oppositeOdds": -135,
+  "modelProbability": 0.59,
+  "bankroll": 2500,
+  "marketWeight": 0.2,
+  "thresholds": {
+    "minEdge": 0.01,
+    "minEvRoi": 0.01,
+    "minKellyFraction": 0.01
+  },
+  "stakePolicy": {
+    "kellyMultiplier": 0.25,
+    "maxStake": 150,
+    "maxBankrollFraction": 0.05,
+    "minStake": 5
+  },
+  "notes": [
+    "Sample input for local evaluation"
+  ]
+}

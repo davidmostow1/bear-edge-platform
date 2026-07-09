@@ -1,0 +1,63 @@
+{
+  "kind": "parlay",
+  "selection": "3-leg mixed prop parlay",
+  "bankroll": 2500,
+  "livePolicy": {
+    "marketWeight": 0.35,
+    "recentWeight": 0.45,
+    "maxParlayLegs": 3,
+    "maxAltPropLegs": 2,
+    "maxSourceAgeMinutes": 30,
+    "correlationPenalty": 0.92,
+    "allowCorrelatedLegs": false,
+    "kellyMultiplier": 0.15,
+    "maxBankrollFraction": 0.02,
+    "minStake": 5
+  },
+  "legs": [
+    {
+      "id": "ohtani-runs",
+      "label": "Shohei Ohtani over 0.5 runs",
+      "provider": "mlb",
+      "marketType": "prop",
+      "side": "over",
+      "line": 0.5,
+      "marketOdds": -105,
+      "source": {
+        "playerId": 660271,
+        "statGroup": "hitting",
+        "statKey": "runs",
+        "recentLimit": 10
+      }
+    },
+    {
+      "id": "mcdavid-shots",
+      "label": "Connor McDavid over 3.5 shots",
+      "provider": "nhl",
+      "marketType": "prop",
+      "side": "over",
+      "line": 3.5,
+      "marketOdds": 105,
+      "source": {
+        "playerId": 8478402,
+        "statKey": "shots",
+        "recentLimit": 5
+      }
+    },
+    {
+      "id": "ohtani-total-bases-alt",
+      "label": "Shohei Ohtani over 1.5 total bases",
+      "provider": "mlb",
+      "marketType": "alt-prop",
+      "side": "over",
+      "line": 1.5,
+      "marketOdds": 130,
+      "source": {
+        "playerId": 660271,
+        "statGroup": "hitting",
+        "statKey": "totalBases",
+        "recentLimit": 10
+      }
+    }
+  ]
+}

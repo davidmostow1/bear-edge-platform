@@ -1,0 +1,55 @@
+{
+  "name": "betting-decision-engine",
+  "version": "1.0.0",
+  "description": "Betting math and verdict engine with risk gates and decision logging.",
+  "main": "src/index.js",
+  "type": "commonjs",
+  "exports": {
+    ".": "./src/index.js"
+  },
+  "files": [
+    "README.md",
+    "Open Bear Edge.command",
+    "src/**/*.js",
+    "src/native/**/*",
+    "src/dashboard/**/*",
+    "examples/**/*.json",
+    "data/logs/.gitkeep",
+    "tsconfig.json"
+  ],
+  "bin": {
+    "bear-edge-evaluate": "./src/cli/evaluate.js",
+    "bear-edge-live-evaluate": "./src/cli/evaluate-live.js",
+    "bear-edge-live-watch": "./src/cli/watch-live.js",
+    "bear-edge-launch": "./src/cli/launch.js",
+    "bear-edge-server": "./src/cli/serve.js"
+  },
+  "scripts": {
+    "test": "node --test",
+    "typecheck": "tsc --project tsconfig.json",
+    "verify": "npm run typecheck && npm test",
+    "evaluate": "node ./src/cli/evaluate.js",
+    "evaluate:live": "node ./src/cli/evaluate-live.js",
+    "launch": "node ./src/cli/launch.js",
+    "watch:live": "node ./src/cli/watch-live.js",
+    "serve": "node ./src/cli/serve.js",
+    "compare:recording": "node ./script/compare_recording_props_with_current_dk.js",
+    "audit:protocol": "node ./script/build_protocol_audit.js",
+    "simulate:card": "node ./script/simulate_verified_card.js",
+    "package:portable": "npm run verify && mkdir -p dist && npm pack --pack-destination dist"
+  },
+  "keywords": [
+    "betting",
+    "kelly",
+    "odds",
+    "expected-value"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "license": "MIT",
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "typescript": "^5.6.3"
+  }
+}

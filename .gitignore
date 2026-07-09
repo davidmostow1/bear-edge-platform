@@ -1,0 +1,13 @@
+.codex/
+.tools/
+node_modules/
+npm-debug.log*
+.env
+.env.local
+.env.*.local
+!.env.example
+data/logs/*.jsonl
+data/logs/*.json
+data/logs/*.log
+data/cache/
+dist/

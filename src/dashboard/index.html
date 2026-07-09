@@ -1,0 +1,506 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Bear Edge Dashboard</title>
+    <link rel="stylesheet" href="/dashboard/styles.css">
+  </head>
+  <body>
+    <div id="globalDropOverlay" class="global-drop-overlay" aria-hidden="true">
+      <div>
+        <strong>Drop screenshot to import odds</strong>
+        <span>Bear Edge will OCR it locally, parse it, and try to match candidate prices.</span>
+      </div>
+    </div>
+
+    <header class="app-header">
+      <div>
+        <p class="eyebrow">Bear Edge</p>
+        <h1>Bet Research Desk</h1>
+      </div>
+      <div class="status-strip">
+        <span id="healthDot" class="dot"></span>
+        <span id="logPath">Loading log...</span>
+      </div>
+    </header>
+
+    <main>
+      <section class="panel command-center-panel" id="start">
+        <div class="panel-title">
+          <div>
+            <h2>Start Here</h2>
+            <p class="panel-subtitle">Bear Edge separates real source data, sportsbook prices, and final BET/PASS/WAIT logic. Use the cards below in order.</p>
+          </div>
+        </div>
+        <div class="command-grid">
+          <article>
+            <span>1</span>
+            <strong>Check actual data</strong>
+            <p>Official games, rosters, injuries, and stat candidates refresh while the app is running.</p>
+            <a href="#games">Games</a>
+          </article>
+          <article>
+            <span>2</span>
+            <strong>Add real odds</strong>
+            <p>Save an odds API key, paste sportsbook text, or drop a screenshot to fill market prices.</p>
+            <a href="#odds">Odds setup</a>
+          </article>
+          <article>
+            <span>3</span>
+            <strong>Use candidates</strong>
+            <p>Total bases, hits, runs, pitcher Ks, and NHL shots are shown with season/recent/fair price.</p>
+            <a href="#candidates">Candidates</a>
+          </article>
+          <article>
+            <span>4</span>
+            <strong>Build singles or parlays</strong>
+            <p>Add up to three sourced legs, then evaluate EV, Kelly stake, flags, and stale-source status.</p>
+            <a href="#ticket">Ticket</a>
+          </article>
+        </div>
+      </section>
+
+      <nav class="quick-nav" aria-label="Dashboard sections">
+        <a href="#operator">Operator</a>
+        <a href="#best-targets">Best 3</a>
+        <a href="#candidates">Props</a>
+        <a href="#parlay-builder">Parlay Builder</a>
+        <a href="#screenshotIntakePanel">Screenshots</a>
+        <a href="#sources">Sources</a>
+        <a href="#ticket">Evaluate</a>
+        <a href="#history">Log</a>
+      </nav>
+
+      <section class="panel operator-panel" id="operator">
+        <div class="panel-title">
+          <div>
+            <h2>Operator Board</h2>
+            <p class="panel-subtitle">Bankroll discipline, slate readiness, and ticket preflight. This is the cockpit before anything becomes a logged decision.</p>
+          </div>
+        </div>
+        <div class="operator-controls">
+          <label>
+            <span>Bankroll</span>
+            <input id="bankrollInput" type="number" min="1" step="0.01" value="1000">
+          </label>
+          <label>
+            <span>Sportsbook minimum</span>
+            <input id="sportsbookMinInput" type="number" min="0" step="0.01" value="1">
+          </label>
+          <label>
+            <span>Mode</span>
+            <select id="riskModeSelect">
+              <option value="training">Training / tiny units</option>
+              <option value="standard" selected>Standard disciplined</option>
+              <option value="aggressive">Aggressive capped</option>
+            </select>
+          </label>
+        </div>
+        <div id="unitGuardBoard" class="unit-guard-board"></div>
+        <div id="operatorStatusBoard" class="operator-status-board"></div>
+      </section>
+
+      <section id="summaryCards" class="summary-grid" aria-label="Decision log summary"></section>
+
+      <section class="panel data-quality-panel">
+        <div class="panel-title">
+          <div>
+            <h2>Decision Quality Gate</h2>
+            <p class="panel-subtitle">Whether the logged results are complete enough to trust hit rate, CLV, ROI, parlays, and false positives.</p>
+          </div>
+        </div>
+        <div id="decisionQualityBoard" class="data-quality-board"></div>
+      </section>
+
+      <section id="screenshotIntakePanel" class="panel screenshot-intake-panel">
+        <div class="panel-title">
+          <div>
+            <h2>Universal Screenshot Intake</h2>
+            <p class="panel-subtitle">Drop a sportsbook screenshot anywhere on this page, or choose one here. DraftKings is the default parser.</p>
+          </div>
+          <div class="button-row">
+            <select id="screenshotParserSelect" aria-label="Screenshot parser">
+              <option value="draftkings">DraftKings odds board</option>
+              <option value="worldcup-goalscorer">World Cup goalscorer</option>
+              <option value="statmuse">StatMuse context</option>
+            </select>
+            <label class="file-button primary-file-button">
+              Choose Screenshot
+              <input id="screenshotImageInput" type="file" accept="image/png,image/jpeg,image/webp,image/tiff,image/heic,image/heif">
+            </label>
+          </div>
+        </div>
+        <div id="screenshotDropZone" class="screenshot-drop-zone">
+          <strong>Drop screenshot here</strong>
+          <span>PNG, JPG, HEIC, TIFF, or WebP. First upload may take ~30 seconds while the local OCR helper warms up.</span>
+        </div>
+        <p id="screenshotIntakeStatus" class="form-status" role="status"></p>
+        <div id="screenshotIntakeResult" class="snapshot-result"></div>
+      </section>
+
+      <section class="panel auto-update-panel">
+        <div class="panel-title">
+          <div>
+            <h2>Auto Update</h2>
+            <p class="panel-subtitle">Server-side daily/current data refresh while this local app is running.</p>
+          </div>
+          <div class="button-row">
+            <span id="autoUpdateTimestamp" class="muted">Not checked yet</span>
+            <button id="autoUpdateRunButton" type="button" class="secondary">Run Auto Update Now</button>
+          </div>
+        </div>
+        <div id="autoUpdateBoard" class="auto-update-board"></div>
+      </section>
+
+      <section class="panel system-audit-panel">
+        <div class="panel-title">
+          <div>
+            <h2>System Audit</h2>
+            <p class="panel-subtitle">Local runtime, files, logs, GitHub readiness, and provider key gates actually used by this app.</p>
+          </div>
+          <div class="button-row">
+            <span id="systemAuditTimestamp" class="muted">Not checked yet</span>
+            <button id="systemAuditRefreshButton" type="button" class="secondary">Refresh Audit</button>
+          </div>
+        </div>
+        <div id="systemAuditBoard" class="system-audit-board"></div>
+      </section>
+
+      <section class="panel odds-key-panel" id="odds">
+        <div class="panel-title">
+          <div>
+            <h2>Verified Odds API</h2>
+            <p class="panel-subtitle">Local setup for real sportsbook odds through The Odds API. The key is stored only in .env.local and never displayed back.</p>
+          </div>
+          <div class="button-row">
+            <a href="https://the-odds-api.com/" target="_blank" rel="noreferrer">Get key</a>
+            <button id="oddsKeyTestButton" type="button" class="secondary">Test Saved Key</button>
+          </div>
+        </div>
+        <form id="oddsKeyForm" class="odds-key-form">
+          <label>
+            <span>The Odds API key</span>
+            <input id="oddsApiKeyInput" type="password" autocomplete="off" placeholder="Paste key locally, not in chat" aria-label="The Odds API key">
+          </label>
+          <button type="submit">Save + Verify</button>
+        </form>
+        <p id="oddsKeyStatus" class="form-status" role="status"></p>
+        <div id="oddsKeyStatusBoard" class="odds-key-status-board"></div>
+      </section>
+
+      <section class="panel provider-setup-panel">
+        <div class="panel-title">
+          <div>
+            <h2>Provider Setup Checklist</h2>
+            <p class="panel-subtitle">Exact API providers needed for verified odds, injuries, lineups, tennis, weather, and research support.</p>
+          </div>
+          <div class="button-row">
+            <span id="providerSetupTimestamp" class="muted">Not checked yet</span>
+            <button id="providerSetupRefreshButton" type="button" class="secondary">Refresh Providers</button>
+          </div>
+        </div>
+        <div id="providerSetupBoard" class="provider-setup-board"></div>
+      </section>
+
+      <section class="panel sources-panel" id="sources">
+        <div class="panel-title">
+          <div>
+            <h2>Live Source Monitor</h2>
+            <p class="panel-subtitle">ESPN rosters/injuries, DraftKings market reachability, STAT News and StatMuse context</p>
+          </div>
+          <div class="button-row">
+            <span id="sourceStatusTimestamp" class="muted">Not checked yet</span>
+            <button id="sourceStatusRefreshButton" type="button" class="secondary">Refresh Sources</button>
+          </div>
+        </div>
+        <div id="sourceStatusBoard" class="source-grid"></div>
+      </section>
+
+      <section class="panel online-opportunities-panel">
+        <div class="panel-title">
+          <div>
+            <h2>Online Opportunities</h2>
+            <p class="panel-subtitle">MLB and World Cup opportunities from actual online sources: ESPN schedule, Covers props, Hard Rock market pages, and StatMuse context.</p>
+          </div>
+          <div class="button-row">
+            <span id="onlineOpportunitiesTimestamp" class="muted">Not checked yet</span>
+            <select id="onlineOpportunitiesSportsSelect" aria-label="Online opportunity sports">
+              <option value="mlb,worldcup">MLB + World Cup</option>
+              <option value="mlb">MLB only</option>
+              <option value="worldcup">World Cup only</option>
+            </select>
+            <button id="onlineOpportunitiesRefreshButton" type="button" class="secondary">Refresh Opportunities</button>
+          </div>
+        </div>
+        <div id="onlineOpportunitiesBoard" class="online-opportunities-board"></div>
+      </section>
+
+      <section class="panel statmuse-panel">
+        <div class="panel-title">
+          <div>
+            <h2>StatMuse Snapshot Intake</h2>
+            <p class="panel-subtitle">Paste text or drop/upload a screenshot to parse scores, displayed odds, and musings into audit context.</p>
+          </div>
+          <div class="button-row">
+            <label class="file-button">
+              Upload Screenshot
+              <input id="statMuseImageInput" type="file" accept="image/png,image/jpeg,image/webp,image/tiff,image/heic,image/heif">
+            </label>
+            <button id="statMuseSnapshotParseButton" type="button">Parse Snapshot</button>
+            <button id="statMuseSnapshotClearButton" type="button" class="secondary">Clear Snapshot</button>
+          </div>
+        </div>
+        <textarea id="statMuseSnapshotInput" class="snapshot-input" spellcheck="false" aria-label="StatMuse pasted page text"></textarea>
+        <p id="statMuseSnapshotStatus" class="form-status" role="status"></p>
+        <div id="statMuseSnapshotResult" class="snapshot-result"></div>
+      </section>
+
+      <section class="panel draftkings-panel">
+        <div class="panel-title">
+          <div>
+            <h2>DraftKings Board Intake</h2>
+            <p class="panel-subtitle">Paste text or drop/upload a sportsbook screenshot to parse moneyline, run line, total, sides, and timestamps for manual review.</p>
+          </div>
+          <div class="button-row">
+            <label class="file-button">
+              Upload Screenshot
+              <input id="draftKingsImageInput" type="file" accept="image/png,image/jpeg,image/webp,image/tiff,image/heic,image/heif">
+            </label>
+            <button id="draftKingsSnapshotParseButton" type="button">Parse DraftKings</button>
+            <button id="draftKingsSnapshotClearButton" type="button" class="secondary">Clear Board</button>
+          </div>
+        </div>
+        <textarea id="draftKingsSnapshotInput" class="snapshot-input" spellcheck="false" aria-label="DraftKings pasted board text"></textarea>
+        <p id="draftKingsSnapshotStatus" class="form-status" role="status"></p>
+        <div id="draftKingsSnapshotResult" class="snapshot-result"></div>
+      </section>
+
+      <section class="panel comparison-panel">
+        <div class="panel-title">
+          <div>
+            <h2>Recording Prop Comparison</h2>
+            <p class="panel-subtitle">Upload the extracted recording CSV plus a current DraftKings total-bases board JSON export to compare every matched prop inside Bear Edge.</p>
+          </div>
+          <div class="button-row">
+            <label class="file-button">
+              Recording CSV
+              <input id="recordingComparisonCsvInput" type="file" accept=".csv,text/csv">
+            </label>
+            <label class="file-button">
+              Current Board JSON
+              <input id="recordingComparisonBoardInput" type="file" accept=".json,application/json">
+            </label>
+            <label class="comparison-bankroll">
+              Bankroll
+              <input id="recordingComparisonBankrollInput" type="number" min="1" step="1" value="1000">
+            </label>
+            <button id="recordingComparisonRunButton" type="button">Compare Props</button>
+            <button id="recordingComparisonClearButton" type="button" class="secondary">Clear</button>
+          </div>
+        </div>
+        <p id="recordingComparisonStatus" class="form-status" role="status"></p>
+        <div id="recordingComparisonResult" class="snapshot-result"></div>
+      </section>
+
+      <section class="panel market-guide-panel" id="market-guide">
+        <div class="panel-title">
+          <div>
+            <h2>What The Markets Mean</h2>
+            <p class="panel-subtitle">Plain-English guide for what Bear Edge can currently evaluate from actual source data.</p>
+          </div>
+        </div>
+        <div class="market-guide-grid">
+          <article><strong>Total Bases</strong><p>Singles count 1, doubles 2, triples 3, home runs 4. Walks do not count.</p></article>
+          <article><strong>Hits</strong><p>Any official hit. Walks, errors, sacrifices, and hit-by-pitch do not count.</p></article>
+          <article><strong>Runs</strong><p>Player crosses home plate. This depends heavily on lineup spot and teammates.</p></article>
+          <article><strong>Pitcher Ks</strong><p>Pitcher strikeouts. Bear Edge uses season/recent rates and flags missing context.</p></article>
+          <article><strong>Parlays</strong><p>Every leg must be sourced and priced. Same-game or same-player legs are treated as correlation risk.</p></article>
+        </div>
+      </section>
+
+      <section class="panel games-panel" id="games">
+        <div class="panel-title">
+          <h2>Today / Tomorrow Games</h2>
+          <div class="button-row">
+            <button id="gamesTodayButton" type="button" class="secondary">Today</button>
+            <button id="gamesTomorrowButton" type="button" class="secondary">Tomorrow</button>
+          </div>
+        </div>
+        <div id="gameBoard" class="game-grid"></div>
+      </section>
+
+      <section class="panel best-targets-panel" id="best-targets">
+        <div class="panel-title">
+          <div>
+            <h2>Best Current MLB Targets</h2>
+            <p class="panel-subtitle">Top three from official stats. If a verified odds key is saved, this panel prices props and shows EV/Kelly verdicts.</p>
+          </div>
+          <div class="button-row">
+            <span id="bestTargetsTimestamp" class="muted">Not checked yet</span>
+            <button id="bestTargetsRefreshButton" type="button" class="secondary">Refresh Best 3</button>
+          </div>
+        </div>
+        <div id="bestTargetsBoard" class="best-targets-board"></div>
+      </section>
+
+      <section class="panel candidates-panel" id="candidates">
+        <div class="panel-title">
+          <div>
+            <h2>Research Candidates</h2>
+            <p class="panel-subtitle">Official-source prop drafts for total bases, hits, runs, pitcher strikeouts, and NHL shots. Add odds, then evaluate or build a parlay.</p>
+          </div>
+          <div class="button-row">
+            <button id="candidatesRefreshButton" type="button" class="secondary">Refresh Candidates</button>
+          </div>
+        </div>
+        <div class="candidate-help">
+          <strong>How to use:</strong>
+          <span>Enter the sportsbook price on a candidate card. Click Evaluate Price for a single, or Add To Parlay for a 2-3 leg ticket.</span>
+        </div>
+        <div class="candidate-toolbar" aria-label="Candidate filters">
+          <label>
+            <span>Sport</span>
+            <select id="candidateSportFilter">
+              <option value="all">All sports</option>
+              <option value="mlb">MLB</option>
+              <option value="nhl">NHL</option>
+            </select>
+          </label>
+          <label>
+            <span>Market</span>
+            <select id="candidateMarketFilter">
+              <option value="all">All markets</option>
+              <option value="totalBases">Total bases</option>
+              <option value="hits">Hits</option>
+              <option value="runs">Runs</option>
+              <option value="strikeOuts">Pitcher Ks</option>
+              <option value="shots">NHL shots</option>
+            </select>
+          </label>
+          <label>
+            <span>Sort</span>
+            <select id="candidateSortSelect">
+              <option value="default">Board order</option>
+              <option value="ev-desc">Best rough EV</option>
+              <option value="ev-asc">Worst rough EV</option>
+              <option value="priced-first">Priced first</option>
+              <option value="model-desc">Highest model probability</option>
+            </select>
+          </label>
+          <label class="candidate-search-label">
+            <span>Find player/team</span>
+            <input id="candidateSearchInput" type="search" placeholder="Search candidates">
+          </label>
+          <label class="candidate-checkbox">
+            <input id="candidatePricedOnlyInput" type="checkbox">
+            <span>Priced only</span>
+          </label>
+          <span id="candidateFilterStatus" class="sources">No candidates loaded yet.</span>
+        </div>
+        <div id="candidateActionBoard" class="candidate-action-board">
+          <p class="muted">Load candidates and enter odds to see the best priced singles here.</p>
+        </div>
+        <div id="parlay-builder" class="parlay-builder">
+          <div>
+            <h3>Parlay Builder</h3>
+            <p class="sources">Uses only sourced candidate legs. Maximum 3 legs; maximum 2 alt props; correlated legs are rejected by the engine.</p>
+          </div>
+          <label>
+            <span>Bankroll</span>
+            <input id="parlayBuilderBankrollInput" type="number" min="1" step="1" value="1000">
+          </label>
+          <div class="button-row">
+            <button id="parlayBuilderAutoTwoButton" type="button" class="secondary">Auto 2-Leg</button>
+            <button id="parlayBuilderAutoThreeButton" type="button" class="secondary">Auto 3-Leg</button>
+            <button id="parlayBuilderLoadButton" type="button">Load Parlay Ticket</button>
+            <button id="parlayBuilderEvaluateButton" type="button" class="secondary">Evaluate Parlay</button>
+            <button id="parlayBuilderClearButton" type="button" class="secondary">Clear Legs</button>
+          </div>
+          <div id="parlayBuilderBoard" class="parlay-builder-board"></div>
+        </div>
+        <div class="candidate-import">
+          <textarea id="candidateOddsImportInput" spellcheck="false" aria-label="Paste sportsbook odds text for candidate matching"></textarea>
+          <div class="button-row">
+            <button id="candidateOddsImportButton" type="button">Apply Odds Text</button>
+            <button id="candidateOddsImportClearButton" type="button" class="secondary">Clear Odds Text</button>
+            <span id="candidateOddsImportStatus" class="form-status inline-status" role="status"></span>
+          </div>
+        </div>
+        <div id="candidateBoard" class="candidate-grid"></div>
+      </section>
+
+      <section class="workspace" id="ticket">
+        <form id="ticketForm" class="panel input-panel">
+          <div class="panel-title">
+            <h2>Ticket JSON</h2>
+            <div class="button-row">
+              <button type="button" class="secondary template-button" data-template="straight">Straight</button>
+              <button type="button" class="secondary template-button" data-template="alt2">2-Leg Alt</button>
+              <button type="button" class="secondary template-button" data-template="parlay3">3-Leg</button>
+              <label class="file-button">
+                Upload
+                <input id="fileInput" type="file" accept=".json,application/json">
+              </label>
+              <button id="clearButton" type="button" class="secondary">Clear</button>
+            </div>
+          </div>
+          <textarea id="ticketInput" spellcheck="false" aria-label="Ticket JSON"></textarea>
+          <div id="ticketPreflightBoard" class="ticket-preflight-board">
+            <p class="muted">Ticket preflight will appear here when JSON is loaded.</p>
+          </div>
+          <div class="action-row">
+            <button type="submit">Evaluate</button>
+            <button id="refreshButton" type="button" class="secondary">Refresh Log</button>
+          </div>
+          <p id="formStatus" class="form-status" role="status"></p>
+        </form>
+
+        <section class="panel result-panel" aria-label="Latest decision">
+          <div class="panel-title">
+            <h2>Latest Decision</h2>
+            <span id="latestTimestamp" class="muted">No run yet</span>
+          </div>
+          <div id="latestDecision" class="latest-empty">Paste or upload a ticket, then evaluate it.</div>
+        </section>
+      </section>
+
+      <section class="panel analytics-panel">
+        <div class="panel-title">
+          <h2>Market Performance</h2>
+          <span id="generatedAt" class="muted"></span>
+        </div>
+        <div id="marketBreakdown" class="market-grid"></div>
+      </section>
+
+      <section class="panel history-panel" id="history">
+        <div class="panel-title">
+          <h2>Decision Log</h2>
+          <span id="historyCount" class="muted"></span>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Time</th>
+                <th>Verdict</th>
+                <th>Selection</th>
+                <th>Type</th>
+                <th>EV</th>
+                <th>Kelly Stake</th>
+                <th>Risk</th>
+                <th>Stale</th>
+                <th>Sources</th>
+                <th>CLV</th>
+                <th>Outcome</th>
+              </tr>
+            </thead>
+            <tbody id="historyBody"></tbody>
+          </table>
+        </div>
+      </section>
+    </main>
+
+    <script src="/dashboard/app.js"></script>
+  </body>
+</html>

@@ -1,0 +1,48 @@
+{
+  "kind": "parlay",
+  "selection": "Cross-sport 2-leg alt prop parlay",
+  "bankroll": 2500,
+  "livePolicy": {
+    "marketWeight": 0.4,
+    "recentWeight": 0.5,
+    "maxParlayLegs": 3,
+    "maxAltPropLegs": 2,
+    "maxSourceAgeMinutes": 30,
+    "correlationPenalty": 0.92,
+    "allowCorrelatedLegs": false,
+    "kellyMultiplier": 0.15,
+    "maxBankrollFraction": 0.02,
+    "minStake": 5
+  },
+  "legs": [
+    {
+      "id": "ohtani-total-bases-alt",
+      "label": "Shohei Ohtani over 1.5 total bases",
+      "provider": "mlb",
+      "marketType": "alt-prop",
+      "side": "over",
+      "line": 1.5,
+      "marketOdds": 130,
+      "source": {
+        "playerId": 660271,
+        "statGroup": "hitting",
+        "statKey": "totalBases",
+        "recentLimit": 10
+      }
+    },
+    {
+      "id": "mcdavid-points-alt",
+      "label": "Connor McDavid over 1.5 points",
+      "provider": "nhl",
+      "marketType": "alt-prop",
+      "side": "over",
+      "line": 1.5,
+      "marketOdds": 125,
+      "source": {
+        "playerId": 8478402,
+        "statKey": "points",
+        "recentLimit": 5
+      }
+    }
+  ]
+}
