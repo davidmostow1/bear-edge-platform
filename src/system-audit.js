@@ -148,13 +148,13 @@ async function getSystemAudit(options = {}) {
     "server",
     "dashboard html",
     "dashboard js",
-    "dashboard css",
-    "bundled node",
-    "bundled npm"
+    "dashboard css"
   ]);
   const requiredPathsOk = paths
     .filter((entry) => requiredPathLabels.has(entry.label))
     .every((entry) => entry.exists);
+  const bundledNodeAvailable = paths.some((entry) => entry.label === "bundled node" && entry.exists);
+  const bundledNpmAvailable = paths.some((entry) => entry.label === "bundled npm" && entry.exists);
   const packageInfo = await readPackage(rootDir);
   const git = await gitStatus(rootDir, options);
   const providerSetup = getProviderSetupStatus({ rootDir });
@@ -226,6 +226,8 @@ async function getSystemAudit(options = {}) {
     providerSetup,
     readiness: {
       localFilesOk: requiredPathsOk,
+      bundledNodeAvailable,
+      bundledNpmAvailable,
       nodeAvailable: commands.find((command) => command.command === "node")?.available ?? false,
       npmAvailable: commands.find((command) => command.command === "npm")?.available ?? false,
       gitAvailable: commands.find((command) => command.command === "git")?.available ?? false,
