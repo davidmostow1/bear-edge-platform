@@ -273,6 +273,16 @@ test("HTTP API serves the local dashboard", async () => {
     assert.match(dashboardScript, /No-vig edge/);
     assert.match(dashboardScript, /Add real sportsbook marketOdds/);
     assert.match(dashboardScript, /manual sportsbook odds/);
+    assert.match(dashboardScript, /loadInitialDashboardPanels/);
+    assert.match(dashboardScript, /loadDeferredDashboardPanels/);
+    assert.match(dashboardScript, /deferDashboardWork/);
+    const startupIndex = dashboardScript.lastIndexOf("loadHealth()\n  .then");
+    assert.notEqual(startupIndex, -1);
+    const startupBlock = dashboardScript.slice(startupIndex);
+    assert.match(startupBlock, /await loadInitialDashboardPanels\(\)/);
+    assert.match(startupBlock, /deferDashboardWork\(\(\) => loadDeferredDashboardPanels\(\)\)/);
+    assert.doesNotMatch(startupBlock, /loadBestTargets\("today"\)/);
+    assert.doesNotMatch(startupBlock, /loadCandidates\("today"\)/);
   });
 });
 

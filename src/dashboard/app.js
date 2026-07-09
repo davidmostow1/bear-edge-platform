@@ -3764,6 +3764,73 @@ async function loadDashboard() {
   renderHistory(payload.evaluations);
 }
 
+function renderDeferredPanelPlaceholders() {
+  els.onlineOpportunitiesBoard.innerHTML = '<p class="muted auto-update-empty">Loading market opportunities after core dashboard...</p>';
+  els.gameBoard.innerHTML = '<p class="muted">Loading games after core dashboard...</p>';
+  els.bestTargetsBoard.innerHTML = '<p class="muted">Ranking best targets after core dashboard...</p>';
+  els.candidateBoard.innerHTML = '<p class="muted">Building prop candidates after core dashboard...</p>';
+}
+
+function deferDashboardWork(callback) {
+  const run = () => {
+    callback().catch((error) => setStatus(error.message, true));
+  };
+
+  if (typeof window.requestIdleCallback === "function") {
+    window.requestIdleCallback(run, { timeout: 1200 });
+    return;
+  }
+
+  window.setTimeout(run, 150);
+}
+
+async function loadInitialDashboardPanels() {
+  await Promise.all([
+    loadDashboard(),
+    loadAutoUpdateStatus(),
+    loadLiveDataHealth(),
+    loadSystemAudit(),
+    loadReleaseReadiness(),
+    loadProviderSetup(),
+    loadOddsKeyStatus(),
+    loadSourceStatus("today")
+  ]);
+}
+
+async function loadDeferredDashboardPanels() {
+  await Promise.all([
+    loadOnlineOpportunities(),
+    loadGames("today"),
+    loadBestTargets("today"),
+    loadCandidates("today")
+  ]);
+}
+
+async function refreshDashboardPanels() {
+  await Promise.all([
+    loadDashboard(),
+    loadAutoUpdateStatus(),
+    loadSystemAudit(),
+    loadReleaseReadiness(),
+    loadProviderSetup(),
+    loadOddsKeyStatus(),
+    loadSourceStatus("today"),
+    loadOnlineOpportunities(),
+    loadGames("today"),
+    loadBestTargets("today"),
+    loadCandidates("today")
+  ]);
+}
+
+function startDashboardRefreshLoops() {
+  window.setInterval(() => {
+    refreshDashboardPanels().catch((error) => setStatus(error.message, true));
+  }, AUTO_REFRESH_MS);
+  window.setInterval(() => {
+    loadLiveDataHealth({ quiet: true }).catch((error) => setStatus(error.message, true));
+  }, LIVE_DATA_HEARTBEAT_MS);
+}
+
 function parseTicket() {
   const text = els.ticketInput.value.trim();
 
@@ -4952,18 +5019,13 @@ document.addEventListener("drop", async (event) => {
 
 initializeBankrollControls();
 renderOperatorBoards();
+renderDeferredPanelPlaceholders();
 
 loadHealth()
   .then(async () => {
-    await Promise.all([loadDashboard(), loadAutoUpdateStatus(), loadLiveDataHealth(), loadSystemAudit(), loadReleaseReadiness(), loadProviderSetup(), loadOddsKeyStatus(), loadSourceStatus("today"), loadOnlineOpportunities(), loadGames("today"), loadBestTargets("today"), loadCandidates("today")]);
-    window.setInterval(() => {
-      Promise.all([loadDashboard(), loadAutoUpdateStatus(), loadSystemAudit(), loadReleaseReadiness(), loadProviderSetup(), loadOddsKeyStatus(), loadSourceStatus("today"), loadOnlineOpportunities(), loadGames("today"), loadBestTargets("today"), loadCandidates("today")]).catch(
-        (error) => setStatus(error.message, true)
-      );
-    }, AUTO_REFRESH_MS);
-    window.setInterval(() => {
-      loadLiveDataHealth({ quiet: true }).catch((error) => setStatus(error.message, true));
-    }, LIVE_DATA_HEARTBEAT_MS);
+    await loadInitialDashboardPanels();
+    deferDashboardWork(() => loadDeferredDashboardPanels());
+    startDashboardRefreshLoops();
   })
   .catch((error) => {
     els.healthDot.classList.remove("ok");
