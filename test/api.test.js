@@ -407,7 +407,7 @@ test("HTTP API exposes local system audit without leaking key values", async () 
 
     assert.equal(response.status, 200);
     assert.equal(payload.package.name, "betting-decision-engine");
-    assert.ok(payload.rootDir.endsWith("2026-06-17-documents-openai-developers-google-drive-google"));
+    assert.equal(payload.rootDir, path.resolve(__dirname, ".."));
     assert.equal(payload.readiness.localFilesOk, true);
     assert.equal(payload.paths.some((entry) => entry.label === "dashboard js" && entry.exists), true);
     assert.equal(payload.commands.some((entry) => entry.command === "git"), true);
