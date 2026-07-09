@@ -22,6 +22,7 @@ const els = {
   ticketPreflightBoard: document.querySelector("#ticketPreflightBoard"),
   fileInput: document.querySelector("#fileInput"),
   clearButton: document.querySelector("#clearButton"),
+  simulateTicketButton: document.querySelector("#simulateTicketButton"),
   refreshButton: document.querySelector("#refreshButton"),
   autoUpdateBoard: document.querySelector("#autoUpdateBoard"),
   autoUpdateRunButton: document.querySelector("#autoUpdateRunButton"),
@@ -735,17 +736,24 @@ function validateTicketPreflight(ticket) {
   }
 
   if (Array.isArray(ticket?.legs)) {
-    if (legs.length < 2) {
+    const isSingleTicket = ticket.kind === "single" || (!ticket.kind && legs.length === 1);
+    const isParlayTicket = ticket.kind === "parlay" || (!ticket.kind && legs.length > 1);
+
+    if (isSingleTicket && legs.length !== 1) {
+      findings.push({ severity: "blocker", code: "SINGLE_LEG_COUNT", message: "A live single ticket needs exactly 1 leg." });
+    }
+
+    if (isParlayTicket && legs.length < 2) {
       findings.push({ severity: "blocker", code: "PARLAY_TOO_SHORT", message: "A parlay ticket needs at least 2 legs." });
     }
 
-    if (legs.length > 3) {
+    if (isParlayTicket && legs.length > 3) {
       findings.push({ severity: "blocker", code: "PARLAY_TOO_LONG", message: "Parlays are capped at 3 legs." });
     }
 
     const altPropLegs = legs.filter((leg) => leg.marketType === "alt-prop").length;
 
-    if (altPropLegs > 2) {
+    if (isParlayTicket && altPropLegs > 2) {
       findings.push({ severity: "blocker", code: "ALT_PROP_CAP", message: "Parlays allow a maximum of 2 alt-prop legs." });
     }
 
@@ -758,7 +766,7 @@ function validateTicketPreflight(ticket) {
       .filter(([, count]) => count > 1)
       .map(([key]) => key);
 
-    if (correlatedKeys.length > 0) {
+    if (isParlayTicket && correlatedKeys.length > 0) {
       findings.push({ severity: "blocker", code: "CORRELATION_RISK", message: `Correlated parlay legs detected: ${correlatedKeys.join(", ")}.` });
     }
   }
@@ -2833,6 +2841,133 @@ function updateAllCandidateEdgePreviews() {
   els.candidateBoard.querySelectorAll(".candidate-card").forEach(updateCandidateEdgePreview);
 }
 
+function targetPreviewFromCard(card) {
+  const target = findBestTarget(card?.dataset?.targetId);
+
+  if (!target) {
+    return null;
+  }
+
+  let market;
+  let opposite;
+
+  try {
+    market = { value: parseAmericanOddsInput(card.querySelector(".best-target-market-odds")?.value), error: null };
+  } catch (error) {
+    return { target, error: error.message };
+  }
+
+  try {
+    opposite = { value: parseAmericanOddsInput(card.querySelector(".best-target-opposite-odds")?.value), error: null };
+  } catch (error) {
+    return { target, error: error.message };
+  }
+
+  const modelProbability = target.modelProbability;
+
+  if (typeof modelProbability !== "number" || !Number.isFinite(modelProbability)) {
+    return { target, error: "This target is missing a model probability for manual pricing." };
+  }
+
+  if (market.value === null) {
+    return {
+      target,
+      marketOdds: null,
+      oppositeOdds: opposite.value,
+      modelProbability,
+      fairAmericanOdds: target.fairAmericanOdds ?? probabilityToAmerican(modelProbability),
+      error: null
+    };
+  }
+
+  const breakEven = americanToImpliedProbability(market.value);
+  const evRoi = expectedValueRoiFromOdds(modelProbability, market.value);
+  const noVigProbability = noVigProbabilityFromOdds(market.value, opposite.value);
+
+  return {
+    target,
+    marketOdds: market.value,
+    oppositeOdds: opposite.value,
+    modelProbability,
+    breakEven,
+    evRoi,
+    noVigProbability,
+    noVigEdge: typeof noVigProbability === "number" ? modelProbability - noVigProbability : null,
+    fairAmericanOdds: target.fairAmericanOdds ?? probabilityToAmerican(modelProbability),
+    error: null
+  };
+}
+
+function updateBestTargetManualPreview(card) {
+  const preview = card?.querySelector(".best-target-edge-preview");
+  const data = targetPreviewFromCard(card);
+  const manualButtons = card?.querySelectorAll(
+    ".load-best-target-with-odds-button, .evaluate-best-target-with-odds-button, .add-best-target-with-odds-to-parlay-button"
+  );
+
+  if (!preview || !data) {
+    return;
+  }
+
+  if (data.error) {
+    card.dataset.manualPriced = "false";
+    manualButtons?.forEach((button) => {
+      button.disabled = true;
+    });
+    preview.className = "candidate-edge-preview best-target-edge-preview edge-high";
+    preview.innerHTML = `
+      <div class="edge-preview-head">
+        <strong>Manual price check</strong>
+        <span class="tag high">invalid odds</span>
+      </div>
+      <p>${escapeHtml(data.error)}</p>
+    `;
+    return;
+  }
+
+  if (data.marketOdds === null) {
+    card.dataset.manualPriced = "false";
+    manualButtons?.forEach((button) => {
+      button.disabled = true;
+    });
+    preview.className = "candidate-edge-preview best-target-edge-preview";
+    preview.innerHTML = `
+      <div class="edge-preview-head">
+        <strong>Manual price check</strong>
+        <span class="tag medium">odds needed</span>
+      </div>
+      <p>Type the sportsbook price from your screen. Then load, evaluate, or add this target to a 2-3 leg parlay.</p>
+    `;
+    return;
+  }
+
+  const tone = edgePreviewTone(data.evRoi);
+  card.dataset.manualPriced = "true";
+  manualButtons?.forEach((button) => {
+    button.disabled = false;
+  });
+  preview.className = `candidate-edge-preview best-target-edge-preview edge-${tone.className}`;
+  preview.innerHTML = `
+    <div class="edge-preview-head">
+      <strong>Manual price check</strong>
+      <span class="tag ${tone.className}">${escapeHtml(tone.label)}</span>
+    </div>
+    <div class="edge-preview-grid">
+      <div><span>Break-even</span><strong>${formatPercent(data.breakEven)}</strong></div>
+      <div><span>Model</span><strong>${formatPercent(data.modelProbability)}</strong></div>
+      <div><span>Rough EV</span><strong>${formatPercent(data.evRoi)}</strong></div>
+      <div><span>Fair line</span><strong>${formatOdds(data.fairAmericanOdds)}</strong></div>
+      <div><span>No-vig prob</span><strong>${data.noVigProbability === null ? "add opposite" : formatPercent(data.noVigProbability)}</strong></div>
+      <div><span>No-vig edge</span><strong>${data.noVigEdge === null ? "-" : formatPercent(data.noVigEdge)}</strong></div>
+    </div>
+    <p>${escapeHtml(tone.message)} Evaluate still runs stale-data, EV, Kelly, caps, and parlay gates.</p>
+  `;
+}
+
+function updateAllBestTargetManualPreviews() {
+  els.bestTargetsBoard.querySelectorAll(".best-target-card").forEach(updateBestTargetManualPreview);
+}
+
 function candidateRowsFromCards() {
   return Array.from(els.candidateBoard.querySelectorAll(".candidate-card")).map((card, index) => {
     const preview = candidatePreviewFromCard(card);
@@ -3149,7 +3284,7 @@ function renderBestTargets(payload) {
         const evaluation = target.evaluation;
         const odds = target.odds;
         return `
-          <article class="best-target-card">
+          <article class="best-target-card" data-target-id="${escapeHtml(target.id)}" data-manual-priced="false">
             <header>
               <span class="rank-pill">#${index + 1}</span>
               <div>
@@ -3169,6 +3304,33 @@ function renderBestTargets(payload) {
             </div>
             <p class="sources">${escapeHtml(odds?.bookmaker?.title ?? "No verified odds yet")} ${odds?.bookmaker?.lastUpdate ? `/ ${escapeHtml(shortTimestamp(odds.bookmaker.lastUpdate))}` : ""}${odds?.match ? ` / ${escapeHtml(odds.match.method)} ${escapeHtml(Math.round((odds.match.confidence ?? 0) * 100))}%` : ""}</p>
             ${renderRiskFlags(evaluation?.riskFlags ?? target.riskFlags)}
+            <div class="candidate-edge-preview best-target-edge-preview">
+              <div class="edge-preview-head">
+                <strong>Manual price check</strong>
+                <span class="tag medium">odds needed</span>
+              </div>
+              <p>Type the sportsbook price from your screen. Then load, evaluate, or add this target to a 2-3 leg parlay.</p>
+            </div>
+            <div class="best-target-manual-odds">
+              <label>
+                <span>Market odds</span>
+                <input class="best-target-market-odds" inputmode="numeric" placeholder="-115 or +140" aria-label="Market odds for ${escapeHtml(target.player?.name ?? "target")}">
+              </label>
+              <label>
+                <span>Opposite odds</span>
+                <input class="best-target-opposite-odds" inputmode="numeric" placeholder="optional" aria-label="Opposite odds for no-vig normalization">
+              </label>
+              <label>
+                <span>Leg type</span>
+                <select class="best-target-market-type" aria-label="Leg type for ${escapeHtml(target.player?.name ?? "target")}">
+                  <option value="prop" ${target.ticketDraft?.legs?.[0]?.marketType === "alt-prop" ? "" : "selected"}>Standard</option>
+                  <option value="alt-prop" ${target.ticketDraft?.legs?.[0]?.marketType === "alt-prop" ? "selected" : ""}>Alt prop</option>
+                </select>
+              </label>
+              <button type="button" class="load-best-target-with-odds-button" data-target-id="${escapeHtml(target.id)}" disabled>Load Manual</button>
+              <button type="button" class="evaluate-best-target-with-odds-button" data-target-id="${escapeHtml(target.id)}" disabled>Evaluate Manual</button>
+              <button type="button" class="secondary add-best-target-with-odds-to-parlay-button" data-target-id="${escapeHtml(target.id)}" disabled>Add Manual To Parlay</button>
+            </div>
             <footer>
               <button type="button" class="secondary load-best-target-button" data-target-id="${escapeHtml(target.id)}" ${target.ticketDraft ? "" : "disabled"}>${target.odds ? "Load Single" : "Load Draft"}</button>
               <button type="button" class="evaluate-best-target-button" data-target-id="${escapeHtml(target.id)}" ${target.ticketDraft && evaluation?.verdict === "BET" ? "" : "disabled"}>Evaluate</button>
@@ -3182,6 +3344,7 @@ function renderBestTargets(payload) {
       ? `<ul class="warning-list">${payload.warnings.slice(0, 4).map((warning) => `<li>${escapeHtml(warning)}</li>`).join("")}</ul>`
       : ""}
   `;
+  updateAllBestTargetManualPreviews();
 }
 
 async function loadBestTargets(date = "today") {
@@ -3423,10 +3586,52 @@ function findBestTarget(targetId) {
 
 function bestTargetTicket(target) {
   if (!target?.ticketDraft) {
-    throw new Error("This best target does not have a priced ticket draft.");
+    throw new Error("This best target does not have a reusable ticket draft.");
   }
 
   return applyBankrollPolicyToTicket(cloneJson(target.ticketDraft));
+}
+
+function buildLegFromBestTarget(target, card) {
+  const marketOdds = parseAmericanOddsInput(card.querySelector(".best-target-market-odds")?.value);
+  const oppositeOdds = parseAmericanOddsInput(card.querySelector(".best-target-opposite-odds")?.value);
+  const marketType = card.querySelector(".best-target-market-type")?.value || target.ticketDraft?.legs?.[0]?.marketType || "prop";
+
+  if (marketOdds === null) {
+    throw new Error("Enter real sportsbook marketOdds before loading this target.");
+  }
+
+  if (!target?.ticketDraft?.legs?.[0]) {
+    throw new Error("This best target is missing a reusable ticket leg.");
+  }
+
+  const leg = cloneJson(target.ticketDraft.legs[0]);
+  leg.marketOdds = marketOdds;
+  leg.marketType = marketType;
+  leg.correlationKey = leg.correlationKey ?? `${target.sport}:${target.gameId}`;
+  leg.riskFlags = (target.riskFlags ?? []).filter((flag) => flag.code !== "MISSING_MARKET_ODDS");
+
+  if (typeof target.modelProbability === "number" && Number.isFinite(target.modelProbability)) {
+    leg.modelProbabilityOverride = target.modelProbability;
+  }
+
+  if (oppositeOdds === null) {
+    delete leg.oppositeOdds;
+  } else {
+    leg.oppositeOdds = oppositeOdds;
+  }
+
+  return leg;
+}
+
+function buildTicketFromBestTarget(target, card) {
+  const ticket = cloneJson(target.ticketDraft);
+  const leg = buildLegFromBestTarget(target, card);
+
+  ticket.legs[0] = leg;
+  ticket.selection = `${target.ticketDraft.selection} at ${formatOdds(leg.marketOdds)}`;
+
+  return applyBankrollPolicyToTicket(ticket);
 }
 
 function parlayEntryFromBestTarget(target) {
@@ -3463,6 +3668,164 @@ function addBestTargetToParlay(target) {
   renderParlayBuilder();
 }
 
+function parlayEntryFromBestTargetManual(target, card) {
+  const leg = buildLegFromBestTarget(target, card);
+
+  return {
+    candidateId: target.id,
+    leg,
+    label: leg.label,
+    matchup: target.matchup,
+    sport: target.sport,
+    statLabel: target.statLabel ?? target.statKey,
+    modelProbability: target.modelProbability ?? null,
+    evRoi: expectedValueRoiFromOdds(target.modelProbability, leg.marketOdds),
+    correlationKey: leg.correlationKey
+  };
+}
+
+function addBestTargetManualToParlay(target, card) {
+  const entry = parlayEntryFromBestTargetManual(target, card);
+  const existingIndex = window.__bearEdgeParlayLegs.findIndex((item) => item.candidateId === target.id);
+
+  if (existingIndex >= 0) {
+    window.__bearEdgeParlayLegs[existingIndex] = entry;
+  } else {
+    if (window.__bearEdgeParlayLegs.length >= 3) {
+      throw new Error("Parlay builder supports a maximum of 3 legs.");
+    }
+
+    window.__bearEdgeParlayLegs.push(entry);
+  }
+
+  renderParlayBuilder();
+}
+
+function simulationProbabilityForLeg(leg) {
+  if (typeof leg.modelProbabilityOverride === "number" && Number.isFinite(leg.modelProbabilityOverride)) {
+    return leg.modelProbabilityOverride;
+  }
+
+  return null;
+}
+
+function simulationInputFromTicket(ticket) {
+  const settings = getBankrollSettings();
+  const policy = riskModePolicy(settings.riskMode);
+  const bankroll = Number(ticket.bankroll ?? settings.bankroll);
+  const legs = Array.isArray(ticket.legs) ? ticket.legs : [];
+
+  if (legs.length === 0) {
+    throw new Error("Simulation needs a loaded live ticket with at least one leg.");
+  }
+
+  const missingProbability = legs.find((leg) => simulationProbabilityForLeg(leg) === null);
+
+  if (missingProbability) {
+    throw new Error("Simulation needs modelProbabilityOverride. Load from Best 3 or Research Candidates after entering real odds.");
+  }
+
+  if (legs.length === 1) {
+    const leg = legs[0];
+    const stake = Math.max(settings.sportsbookMinimum, bankroll * policy.singleUnitFraction * 0.5);
+
+    return {
+      seed: `bear-edge:${ticket.selection ?? leg.label}`,
+      scenario: "half_edge",
+      iterations: 1000,
+      startingBankroll: bankroll,
+      bets: [
+        {
+          selection: leg.label ?? ticket.selection ?? leg.id,
+          americanOdds: leg.marketOdds,
+          stake,
+          fairProbability: simulationProbabilityForLeg(leg),
+          marketImpliedProbability: americanToImpliedProbability(leg.marketOdds),
+          marketType: leg.marketType,
+          source: leg.source
+        }
+      ]
+    };
+  }
+
+  const combinedDecimal = legs.reduce((total, leg) => total * americanToDecimal(leg.marketOdds), 1);
+  const combinedAmerican = decimalToAmerican(combinedDecimal);
+  const fairProbability = legs.reduce((total, leg) => total * simulationProbabilityForLeg(leg), 1);
+  const stake = Math.max(settings.sportsbookMinimum, bankroll * policy.parlayFraction);
+
+  return {
+    seed: `bear-edge:${ticket.selection ?? "parlay"}`,
+    scenario: "half_edge",
+    iterations: 1000,
+    startingBankroll: bankroll,
+    bets: [
+      {
+        selection: ticket.selection ?? `${legs.length}-leg parlay`,
+        americanOdds: combinedAmerican,
+        stake,
+        fairProbability,
+        marketImpliedProbability: 1 / combinedDecimal,
+        marketType: "parlay",
+        evidence: {
+          legCount: legs.length,
+          legs: legs.map((leg) => ({
+            label: leg.label,
+            marketOdds: leg.marketOdds,
+            modelProbability: simulationProbabilityForLeg(leg)
+          }))
+        }
+      }
+    ]
+  };
+}
+
+function renderSimulationResult(payload) {
+  els.latestTimestamp.textContent = `Simulated ${formatDate(payload.generatedAt)}`;
+  els.latestDecision.className = "latest-content";
+  els.latestDecision.innerHTML = `
+    <div class="decision-head">
+      <div>
+        <span class="eyebrow">Risk Simulation</span>
+        <h3>${escapeHtml(payload.bets?.[0]?.selection ?? "Loaded ticket")}</h3>
+      </div>
+      <span class="verdict-badge ${payload.expectedReturnOnStake > 0 ? "bet" : "pass"}">${escapeHtml(payload.scenario)}</span>
+    </div>
+    <div class="decision-grid">
+      ${[
+        ["Iterations", payload.iterations],
+        ["Expected ROI", formatPercent(payload.expectedReturnOnStake)],
+        ["Expected net", formatSignedMoney(payload.expectedNetProfitPerTrial)],
+        ["Positive trials", formatPercent(payload.probabilityOfPositiveTrial)],
+        ["Losing trials", formatPercent(payload.probabilityOfLosingTrial)],
+        ["5th percentile", formatSignedMoney(payload.summary?.percentile05NetProfit)]
+      ]
+        .map(([label, value]) => `<article><span>${escapeHtml(label)}</span><strong>${escapeHtml(value)}</strong></article>`)
+        .join("")}
+    </div>
+    <p class="sources">Scenario is half-edge stress: the simulator cuts the apparent edge in half before sampling. It is variance/risk analysis, not proof of future wins.</p>
+  `;
+}
+
+async function simulateLoadedTicket() {
+  const ticket = parseTicket();
+  const simulationInput = simulationInputFromTicket(ticket);
+  const response = await fetch("/api/simulate-card", {
+    method: "POST",
+    headers: {
+      "content-type": "application/json"
+    },
+    body: JSON.stringify(simulationInput)
+  });
+  const payload = await response.json();
+
+  if (!response.ok) {
+    throw new Error(payload.error ?? "Simulation failed.");
+  }
+
+  renderSimulationResult(payload);
+  setStatus("Simulation complete. Read it as variance risk, not a prediction guarantee.");
+}
+
 function buildLegFromCandidate(candidate, card) {
   const marketOdds = parseAmericanOddsInput(card.querySelector(".candidate-market-odds")?.value);
   const oppositeOdds = parseAmericanOddsInput(card.querySelector(".candidate-opposite-odds")?.value);
@@ -3477,6 +3840,9 @@ function buildLegFromCandidate(candidate, card) {
   leg.marketType = marketType;
   leg.correlationKey = `${candidate.sport}:${candidate.gameId}`;
   leg.riskFlags = (candidate.riskFlags ?? []).filter((flag) => flag.code !== "MISSING_MARKET_ODDS");
+  if (typeof candidate.prediction?.modelProbability === "number" && Number.isFinite(candidate.prediction.modelProbability)) {
+    leg.modelProbabilityOverride = candidate.prediction.modelProbability;
+  }
 
   if (oppositeOdds === null) {
     delete leg.oppositeOdds;
@@ -3843,6 +4209,14 @@ async function settleEvaluation(event) {
 }
 
 els.ticketForm.addEventListener("submit", evaluateTicket);
+els.simulateTicketButton.addEventListener("click", async () => {
+  try {
+    setStatus("Running ticket risk simulation...");
+    await simulateLoadedTicket();
+  } catch (error) {
+    setStatus(error.message, true);
+  }
+});
 els.ticketInput.addEventListener("input", renderTicketPreflightFromText);
 [
   els.bankrollInput,
@@ -3875,10 +4249,13 @@ els.ticketInput.addEventListener("input", renderTicketPreflightFromText);
 });
 els.historyBody.addEventListener("submit", settleEvaluation);
 els.bestTargetsBoard.addEventListener("click", async (event) => {
+  const manualLoadButton = event.target.closest(".load-best-target-with-odds-button");
+  const manualEvaluateButton = event.target.closest(".evaluate-best-target-with-odds-button");
+  const manualParlayButton = event.target.closest(".add-best-target-with-odds-to-parlay-button");
   const loadButton = event.target.closest(".load-best-target-button");
   const evaluateButton = event.target.closest(".evaluate-best-target-button");
   const parlayButton = event.target.closest(".add-best-target-to-parlay-button");
-  const button = loadButton ?? evaluateButton ?? parlayButton;
+  const button = manualLoadButton ?? manualEvaluateButton ?? manualParlayButton ?? loadButton ?? evaluateButton ?? parlayButton;
 
   if (!button) {
     return;
@@ -3892,6 +4269,26 @@ els.bestTargetsBoard.addEventListener("click", async (event) => {
   }
 
   try {
+    if (manualParlayButton) {
+      addBestTargetManualToParlay(target, button.closest(".best-target-card"));
+      setStatus("Manual-priced best target added to the parlay builder.");
+      return;
+    }
+
+    if (manualLoadButton || manualEvaluateButton) {
+      const ticket = buildTicketFromBestTarget(target, button.closest(".best-target-card"));
+
+      setTicketInputValue(ticket);
+      setStatus("Manual-priced best target loaded into the ticket evaluator.");
+
+      if (manualEvaluateButton) {
+        setStatus("Evaluating manual-priced best target...");
+        await submitTicket(ticket);
+      }
+
+      return;
+    }
+
     if (parlayButton) {
       addBestTargetToParlay(target);
       setStatus("Best target added to the parlay builder.");
@@ -3913,6 +4310,20 @@ els.bestTargetsBoard.addEventListener("click", async (event) => {
   } catch (error) {
     setStatus(error.message, true);
   }
+});
+els.bestTargetsBoard.addEventListener("input", (event) => {
+  if (!event.target.matches(".best-target-market-odds, .best-target-opposite-odds")) {
+    return;
+  }
+
+  updateBestTargetManualPreview(event.target.closest(".best-target-card"));
+});
+els.bestTargetsBoard.addEventListener("change", (event) => {
+  if (!event.target.matches(".best-target-market-type")) {
+    return;
+  }
+
+  updateBestTargetManualPreview(event.target.closest(".best-target-card"));
 });
 els.recordingComparisonResult.addEventListener("click", async (event) => {
   const loadButton = event.target.closest(".load-comparison-ticket-button");

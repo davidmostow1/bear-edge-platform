@@ -133,6 +133,7 @@ test("HTTP API serves the local dashboard", async () => {
     assert.match(dashboardHtml, /riskModeSelect/);
     assert.match(dashboardHtml, /unitGuardBoard/);
     assert.match(dashboardHtml, /ticketPreflightBoard/);
+    assert.match(dashboardHtml, /simulateTicketButton/);
     assert.match(dashboardHtml, /Universal Screenshot Intake/);
     assert.match(dashboardHtml, /globalDropOverlay/);
     assert.match(dashboardHtml, /screenshotImageInput/);
@@ -172,6 +173,8 @@ test("HTTP API serves the local dashboard", async () => {
     assert.match(dashboardScript, /renderUnitGuard/);
     assert.match(dashboardScript, /renderOperatorStatus/);
     assert.match(dashboardScript, /validateTicketPreflight/);
+    assert.match(dashboardScript, /isSingleTicket/);
+    assert.match(dashboardScript, /isParlayTicket/);
     assert.match(dashboardScript, /applyBankrollPolicyToTicket/);
     assert.match(dashboardScript, /Ticket preflight blocked evaluation/);
     assert.match(dashboardScript, /loadAutoUpdateStatus/);
@@ -220,6 +223,11 @@ test("HTTP API serves the local dashboard", async () => {
     assert.match(dashboardScript, /load-best-target-button/);
     assert.match(dashboardScript, /evaluate-best-target-button/);
     assert.match(dashboardScript, /add-best-target-to-parlay-button/);
+    assert.match(dashboardScript, /best-target-market-odds/);
+    assert.match(dashboardScript, /evaluate-best-target-with-odds-button/);
+    assert.match(dashboardScript, /buildTicketFromBestTarget/);
+    assert.match(dashboardScript, /simulateLoadedTicket/);
+    assert.match(dashboardScript, /modelProbabilityOverride/);
     assert.match(dashboardScript, /Load Draft/);
     assert.match(dashboardScript, /Load With Odds/);
     assert.match(dashboardScript, /parseAmericanOddsInput/);

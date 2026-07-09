@@ -1165,6 +1165,43 @@ main {
   margin-top: 2px;
 }
 
+.best-target-manual-odds {
+  border-top: 1px solid var(--line);
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(3, minmax(90px, 1fr));
+  padding-top: 10px;
+}
+
+.best-target-manual-odds label {
+  display: grid;
+  gap: 5px;
+}
+
+.best-target-manual-odds label span {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.best-target-manual-odds input,
+.best-target-manual-odds select {
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  color: var(--ink);
+  height: 38px;
+  min-width: 0;
+  padding: 0 9px;
+  width: 100%;
+}
+
+.best-target-manual-odds button {
+  min-height: 38px;
+  white-space: nowrap;
+}
+
 .rank-pill {
   align-items: center;
   background: var(--ink);
@@ -2501,6 +2538,7 @@ th {
   }
 
   .candidate-odds,
+  .best-target-manual-odds,
   .provider-key-form {
     grid-template-columns: 1fr;
   }

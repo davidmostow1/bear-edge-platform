@@ -23,6 +23,7 @@ test("validateLiveTicket accepts a 2-leg alt-prop parlay", () => {
         side: "over",
         line: 1.5,
         marketOdds: 120,
+        modelProbabilityOverride: 0.58,
         source: { playerId: 1, statGroup: "hitting", statKey: "totalBases" }
       },
       {
@@ -39,6 +40,7 @@ test("validateLiveTicket accepts a 2-leg alt-prop parlay", () => {
 
   assert.equal(ticket.kind, "parlay");
   assert.equal(ticket.legs.length, 2);
+  assert.equal(ticket.legs[0].modelProbabilityOverride, 0.58);
 });
 
 test("evaluateLiveTicket prices a cross-sport live parlay from official-source snapshots", async () => {

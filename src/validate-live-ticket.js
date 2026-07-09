@@ -27,6 +27,14 @@ const LIVE_TICKET_SCHEMA = Object.freeze({
           line: { type: "number", minimum: 0 },
           marketOdds: { type: "number" },
           oppositeOdds: { type: "number" },
+          modelProbabilityOverride: { type: "number", minimum: 0, maximum: 1 },
+          recentWeight: { type: "number", minimum: 0, maximum: 1 },
+          marketWeight: { type: "number", minimum: 0, maximum: 1 },
+          minEvRoi: { type: "number" },
+          minStake: { type: "number", minimum: 0 },
+          maxStake: { type: "number", exclusiveMinimum: 0 },
+          maxBankrollFraction: { type: "number", minimum: 0, maximum: 1 },
+          maxSourceAgeMinutes: { type: "number", minimum: 0 },
           riskFlags: {
             type: "array",
             items: { type: "object" }
