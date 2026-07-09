@@ -1262,6 +1262,89 @@ function renderRequirementPill(label, ok) {
   `;
 }
 
+function providerCapabilityStatus(provider, capability) {
+  const liveStatus = provider?.liveStatus ?? "unavailable";
+  const usable = liveStatus === "live" || liveStatus === "degraded";
+  const degraded = liveStatus === "degraded";
+
+  if (capability === "scoreboards") {
+    return provider.provider === "ESPN"
+      ? { state: degraded ? "medium" : usable ? "ok" : "high", label: usable ? "yes" : "no" }
+      : { state: "neutral", label: "-" };
+  }
+
+  if (capability === "research") {
+    return ["STAT News", "StatMuse"].includes(provider.provider)
+      ? { state: degraded ? "medium" : usable ? "ok" : "high", label: usable ? "yes" : "no" }
+      : { state: "neutral", label: "-" };
+  }
+
+  if (capability === "odds") {
+    return provider.provider === "DraftKings"
+      ? { state: liveStatus === "live" ? "ok" : liveStatus === "degraded" ? "medium" : "high", label: liveStatus === "live" ? "yes" : "no" }
+      : { state: "neutral", label: "-" };
+  }
+
+  if (capability === "tennis") {
+    return provider.provider === "Tennis"
+      ? { state: liveStatus === "live" ? "ok" : "high", label: liveStatus === "live" ? "yes" : "manual" }
+      : { state: "neutral", label: "-" };
+  }
+
+  if (capability === "freshness") {
+    if (provider.stale) {
+      return { state: "high", label: "stale" };
+    }
+
+    return provider.ageMs === null || provider.ageMs === undefined
+      ? { state: "neutral", label: "-" }
+      : { state: "ok", label: "fresh" };
+  }
+
+  return { state: "neutral", label: "-" };
+}
+
+function renderLiveSourceMatrix(providers) {
+  const columns = [
+    { key: "scoreboards", label: "Scores" },
+    { key: "research", label: "Research" },
+    { key: "odds", label: "Odds" },
+    { key: "tennis", label: "Tennis" },
+    { key: "freshness", label: "Fresh" }
+  ];
+
+  return `
+    <section class="live-source-matrix" aria-label="Live source capability matrix">
+      <header>
+        <div>
+          <h3>Source Health Matrix</h3>
+          <p>Rows are data providers. Columns show what each provider can support right now.</p>
+        </div>
+        <span class="sources">Green usable / amber degraded / red blocked</span>
+      </header>
+      <div class="live-source-matrix-grid" role="table" aria-label="Live source capability matrix">
+        <div class="matrix-head provider-name" role="columnheader">Provider</div>
+        ${columns.map((column) => `<div class="matrix-head" role="columnheader">${escapeHtml(column.label)}</div>`).join("")}
+        ${providers
+          .map((provider) => `
+            <div class="matrix-provider" role="rowheader">
+              <strong>${escapeHtml(provider.provider)}</strong>
+              <span>${escapeHtml(provider.liveStatus)} / ${escapeHtml(formatDurationMs(provider.ageMs))}</span>
+            </div>
+            ${columns
+              .map((column) => {
+                const cell = providerCapabilityStatus(provider, column.key);
+
+                return `<div class="matrix-cell ${escapeHtml(cell.state)}" role="cell">${escapeHtml(cell.label)}</div>`;
+              })
+              .join("")}
+          `)
+          .join("")}
+      </div>
+    </section>
+  `;
+}
+
 function renderLiveDataHealth(payload) {
   const providers = Array.isArray(payload?.providers) ? payload.providers : [];
   const actions = Array.isArray(payload?.actions) ? payload.actions : [];
@@ -1303,6 +1386,7 @@ function renderLiveDataHealth(payload) {
       ${renderRequirementPill("Verified odds", Boolean(requirements.verifiedOdds))}
       ${renderRequirementPill("Tennis automation", Boolean(requirements.tennisAutomation))}
     </div>
+    ${renderLiveSourceMatrix(providers)}
     <div class="live-provider-grid">
       ${providers
         .map((provider) => `

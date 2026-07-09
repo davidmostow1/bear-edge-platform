@@ -206,6 +206,9 @@ test("HTTP API serves the local dashboard", async () => {
     assert.match(dashboardScript, /loadAutoUpdateStatus/);
     assert.match(dashboardScript, /LIVE_DATA_HEARTBEAT_MS/);
     assert.match(dashboardScript, /loadLiveDataHealth/);
+    assert.match(dashboardScript, /renderLiveSourceMatrix/);
+    assert.match(dashboardScript, /Source Health Matrix/);
+    assert.match(dashboardScript, /live-source-matrix/);
     assert.match(dashboardScript, /\/api\/live-data-health/);
     assert.match(dashboardScript, /loadSystemAudit/);
     assert.match(dashboardScript, /loadReleaseReadiness/);

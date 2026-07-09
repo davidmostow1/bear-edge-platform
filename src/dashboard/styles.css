@@ -112,7 +112,7 @@ main {
 
 .command-center-panel {
   margin-bottom: 14px;
-  overflow: hidden;
+  overflow-x: auto;
 }
 
 .command-grid,
@@ -821,6 +821,112 @@ main {
 
 .live-requirement strong {
   font-size: 16px;
+}
+
+.live-source-matrix {
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  display: grid;
+  gap: 12px;
+  overflow: hidden;
+  padding: 12px;
+}
+
+.live-source-matrix header {
+  align-items: start;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+}
+
+.live-source-matrix h3 {
+  font-size: 15px;
+  margin: 0 0 4px;
+}
+
+.live-source-matrix p {
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.35;
+  margin: 0;
+}
+
+.live-source-matrix-grid {
+  display: grid;
+  grid-template-columns: minmax(150px, 1.3fr) repeat(5, minmax(80px, 1fr));
+  gap: 6px;
+  min-width: 640px;
+}
+
+.matrix-head,
+.matrix-provider,
+.matrix-cell {
+  border-radius: 8px;
+  min-height: 42px;
+  padding: 8px;
+}
+
+.matrix-head {
+  align-content: center;
+  background: var(--field);
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 900;
+  text-align: center;
+  text-transform: uppercase;
+}
+
+.matrix-head.provider-name {
+  text-align: left;
+}
+
+.matrix-provider {
+  background: #f9fbf8;
+  border: 1px solid var(--line);
+  display: grid;
+  gap: 3px;
+}
+
+.matrix-provider strong {
+  font-size: 13px;
+}
+
+.matrix-provider span {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.matrix-cell {
+  align-content: center;
+  border: 1px solid var(--line);
+  font-size: 12px;
+  font-weight: 900;
+  text-align: center;
+  text-transform: uppercase;
+}
+
+.matrix-cell.ok {
+  background: var(--green-soft);
+  border-color: rgba(15, 123, 95, 0.22);
+  color: var(--green);
+}
+
+.matrix-cell.medium {
+  background: var(--amber-soft);
+  border-color: rgba(169, 104, 0, 0.22);
+  color: var(--amber);
+}
+
+.matrix-cell.high {
+  background: var(--red-soft);
+  border-color: rgba(180, 51, 46, 0.22);
+  color: var(--red);
+}
+
+.matrix-cell.neutral {
+  background: #fafafa;
+  color: var(--muted);
 }
 
 .live-provider-card header {
@@ -2680,6 +2786,7 @@ th {
   .unit-pressure,
   .operator-state-card,
   .live-data-hero,
+  .live-source-matrix header,
   .release-hero {
     align-items: start;
     flex-direction: column;
