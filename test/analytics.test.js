@@ -151,18 +151,21 @@ test("validation gate requires three settled BET wins in a row", () => {
       recordType: "settlement",
       evaluationId: "eval_1",
       outcome: "win",
+      closingOdds: -115,
       settledAt: "2026-06-17T10:00:00.000Z"
     },
     {
       recordType: "settlement",
       evaluationId: "eval_2",
       outcome: "win",
+      closingOdds: -120,
       settledAt: "2026-06-17T11:00:00.000Z"
     },
     {
       recordType: "settlement",
       evaluationId: "eval_3",
       outcome: "win",
+      closingOdds: -125,
       settledAt: "2026-06-17T12:00:00.000Z"
     }
   ];
@@ -172,6 +175,35 @@ test("validation gate requires three settled BET wins in a row", () => {
   assert.equal(dashboard.validationGate.complete, true);
   assert.equal(dashboard.validationGate.currentWinStreak, 3);
   assert.equal(dashboard.validationGate.remainingWins, 0);
+});
+
+test("validation gate rejects settled wins without closing-line evidence", () => {
+  const records = [1, 2, 3].flatMap((number) => [
+    {
+      id: `eval_${number}`,
+      recordType: "evaluation",
+      timestamp: `2026-06-17T0${number}:00:00.000Z`,
+      selection: `Bet ${number}`,
+      verdict: "BET",
+      inputs: { marketOdds: -110, marketType: "straight" },
+      metrics: { expectedValueRoi: 0.05, recommendedStake: 10 },
+      sourceTimestamps: [`2026-06-17T0${number}:00:00.000Z`]
+    },
+    {
+      recordType: "settlement",
+      evaluationId: `eval_${number}`,
+      outcome: "win",
+      settledAt: `2026-06-17T1${number}:00:00.000Z`
+    }
+  ]);
+
+  const dashboard = summarizeDecisionLogRecords(records);
+
+  assert.equal(dashboard.validationGate.complete, false);
+  assert.equal(dashboard.validationGate.currentWinStreak, 0);
+  assert.equal(dashboard.validationGate.remainingWins, 3);
+  assert.equal(dashboard.validationGate.ineligibleSettledBetCalls, 3);
+  assert.ok(dashboard.dataQuality.checks.some((check) => check.code === "MISSING_CLOSING_ODDS"));
 });
 
 test("decision-log data quality blocks ungraded BET history", () => {
