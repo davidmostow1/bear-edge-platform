@@ -45,17 +45,51 @@ function evaluationRecord(sequence = 1) {
 test("appendAuthoritativeRecord appends once and treats the same id and digest as idempotent", async (t) => {
   const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "bear-edge-ledger-"));
   const ledgerPath = path.join(tempDir, "decision_log.jsonl");
+  const outboxPath = path.join(tempDir, "sync_outbox.jsonl");
   const record = evaluationRecord();
   t.after(() => fs.rm(tempDir, { recursive: true, force: true }));
 
-  const first = await appendAuthoritativeRecord(record, { ledgerPath });
-  const second = await appendAuthoritativeRecord(record, { ledgerPath });
+  const first = await appendAuthoritativeRecord(record, { ledgerPath, outboxPath });
+  const second = await appendAuthoritativeRecord(record, { ledgerPath, outboxPath });
   const lines = (await fs.readFile(ledgerPath, "utf8")).trim().split("\n");
+  const outboxLines = (await fs.readFile(outboxPath, "utf8")).trim().split("\n");
 
   assert.equal(first.appended, true);
   assert.equal(second.appended, false);
   assert.equal(first.ledgerPath, ledgerPath);
+  assert.equal(first.syncState, "pending");
+  assert.equal(second.syncState, "pending");
   assert.equal(lines.length, 1);
+  assert.equal(outboxLines.length, 1);
+});
+
+test("appendAuthoritativeRecord keeps the local record when outbox persistence fails", async (t) => {
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "bear-edge-ledger-"));
+  const ledgerPath = path.join(tempDir, "decision_log.jsonl");
+  const outboxPath = path.join(tempDir, "missing", "sync_outbox.jsonl");
+  const record = evaluationRecord();
+  const fsImpl = {
+    ...fs,
+    mkdir: async (directory, options) => {
+      if (path.resolve(directory) === path.resolve(path.dirname(outboxPath))) {
+        throw Object.assign(new Error("outbox unavailable"), { code: "EACCES" });
+      }
+      return fs.mkdir(directory, options);
+    }
+  };
+  t.after(() => fs.rm(tempDir, { recursive: true, force: true }));
+
+  const result = await appendAuthoritativeRecord(record, {
+    ledgerPath,
+    outboxPath,
+    fsImpl
+  });
+
+  assert.equal(result.appended, true);
+  assert.equal(result.syncState, "terminal_failure");
+  assert.equal(result.syncError.code, "OUTBOX_OPEN_FAILED");
+  assert.match(result.syncError.message, /authoritative record remains available/i);
+  assert.equal((await fs.readFile(ledgerPath, "utf8")).trim().split("\n").length, 1);
 });
 
 test("appendAuthoritativeRecord rejects the same id with a different digest", async (t) => {

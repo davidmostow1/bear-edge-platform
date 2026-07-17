@@ -6,6 +6,7 @@ const {
   AUDIT_RECORD_SCHEMA_VERSION,
   validateAuditRecord
 } = require("./record-contract.js");
+const { enqueueRecord } = require("../sync/outbox.js");
 
 const DEFAULT_AUTHORITATIVE_LEDGER_PATH = path.resolve(
   process.cwd(),
@@ -174,7 +175,7 @@ async function appendAuthoritativeRecord(record, options = {}) {
   const ledgerPath = resolveAuthoritativeLedgerPath(options.ledgerPath ?? options.logPath);
   const fsImpl = options.fsImpl ?? fs;
 
-  return enqueueAppend(ledgerPath, async () => {
+  const persistence = await enqueueAppend(ledgerPath, async () => {
     const inspection = await readAuthoritativeLedger({ ledgerPath, fsImpl });
     const sameId = inspection.records.filter((existing) => existing?.id === record?.id);
     const conflicting = sameId.find(
@@ -263,6 +264,33 @@ async function appendAuthoritativeRecord(record, options = {}) {
       persistedAt: new Date().toISOString()
     };
   });
+
+  try {
+    const sync = await enqueueRecord(record, {
+      outboxPath: options.outboxPath,
+      ledgerPath,
+      fsImpl: options.outboxFsImpl ?? fsImpl
+    });
+
+    return {
+      ...persistence,
+      outboxPath: sync.outboxPath,
+      syncEventId: sync.event.eventId,
+      syncState: sync.event.state,
+      syncError: null
+    };
+  } catch (error) {
+    return {
+      ...persistence,
+      outboxPath: options.outboxPath ?? null,
+      syncEventId: null,
+      syncState: "terminal_failure",
+      syncError: {
+        code: typeof error?.code === "string" ? error.code : "OUTBOX_ENQUEUE_FAILED",
+        message: "The authoritative record remains available locally, but remote synchronization could not be queued."
+      }
+    };
+  }
 }
 
 module.exports = {
