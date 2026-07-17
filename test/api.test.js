@@ -897,6 +897,8 @@ test("HTTP API fetches provider odds when a configured API key exists", async ()
 });
 
 test("HTTP API ranks best MLB targets as price checks without an odds key", async () => {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "bear-edge-best-targets-"));
+  const logPath = path.join(tempDir, "decision_log.jsonl");
   const previousOddsApiKey = process.env.THE_ODDS_API_KEY;
   const previousAltOddsApiKey = process.env.ODDS_API_KEY;
 
@@ -915,7 +917,46 @@ test("HTTP API ranks best MLB targets as price checks without an odds key", asyn
       assert.equal(payload.best[0].status, "price_check");
       assert.equal(payload.best[0].odds, null);
       assert.equal(payload.best[0].evaluation, null);
+      assert.equal(payload.best[0].auditRecord.verdict, "WAIT");
+      assert.equal(payload.best[0].auditRecord.permission, "PRICE_CHECK_ONLY");
+      assert.equal(payload.persistence.persistedCount, payload.best.length);
+      assert.equal(fs.readFileSync(logPath, "utf8").trim().split("\n").length, payload.best.length);
       assert.ok(payload.warnings.some((warning) => warning.includes("price-check targets")));
+    }, { logPath });
+  } finally {
+    if (previousOddsApiKey === undefined) {
+      delete process.env.THE_ODDS_API_KEY;
+    } else {
+      process.env.THE_ODDS_API_KEY = previousOddsApiKey;
+    }
+
+    if (previousAltOddsApiKey === undefined) {
+      delete process.env.ODDS_API_KEY;
+    } else {
+      process.env.ODDS_API_KEY = previousAltOddsApiKey;
+    }
+  }
+});
+
+test("best-target route returns no recommendations when authoritative persistence fails", async () => {
+  const previousOddsApiKey = process.env.THE_ODDS_API_KEY;
+  const previousAltOddsApiKey = process.env.ODDS_API_KEY;
+
+  delete process.env.THE_ODDS_API_KEY;
+  delete process.env.ODDS_API_KEY;
+
+  try {
+    await withServer(async (baseUrl) => {
+      const response = await fetch(`${baseUrl}/api/best-mlb-targets?date=2026-06-17&days=1&limit=3`);
+      const payload = await response.json();
+
+      assert.equal(response.status, 500);
+      assert.equal(Object.prototype.hasOwnProperty.call(payload, "best"), false);
+      assert.match(payload.error, /forced recommendation ledger failure/i);
+    }, {
+      appendAuthoritativeRecordImpl: async () => {
+        throw new Error("Forced recommendation ledger failure");
+      }
     });
   } finally {
     if (previousOddsApiKey === undefined) {
@@ -967,6 +1008,8 @@ test("HTTP API exposes explicit odds evidence and price-check permission", async
 });
 
 test("HTTP API prices and evaluates best MLB targets with a configured odds key", async () => {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "bear-edge-best-targets-priced-"));
+  const logPath = path.join(tempDir, "decision_log.jsonl");
   const previousOddsApiKey = process.env.THE_ODDS_API_KEY;
 
   process.env.THE_ODDS_API_KEY = "test-odds-key";
@@ -994,10 +1037,13 @@ test("HTTP API prices and evaluates best MLB targets with a configured odds key"
       assert.ok(payload.best[0].ticketDraft.legs[0].marketContext.consensus.length >= 2);
       assert.equal(payload.best[0].riskFlags.some((flag) => flag.code === "MISSING_MARKET_ODDS"), false);
       assert.ok(["BET", "PASS", "WAIT"].includes(payload.best[0].evaluation.verdict));
+      assert.equal(payload.best[0].auditRecord.verdict, "WAIT");
+      assert.equal(payload.best[0].auditRecord.model.modelStatus, "research_only");
+      assert.equal(payload.persistence.persistedCount, payload.best.length);
       assert.equal(typeof payload.best[0].evaluation.expectedValueRoi, "number");
       assert.equal(payload.oddsSources.eventsSourceUrl?.includes("test-odds-key"), false);
       assert.equal(JSON.stringify(payload).includes("test-odds-key"), false);
-    });
+    }, { logPath });
   } finally {
     if (previousOddsApiKey === undefined) {
       delete process.env.THE_ODDS_API_KEY;

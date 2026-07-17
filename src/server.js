@@ -3,6 +3,7 @@ const fs = require("node:fs/promises");
 const path = require("node:path");
 
 const { appendAuthoritativeRecord } = require("./audit/authoritative-ledger.js");
+const { persistDisplayedTargets } = require("./audit/recommendation-service.js");
 const {
   appendSettlement,
   getDecisionLogDashboard
@@ -370,8 +371,15 @@ function createServer(options = {}) {
           fetchJsonImpl: process.env.BEAR_EDGE_TEST_MODE ? fetchJson : options.fetchJsonImpl,
           oddsApiKey: process.env.THE_ODDS_API_KEY ?? process.env.ODDS_API_KEY
         });
+        const persistedResult = await persistDisplayedTargets(result, {
+          logPath: options.logPath,
+          requestId: typeof request.headers["x-request-id"] === "string"
+            ? request.headers["x-request-id"]
+            : null,
+          appendRecordImpl: options.appendAuthoritativeRecordImpl
+        });
 
-        return jsonResponse(response, 200, result);
+        return jsonResponse(response, 200, persistedResult);
       }
 
       if (request.method === "GET" && url.pathname === "/api/online-opportunities") {

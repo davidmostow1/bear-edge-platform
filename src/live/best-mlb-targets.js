@@ -77,15 +77,17 @@ function kellyFraction(winProbability, americanOdds) {
 
 function evaluatePrice(candidate, price, options = {}) {
   const bankroll = options.bankroll ?? candidate.ticketDraft.bankroll ?? 1000;
-  const marketWeight = candidate.ticketDraft.livePolicy?.marketWeight ?? 0.35;
+  const livePolicy = candidate.ticketDraft.livePolicy ?? {};
+  const marketWeight = livePolicy.marketWeight ?? 0.35;
+  const maxMarketAgeMinutes = options.maxMarketAgeMinutes ?? livePolicy.maxMarketAgeMinutes;
   const marketIntelligence = analyzeMarketIntelligence({
     marketOdds: price.marketOdds,
     oppositeOdds: price.oppositeOdds,
     marketContext: price.marketContext,
     baseMarketWeight: marketWeight,
-    policy: options.maxMarketAgeMinutes === undefined
+    policy: maxMarketAgeMinutes === undefined
       ? {}
-      : { maxMarketAgeMinutes: options.maxMarketAgeMinutes }
+      : { maxMarketAgeMinutes }
   });
   const marketProbability = marketIntelligence.referenceProbability;
   const adjustedModelProbability = applyMarketAdjustments(
@@ -103,10 +105,15 @@ function evaluatePrice(candidate, price, options = {}) {
   const roi = expectedValueRoi(adjustedProbability, price.marketOdds);
   const kelly = kellyFraction(adjustedProbability, price.marketOdds);
   const policy = {
-    kellyMultiplier: candidate.ticketDraft.livePolicy?.kellyMultiplier ?? 0.12,
-    maxBankrollFraction: candidate.ticketDraft.livePolicy?.maxBankrollFraction ?? 0.015,
-    maxStake: Math.max(5, bankroll * 0.015),
-    minStake: candidate.ticketDraft.livePolicy?.minStake ?? 5
+    minFairEdge: livePolicy.minFairEdge ?? 0.02,
+    minEvRoi: livePolicy.minEvRoi ?? 0.01,
+    minKellyFraction: livePolicy.minKellyFraction ?? 0.005,
+    requireMarketTimestamp: livePolicy.requireMarketTimestamp ?? true,
+    requireCalibratedModel: livePolicy.requireCalibratedModel ?? true,
+    kellyMultiplier: livePolicy.kellyMultiplier ?? 0.12,
+    maxBankrollFraction: livePolicy.maxBankrollFraction ?? 0.015,
+    maxStake: livePolicy.maxStake ?? Math.max(5, bankroll * 0.015),
+    minStake: livePolicy.minStake ?? 5
   };
   const rawStake = bankroll * kelly * policy.kellyMultiplier;
   const recommendedStake = Math.min(rawStake, policy.maxStake, bankroll * policy.maxBankrollFraction);
@@ -119,10 +126,37 @@ function evaluatePrice(candidate, price, options = {}) {
     }
   }
   riskFlags.push(...marketIntelligence.riskFlags);
-
+  if (policy.requireCalibratedModel && candidate.prediction?.calibrationStatus !== "validated") {
+    riskFlags.push({
+      code: "MODEL_CALIBRATION_REQUIRED",
+      severity: "high",
+      message: "This candidate is a research-only model output and has not passed a calibration validation gate."
+    });
+  }
   let verdict = "BET";
 
-  if (fairEdge < 0.01) {
+  const marketDataRiskCodes = new Set([
+    "MISSING_MARKET_TIMESTAMP",
+    "INVALID_MARKET_TIMESTAMP",
+    "FUTURE_MARKET_TIMESTAMP",
+    "STALE_MARKET_PRICE",
+    "MARKET_DISAGREEMENT"
+  ]);
+  const hasMarketDataRisk = riskFlags.some((flag) => marketDataRiskCodes.has(flag.code));
+  const hasManualConfirmationRisk = riskFlags.some((flag) =>
+    ["LINEUP_NOT_CONFIRMED", "STALE_INJURY", "INJURY_DATA_STALE", "ROSTER_NOT_CONFIRMED"].includes(flag.code)
+  );
+
+  if (policy.requireMarketTimestamp && hasMarketDataRisk) {
+    verdict = "WAIT";
+    reasons.push("Market timestamp or market agreement is not safe for a live decision.");
+  } else if (hasManualConfirmationRisk) {
+    verdict = "WAIT";
+    reasons.push("Lineup, roster, or injury evidence requires manual confirmation.");
+  } else if (policy.requireCalibratedModel && candidate.prediction?.calibrationStatus !== "validated") {
+    verdict = "WAIT";
+    reasons.push("The research model is not calibrated for production betting.");
+  } else if (fairEdge <= policy.minFairEdge) {
     verdict = "PASS";
     reasons.push("Adjusted fair edge versus the no-vig market is below threshold.");
     riskFlags.push({
@@ -130,7 +164,7 @@ function evaluatePrice(candidate, price, options = {}) {
       severity: "info",
       message: "Adjusted fair edge versus the no-vig market does not clear the minimum edge threshold."
     });
-  } else if (roi < 0.01) {
+  } else if (roi <= policy.minEvRoi) {
     verdict = "PASS";
     reasons.push("Expected value versus offered odds is below threshold.");
     riskFlags.push({
@@ -138,7 +172,7 @@ function evaluatePrice(candidate, price, options = {}) {
       severity: "info",
       message: "Expected value versus the offered odds does not clear the minimum ROI threshold."
     });
-  } else if (kelly < 0.001) {
+  } else if (kelly <= policy.minKellyFraction) {
     verdict = "PASS";
     reasons.push("Kelly fraction is below threshold.");
     riskFlags.push({
@@ -146,7 +180,7 @@ function evaluatePrice(candidate, price, options = {}) {
       severity: "info",
       message: "Kelly fraction does not clear the minimum staking threshold."
     });
-  } else if (recommendedStake < policy.minStake) {
+  } else if (recommendedStake <= policy.minStake) {
     verdict = "PASS";
     reasons.push("Recommended stake is below minimum.");
     riskFlags.push({
@@ -392,6 +426,17 @@ function serializeCandidate(candidate, extra = {}) {
       : null,
     rankValue: extra.rankValue ?? unpricedRankValue(candidate),
     stats: candidate.stats,
+    model: {
+      modelId: candidate.prediction?.model ?? "unknown",
+      modelVersion: candidate.prediction?.modelVersion ?? "1.0.0",
+      modelStatus: candidate.prediction?.calibrationStatus === "validated"
+        ? "validated"
+        : "research_only",
+      probabilityMethod: candidate.prediction?.model ?? "unknown",
+      calibrationReportId: candidate.prediction?.calibrationReportId ?? null,
+      trainingCutoff: candidate.prediction?.trainingCutoff ?? null,
+      sampleSize: candidate.prediction?.sampleSize ?? null
+    },
     odds: extra.odds ?? null,
     evaluation: extra.evaluation ?? null,
     ticketDraft: extra.ticketDraft ?? candidate.ticketDraft ?? null,
@@ -514,8 +559,12 @@ function evaluatePricedCandidate(candidate, price, options = {}) {
       verdict: evaluation.verdict,
       reasons: evaluation.reasons,
       marketIntelligence: evaluation.marketIntelligence,
+      calibrationStatus: candidate.prediction?.calibrationStatus ?? "unknown",
       adjustedModelProbability: evaluation.adjustedModelProbability,
       adjustedProbability: evaluation.adjustedProbability,
+      marketProbability: evaluation.marketProbability,
+      impliedProbability: evaluation.impliedProbability,
+      fairEdge: evaluation.fairEdge,
       priceEdge: evaluation.priceEdge,
       expectedValueRoi: evaluation.expectedValueRoi,
       expectedValuePerDollar: evaluation.expectedValuePerDollar,
