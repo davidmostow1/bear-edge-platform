@@ -46,7 +46,7 @@ The current checkout contains pre-existing uncommitted work that is part of the 
 
 ## Program Baseline
 
-- [ ] **Step 1: Record the pre-implementation baseline**
+- [x] **Step 1: Record the pre-implementation baseline**
 
 Run:
 
@@ -59,9 +59,23 @@ PATH="/Applications/ChatGPT.app/Contents/Resources/cua_node/bin:$PATH" npm run a
 
 Expected: the status lists the known dirty worktree, `HEAD` starts at or descends from `0290140`, verification passes, and release readiness remains truthful about provider and evidence blockers.
 
-- [ ] **Step 2: Preserve baseline evidence**
+- [x] **Step 2: Preserve baseline evidence**
 
 Create `data/reports/elite-audit/baseline.json` through the audit writer introduced in Plan 5, or temporarily retain the complete terminal output until Plan 5 imports it. The evidence must include command, start time, end time, exit code, commit identifier, and output digest.
+
+### Baseline Result
+
+- Recorded at commit `69a0e620ac0de85fd670237587860284d48617f1` on branch `codex/product-hardening-ci`.
+- The pre-existing dirty worktree contained 42 tracked or untracked entries and was preserved without restoration or broad staging.
+- `npm run verify` passed TypeScript checking and 138 of 138 tests with zero failures.
+- `npm run audit:release` completed with `shippable-with-warnings`, score 85 of 100, and `PRICE_CHECK_ONLY` betting permission.
+- The release audit reported blocked decision-log quality, zero of three legacy validation wins, provider error for verified odds, zero fresh priced candidates, zero exact DraftKings matches, stale live data, and no configured licensed injury or verified tennis feed.
+- The operator doctor independently repeated verification and release audit successfully. The local dashboard server was not running during its API probes, so live API health and best-target responses were unavailable for this baseline.
+- Retained release evidence: `data/reports/release_readiness.json`, SHA-256 `96bbc69b7bdab1a3e3a8a5c151411d5df526aa0d556184975c6c3da23961ac85`.
+- Retained release summary: `data/reports/release_readiness.md`, SHA-256 `18e939b73b6ecbf4951b822b7d23816ef455caa756cf950d323f75d5f076d1b1`.
+- Retained operator evidence: `data/reports/bear_edge_operator_doctor.json`, SHA-256 `b7b3e1fb5b8865e6fb938df95dbd233c2b67e3c9e3a137aae2450ebd8f46fa32`.
+- Retained operator summary: `data/reports/bear_edge_operator_doctor.md`, SHA-256 `dc7ece1892685fd56304ceccb85aae361bb305dd564a2936e555fb98fbe0ec78`.
+- Plan 5 must import the retained command evidence into `data/reports/elite-audit/baseline.json` without changing the recorded outcomes.
 
 ## Execution Rule
 
