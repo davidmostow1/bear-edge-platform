@@ -1,9 +1,13 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
+const fs = require("node:fs/promises");
+const os = require("node:os");
+const path = require("node:path");
 
 const {
   calculateClosingLineValue,
   createSettlementRecord,
+  readDecisionLogEntries,
   summarizeDecisionLogRecords
 } = require("../src/index.js");
 
@@ -228,4 +232,24 @@ test("decision-log data quality flags malformed rows and orphan settlements", ()
   assert.equal(dashboard.dataQuality.metrics.orphanSettlementCount, 1);
   assert.ok(dashboard.dataQuality.checks.some((check) => check.code === "MALFORMED_LOG_LINES"));
   assert.ok(dashboard.dataQuality.checks.some((check) => check.code === "ORPHAN_SETTLEMENTS"));
+});
+
+test("decision-log reading reports duplicate identifiers and digest conflicts without changing records", async (t) => {
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "bear-edge-analytics-"));
+  const logPath = path.join(tempDir, "decision_log.jsonl");
+  const first = { id: "eval_duplicate", contentDigest: "a".repeat(64), verdict: "WAIT" };
+  const conflict = { ...first, contentDigest: "b".repeat(64) };
+  t.after(() => fs.rm(tempDir, { recursive: true, force: true }));
+
+  await fs.writeFile(
+    logPath,
+    `${JSON.stringify(first)}\n${JSON.stringify(first)}\n${JSON.stringify(conflict)}\n`,
+    "utf8"
+  );
+  const result = await readDecisionLogEntries({ logPath });
+
+  assert.equal(result.records.length, 3);
+  assert.equal(result.duplicateIds.length, 1);
+  assert.equal(result.digestConflicts.length, 1);
+  assert.deepEqual(result.records[0], first);
 });

@@ -1,10 +1,12 @@
 const crypto = require("node:crypto");
-const fs = require("node:fs/promises");
 
 const {
   appendDecisionLog,
   resolveDecisionLogPath
 } = require("./decision-log.js");
+const {
+  readAuthoritativeLedger
+} = require("./audit/authoritative-ledger.js");
 
 const SETTLEMENT_OUTCOMES = Object.freeze(["pending", "win", "loss", "push", "void"]);
 
@@ -711,51 +713,37 @@ function summarizeDecisionLogRecords(records, malformedLines = []) {
 
 async function readDecisionLogEntries(options = {}) {
   const logPath = resolveDecisionLogPath(options.logPath);
+  const inspection = await readAuthoritativeLedger({
+    ledgerPath: logPath,
+    fsImpl: options.fsImpl
+  });
 
-  try {
-    const contents = await fs.readFile(logPath, "utf8");
-    const records = [];
-    const malformedLines = [];
-
-    contents.split(/\r?\n/).forEach((line, index) => {
-      if (!line.trim()) {
-        return;
-      }
-
-      try {
-        records.push(JSON.parse(line));
-      } catch (error) {
-        malformedLines.push({
-          lineNumber: index + 1,
-          error: error.message
-        });
-      }
-    });
-
-    return {
-      logPath,
-      records,
-      malformedLines
-    };
-  } catch (error) {
-    if (error.code === "ENOENT") {
-      return {
-        logPath,
-        records: [],
-        malformedLines: []
-      };
-    }
-
-    throw error;
-  }
+  return {
+    logPath: inspection.ledgerPath,
+    records: inspection.records,
+    malformedLines: inspection.malformedLines,
+    duplicateIds: inspection.duplicateIds,
+    digestConflicts: inspection.digestConflicts,
+    invalidRecords: inspection.invalidRecords
+  };
 }
 
 async function getDecisionLogDashboard(options = {}) {
-  const { logPath, records, malformedLines } = await readDecisionLogEntries(options);
+  const {
+    logPath,
+    records,
+    malformedLines,
+    duplicateIds,
+    digestConflicts,
+    invalidRecords
+  } = await readDecisionLogEntries(options);
   const dashboard = summarizeDecisionLogRecords(records, malformedLines);
 
   return {
     logPath,
+    duplicateIds,
+    digestConflicts,
+    invalidRecords,
     ...dashboard
   };
 }
