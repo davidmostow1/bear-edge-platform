@@ -5,11 +5,42 @@ const os = require("node:os");
 const path = require("node:path");
 
 const {
+  appendAmendment,
+  appendAuthoritativeRecord,
+  appendSettlement,
   calculateClosingLineValue,
+  createEvaluationRecord,
   createSettlementRecord,
   readDecisionLogEntries,
   summarizeDecisionLogRecords
 } = require("../src/index.js");
+
+function canonicalEvaluation(sequence = 1) {
+  const clientEventId = `00000000-0000-4000-8000-${String(sequence).padStart(12, "0")}`;
+
+  return createEvaluationRecord({
+    origin: {},
+    event: {},
+    market: { marketType: "moneyline", selection: `Evaluation ${sequence}` },
+    price: { marketOdds: 120 },
+    sources: [],
+    model: { modelStatus: "research_only" },
+    probability: {},
+    edge: {},
+    stake: { recommendedStake: 10, bankroll: 1000 },
+    decision: {
+      verdict: "WAIT",
+      permission: "PRICE_CHECK_ONLY",
+      reasons: ["Research-only evaluation."],
+      riskFlags: [],
+      gateResults: []
+    },
+    audit: { warnings: [] }
+  }, {
+    clientEventId,
+    createdAt: `2026-07-17T12:${String(sequence).padStart(2, "0")}:00.000Z`
+  });
+}
 
 test("calculateClosingLineValue rewards beating the closing price", () => {
   assert.ok(Math.abs(calculateClosingLineValue(120, 100) - 0.1) < 1e-12);
@@ -252,4 +283,91 @@ test("decision-log reading reports duplicate identifiers and digest conflicts wi
   assert.equal(result.duplicateIds.length, 1);
   assert.equal(result.digestConflicts.length, 1);
   assert.deepEqual(result.records[0], first);
+});
+
+test("appendSettlement rejects an unknown evaluation id", async (t) => {
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "bear-edge-settlement-"));
+  const logPath = path.join(tempDir, "decision_log.jsonl");
+  t.after(() => fs.rm(tempDir, { recursive: true, force: true }));
+
+  await assert.rejects(
+    appendSettlement({ evaluationId: "eval_missing", outcome: "win", stake: 10 }, { logPath }),
+    /evaluation does not exist/i
+  );
+});
+
+test("appendSettlement requires corrections to use immutable amendments", async (t) => {
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "bear-edge-settlement-"));
+  const logPath = path.join(tempDir, "decision_log.jsonl");
+  const evaluation = canonicalEvaluation(1);
+  t.after(() => fs.rm(tempDir, { recursive: true, force: true }));
+
+  await appendAuthoritativeRecord(evaluation, { logPath });
+  await appendSettlement({ evaluationId: evaluation.id, outcome: "loss" }, { logPath });
+
+  await assert.rejects(
+    appendSettlement({ evaluationId: evaluation.id, outcome: "win" }, { logPath }),
+    /already has a settlement.*amendment/i
+  );
+});
+
+test("a settlement correction is an amendment and preserves every record", async (t) => {
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "bear-edge-amendment-"));
+  const logPath = path.join(tempDir, "decision_log.jsonl");
+  const evaluation = canonicalEvaluation(2);
+  t.after(() => fs.rm(tempDir, { recursive: true, force: true }));
+
+  await appendAuthoritativeRecord(evaluation, { logPath });
+  const settlementResult = await appendSettlement({
+    evaluationId: evaluation.id,
+    outcome: "loss",
+    closingOdds: 100
+  }, { logPath });
+  const amendment = await appendAmendment({
+    evaluationId: evaluation.id,
+    settlementId: settlementResult.settlement.id,
+    reason: "Official scoring correction",
+    patch: { outcome: "push", profit: 0 }
+  }, { logPath });
+  const entries = await readDecisionLogEntries({ logPath });
+  const dashboard = summarizeDecisionLogRecords(entries.records);
+
+  assert.equal(amendment.record.recordType, "amendment");
+  assert.equal(entries.records.length, 3);
+  assert.equal(dashboard.evaluations.length, 1);
+  assert.equal(dashboard.settlements.length, 1);
+  assert.equal(dashboard.settlements[0].outcome, "push");
+  assert.equal(dashboard.amendments.length, 1);
+  assert.equal(dashboard.amendments[0].reason, "Official scoring correction");
+});
+
+test("appendAmendment rejects unknown settlements and reference-changing patches", async (t) => {
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "bear-edge-amendment-"));
+  const logPath = path.join(tempDir, "decision_log.jsonl");
+  const evaluation = canonicalEvaluation(3);
+  t.after(() => fs.rm(tempDir, { recursive: true, force: true }));
+
+  await appendAuthoritativeRecord(evaluation, { logPath });
+
+  await assert.rejects(
+    appendAmendment({
+      evaluationId: evaluation.id,
+      settlementId: "settle_missing",
+      reason: "Unknown correction",
+      patch: { outcome: "void" }
+    }, { logPath }),
+    /settlement does not exist/i
+  );
+
+  const settlement = await appendSettlement({ evaluationId: evaluation.id, outcome: "loss" }, { logPath });
+
+  await assert.rejects(
+    appendAmendment({
+      evaluationId: evaluation.id,
+      settlementId: settlement.settlement.id,
+      reason: "Invalid reference rewrite",
+      patch: { settlementId: "settle_other" }
+    }, { logPath }),
+    /cannot change record references/i
+  );
 });

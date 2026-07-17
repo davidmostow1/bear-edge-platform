@@ -5,6 +5,8 @@ const path = require("node:path");
 const { appendAuthoritativeRecord } = require("./audit/authoritative-ledger.js");
 const { persistDisplayedTargets } = require("./audit/recommendation-service.js");
 const {
+  AuditIntegrityError,
+  appendAmendment,
   appendSettlement,
   getDecisionLogDashboard
 } = require("./analytics.js");
@@ -39,12 +41,14 @@ const { getProviderSetupStatus } = require("./config/provider-requirements.js");
 const { saveProviderApiKey } = require("./config/provider-key-settings.js");
 const { safeErrorMessage } = require("./config/secrets.js");
 const {
+  AMENDMENT_INPUT_SCHEMA,
   AUDIT_RECORD_SCHEMA,
   BET_DECISION_SCHEMA,
   BET_INPUT_SCHEMA,
   LIVE_DECISION_SCHEMA,
   LIVE_TICKET_SCHEMA,
-  RESEARCH_PACKET_SCHEMA
+  RESEARCH_PACKET_SCHEMA,
+  SETTLEMENT_INPUT_SCHEMA
 } = require("./schemas.js");
 const { BetInputValidationError, validateBetInput } = require("./validate-bet-input.js");
 const { LiveTicketValidationError, validateLiveTicket } = require("./validate-live-ticket.js");
@@ -316,12 +320,14 @@ function createServer(options = {}) {
 
       if (request.method === "GET" && url.pathname === "/schemas") {
         return jsonResponse(response, 200, {
+          amendmentInput: AMENDMENT_INPUT_SCHEMA,
           auditRecord: AUDIT_RECORD_SCHEMA,
           betInput: BET_INPUT_SCHEMA,
           betDecision: BET_DECISION_SCHEMA,
           liveTicket: LIVE_TICKET_SCHEMA,
           liveDecision: LIVE_DECISION_SCHEMA,
-          researchPacket: RESEARCH_PACKET_SCHEMA
+          researchPacket: RESEARCH_PACKET_SCHEMA,
+          settlementInput: SETTLEMENT_INPUT_SCHEMA
         });
       }
 
@@ -498,6 +504,21 @@ function createServer(options = {}) {
       if (request.method === "POST" && url.pathname === "/api/settle") {
         const body = await readJsonBody(request);
         const result = await appendSettlement(body, {
+          logPath: options.logPath
+        });
+        const dashboard = await getDecisionLogDashboard({
+          logPath: options.logPath
+        });
+
+        return jsonResponse(response, 200, {
+          ...result,
+          dashboard
+        });
+      }
+
+      if (request.method === "POST" && url.pathname === "/api/amend") {
+        const body = await readJsonBody(request);
+        const result = await appendAmendment(body, {
           logPath: options.logPath
         });
         const dashboard = await getDecisionLogDashboard({
@@ -716,6 +737,12 @@ function createServer(options = {}) {
         error: "Not found."
       });
     } catch (error) {
+      if (error instanceof AuditIntegrityError) {
+        return jsonResponse(response, 400, {
+          error: error.message
+        });
+      }
+
       if (error instanceof BetInputValidationError || error instanceof LiveTicketValidationError) {
         return jsonResponse(response, 400, {
           error: error.message,

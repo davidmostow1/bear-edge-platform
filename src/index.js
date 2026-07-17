@@ -20,6 +20,7 @@ const {
   resolveDecisionLogPath
 } = require("./decision-log.js");
 const {
+  appendAmendment,
   appendSettlement,
   buildValidationGate,
   calculateClosingLineValue,
@@ -51,9 +52,11 @@ const {
   validateLiveTicket
 } = require("./validate-live-ticket.js");
 const {
+  AMENDMENT_INPUT_SCHEMA,
   BET_DECISION_SCHEMA,
   LIVE_DECISION_SCHEMA,
-  RESEARCH_PACKET_SCHEMA
+  RESEARCH_PACKET_SCHEMA,
+  SETTLEMENT_INPUT_SCHEMA
 } = require("./schemas.js");
 
 /**
@@ -737,7 +740,9 @@ function createStraightEvaluationAuditRecord(input, result, context = {}) {
 }
 
 module.exports = {
+  AMENDMENT_INPUT_SCHEMA,
   AUDIT_RECORD_SCHEMA_VERSION,
+  appendAmendment,
   appendAuthoritativeRecord,
   appendDecisionLog,
   appendSettlement,
@@ -781,6 +786,7 @@ module.exports = {
   RESEARCH_PACKET_SCHEMA,
   readDecisionLogEntries,
   resolveDecisionLogPath,
+  SETTLEMENT_INPUT_SCHEMA,
   describeCausalEvidence,
   simulateBetCard,
   summarizeDecisionLogRecords,

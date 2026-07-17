@@ -2,6 +2,59 @@ const { BET_INPUT_SCHEMA } = require("./validate-bet-input.js");
 const { LIVE_TICKET_SCHEMA } = require("./validate-live-ticket.js");
 const { AUDIT_RECORD_SCHEMA } = require("./audit/record-contract.js");
 
+const SETTLEMENT_INPUT_SCHEMA = Object.freeze({
+  title: "Bear Edge Settlement Input",
+  type: "object",
+  additionalProperties: false,
+  required: ["evaluationId", "outcome"],
+  properties: {
+    evaluationId: { type: "string", minLength: 1 },
+    outcome: { type: "string", enum: ["pending", "win", "loss", "push", "void"] },
+    settledAt: { type: "string", format: "date-time" },
+    closingOdds: { type: "number", not: { const: 0 } },
+    closingOppositeOdds: { type: "number", not: { const: 0 } },
+    stake: { type: "number", minimum: 0 },
+    profit: { type: "number" },
+    notes: {
+      oneOf: [
+        { type: "string" },
+        { type: "array", items: { type: "string" } }
+      ]
+    }
+  }
+});
+
+const AMENDMENT_INPUT_SCHEMA = Object.freeze({
+  title: "Bear Edge Amendment Input",
+  type: "object",
+  additionalProperties: false,
+  required: ["evaluationId", "settlementId", "reason", "patch"],
+  properties: {
+    evaluationId: { type: "string", minLength: 1 },
+    settlementId: { type: "string", minLength: 1 },
+    reason: { type: "string", minLength: 1 },
+    patch: {
+      type: "object",
+      minProperties: 1,
+      additionalProperties: false,
+      properties: {
+        outcome: { type: "string", enum: ["pending", "win", "loss", "push", "void"] },
+        settledAt: { type: "string", format: "date-time" },
+        closingOdds: { type: ["number", "null"], not: { const: 0 } },
+        closingOppositeOdds: { type: ["number", "null"], not: { const: 0 } },
+        stake: { type: ["number", "null"], minimum: 0 },
+        profit: { type: ["number", "null"] },
+        notes: {
+          oneOf: [
+            { type: "string" },
+            { type: "array", items: { type: "string" } }
+          ]
+        }
+      }
+    }
+  }
+});
+
 const RESEARCH_PACKET_SCHEMA = Object.freeze({
   type: "object",
   required: ["generatedAt", "ticketKind", "sources", "confidence"],
@@ -98,10 +151,12 @@ const BET_DECISION_SCHEMA = Object.freeze({
 });
 
 module.exports = {
+  AMENDMENT_INPUT_SCHEMA,
   AUDIT_RECORD_SCHEMA,
   BET_DECISION_SCHEMA,
   BET_INPUT_SCHEMA,
   LIVE_DECISION_SCHEMA,
   LIVE_TICKET_SCHEMA,
-  RESEARCH_PACKET_SCHEMA
+  RESEARCH_PACKET_SCHEMA,
+  SETTLEMENT_INPUT_SCHEMA
 };

@@ -1,14 +1,34 @@
 const crypto = require("node:crypto");
 
 const {
-  appendDecisionLog,
   resolveDecisionLogPath
 } = require("./decision-log.js");
 const {
+  appendAuthoritativeRecord,
   readAuthoritativeLedger
 } = require("./audit/authoritative-ledger.js");
+const {
+  createAmendmentRecord,
+  createSettlementAuditRecord
+} = require("./audit/record-contract.js");
 
 const SETTLEMENT_OUTCOMES = Object.freeze(["pending", "win", "loss", "push", "void"]);
+const AMENDMENT_PATCH_FIELDS = Object.freeze([
+  "outcome",
+  "settledAt",
+  "closingOdds",
+  "closingOppositeOdds",
+  "stake",
+  "profit",
+  "notes"
+]);
+
+class AuditIntegrityError extends Error {
+  constructor(message) {
+    super(message);
+    this.name = "AuditIntegrityError";
+  }
+}
 
 function createId(prefix = "rec") {
   return `${prefix}_${crypto.randomUUID()}`;
@@ -81,6 +101,10 @@ function uniqueRiskFlags(...flagSets) {
 function normalizeRecordType(record) {
   if (record?.recordType === "settlement") {
     return "settlement";
+  }
+
+  if (record?.recordType === "amendment") {
+    return "amendment";
   }
 
   return "evaluation";
@@ -358,6 +382,10 @@ function calculateActualProfit(evaluation, settlement) {
     return null;
   }
 
+  if (isFiniteNumber(settlement.profit)) {
+    return settlement.profit;
+  }
+
   if (settlement.outcome === "push" || settlement.outcome === "void") {
     return 0;
   }
@@ -428,8 +456,75 @@ function extractSettlement(record, sequence) {
     closingOdds: isFiniteNumber(record?.closingOdds) ? record.closingOdds : null,
     closingOppositeOdds: isFiniteNumber(record?.closingOppositeOdds) ? record.closingOppositeOdds : null,
     stake: isFiniteNumber(record?.stake) ? record.stake : null,
-    notes: Array.isArray(record?.notes) ? record.notes : []
+    profit: isFiniteNumber(record?.profit) ? record.profit : null,
+    notes: Array.isArray(record?.notes) ? record.notes : [],
+    amendmentIds: [],
+    effectiveSequence: sequence,
+    raw: record
   };
+}
+
+function extractAmendment(record, sequence) {
+  return {
+    id: typeof record?.id === "string" && record.id.trim()
+      ? record.id
+      : `amend_${stableHash(JSON.stringify({ sequence, record }))}`,
+    sequence,
+    timestamp: typeof record?.createdAt === "string"
+      ? record.createdAt
+      : typeof record?.timestamp === "string" ? record.timestamp : null,
+    evaluationId: typeof record?.evaluationId === "string" ? record.evaluationId : "",
+    settlementId: typeof record?.settlementId === "string" ? record.settlementId : "",
+    reason: typeof record?.reason === "string" ? record.reason : "",
+    patch: isPlainObject(record?.patch) ? record.patch : {},
+    applied: false,
+    rejectionReason: null,
+    raw: record
+  };
+}
+
+function resolveSettlementAmendments(settlements, amendments) {
+  const byId = new Map(settlements.map((settlement) => [settlement.id, { ...settlement }]));
+
+  for (const amendment of amendments.sort((a, b) => a.sequence - b.sequence)) {
+    const settlement = byId.get(amendment.settlementId);
+
+    if (!settlement) {
+      amendment.rejectionReason = "Unknown settlement reference.";
+      continue;
+    }
+
+    if (settlement.evaluationId !== amendment.evaluationId) {
+      amendment.rejectionReason = "Evaluation and settlement references do not match.";
+      continue;
+    }
+
+    const patch = amendment.patch;
+
+    if (patch.outcome !== undefined && SETTLEMENT_OUTCOMES.includes(patch.outcome)) {
+      settlement.outcome = patch.outcome;
+    }
+
+    if (typeof patch.settledAt === "string" && Number.isFinite(Date.parse(patch.settledAt))) {
+      settlement.settledAt = patch.settledAt;
+    }
+
+    for (const field of ["closingOdds", "closingOppositeOdds", "stake", "profit"]) {
+      if (patch[field] === null || isFiniteNumber(patch[field])) {
+        settlement[field] = patch[field];
+      }
+    }
+
+    if (Array.isArray(patch.notes)) {
+      settlement.notes = patch.notes.filter((note) => typeof note === "string");
+    }
+
+    settlement.amendmentIds = [...settlement.amendmentIds, amendment.id];
+    settlement.effectiveSequence = amendment.sequence;
+    amendment.applied = true;
+  }
+
+  return settlements.map((settlement) => byId.get(settlement.id) ?? settlement);
 }
 
 function latestSettlementsByEvaluation(settlements) {
@@ -438,7 +533,7 @@ function latestSettlementsByEvaluation(settlements) {
   for (const settlement of settlements) {
     const existing = byEvaluation.get(settlement.evaluationId);
 
-    if (!existing || settlement.sequence > existing.sequence) {
+    if (!existing || settlement.effectiveSequence > existing.effectiveSequence) {
       byEvaluation.set(settlement.evaluationId, settlement);
     }
   }
@@ -686,15 +781,6 @@ function buildDataQualityReport(evaluations, settlements, malformedLines, valida
     );
   }
 
-  if (!validationGate.complete) {
-    checks.push(
-      qualityCheck("THREE_WIN_GATE_INCOMPLETE", "medium", "The three consecutive settled BET wins gate is not complete.", {
-        currentWinStreak: validationGate.currentWinStreak,
-        requiredWinStreak: validationGate.requiredWinStreak
-      })
-    );
-  }
-
   const blockingSeverities = new Set(["critical", "high"]);
   const status =
     evaluations.length === 0
@@ -732,16 +818,22 @@ function buildDataQualityReport(evaluations, settlements, malformedLines, valida
 function summarizeDecisionLogRecords(records, malformedLines = []) {
   const evaluations = [];
   const settlements = [];
+  const amendments = [];
 
   records.forEach((record, index) => {
-    if (normalizeRecordType(record) === "settlement") {
+    const recordType = normalizeRecordType(record);
+
+    if (recordType === "settlement") {
       settlements.push(extractSettlement(record, index));
+    } else if (recordType === "amendment") {
+      amendments.push(extractAmendment(record, index));
     } else {
       evaluations.push(extractEvaluation(record, index));
     }
   });
 
-  const hydratedEvaluations = attachSettlementMetrics(evaluations, settlements);
+  const resolvedSettlements = resolveSettlementAmendments(settlements, amendments);
+  const hydratedEvaluations = attachSettlementMetrics(evaluations, resolvedSettlements);
   const validationGate = buildValidationGate(hydratedEvaluations);
   const summary = {
     generatedAt: new Date().toISOString(),
@@ -758,12 +850,13 @@ function summarizeDecisionLogRecords(records, malformedLines = []) {
   return {
     summary,
     validationGate,
-    dataQuality: buildDataQualityReport(hydratedEvaluations, settlements, malformedLines, validationGate),
+    dataQuality: buildDataQualityReport(hydratedEvaluations, resolvedSettlements, malformedLines, validationGate),
     byMarketType: summarizeByMarketType(hydratedEvaluations),
     parlayPerformance: summarizeGroup(hydratedEvaluations.filter((evaluation) => evaluation.kind === "parlay")),
     riskFlagCounts: summarizeRiskFlags(hydratedEvaluations),
     evaluations: hydratedEvaluations.sort((a, b) => b.sequence - a.sequence),
-    settlements: settlements.sort((a, b) => b.sequence - a.sequence),
+    settlements: resolvedSettlements.sort((a, b) => b.effectiveSequence - a.effectiveSequence),
+    amendments: amendments.sort((a, b) => b.sequence - a.sequence),
     malformedLines
   };
 }
@@ -805,36 +898,40 @@ async function getDecisionLogDashboard(options = {}) {
   };
 }
 
-function createSettlementRecord(input) {
+function createSettlementRecord(input, context = {}) {
   if (!isPlainObject(input)) {
-    throw new TypeError("Settlement input must be an object.");
+    throw new AuditIntegrityError("Settlement input must be an object.");
   }
 
   const evaluationId = typeof input.evaluationId === "string" ? input.evaluationId.trim() : "";
 
   if (!evaluationId) {
-    throw new Error("evaluationId is required.");
+    throw new AuditIntegrityError("evaluationId is required.");
   }
 
   const outcome = typeof input.outcome === "string" ? input.outcome : "pending";
 
   if (!SETTLEMENT_OUTCOMES.includes(outcome)) {
-    throw new Error(`outcome must be one of: ${SETTLEMENT_OUTCOMES.join(", ")}.`);
+    throw new AuditIntegrityError(`outcome must be one of: ${SETTLEMENT_OUTCOMES.join(", ")}.`);
   }
 
   if (input.closingOdds !== undefined && (!isFiniteNumber(input.closingOdds) || input.closingOdds === 0)) {
-    throw new Error("closingOdds must be a non-zero finite number when supplied.");
+    throw new AuditIntegrityError("closingOdds must be a non-zero finite number when supplied.");
   }
 
   if (
     input.closingOppositeOdds !== undefined &&
     (!isFiniteNumber(input.closingOppositeOdds) || input.closingOppositeOdds === 0)
   ) {
-    throw new Error("closingOppositeOdds must be a non-zero finite number when supplied.");
+    throw new AuditIntegrityError("closingOppositeOdds must be a non-zero finite number when supplied.");
   }
 
   if (input.stake !== undefined && (!isFiniteNumber(input.stake) || input.stake < 0)) {
-    throw new Error("stake must be a non-negative finite number when supplied.");
+    throw new AuditIntegrityError("stake must be a non-negative finite number when supplied.");
+  }
+
+  if (input.profit !== undefined && !isFiniteNumber(input.profit)) {
+    throw new AuditIntegrityError("profit must be a finite number when supplied.");
   }
 
   const notes = Array.isArray(input.notes)
@@ -843,32 +940,196 @@ function createSettlementRecord(input) {
       ? [input.notes]
       : [];
 
-  return {
-    id: createId("settle"),
-    recordType: "settlement",
-    timestamp: new Date().toISOString(),
+  const settledAt = typeof input.settledAt === "string" && input.settledAt.trim()
+    ? input.settledAt
+    : new Date().toISOString();
+
+  if (!Number.isFinite(Date.parse(settledAt))) {
+    throw new AuditIntegrityError("settledAt must be a valid timestamp when supplied.");
+  }
+
+  return createSettlementAuditRecord({
     evaluationId,
-    settledAt: typeof input.settledAt === "string" && input.settledAt.trim() ? input.settledAt : new Date().toISOString(),
+    settledAt,
     outcome,
     closingOdds: input.closingOdds ?? null,
     closingOppositeOdds: input.closingOppositeOdds ?? null,
     stake: input.stake ?? null,
+    profit: input.profit ?? null,
     notes
-  };
+  }, context);
 }
 
 async function appendSettlement(input, options = {}) {
-  const settlement = createSettlementRecord(input);
-  const logPath = await appendDecisionLog(settlement, options);
+  const entries = await readDecisionLogEntries(options);
+  const evaluationId = typeof input?.evaluationId === "string" ? input.evaluationId.trim() : "";
+  const evaluationExists = entries.records.some(
+    (record) => normalizeRecordType(record) === "evaluation" && record?.id === evaluationId
+  );
+
+  if (!evaluationExists) {
+    throw new AuditIntegrityError(`Referenced evaluation does not exist: ${evaluationId || "<missing>"}.`);
+  }
+
+  const existingSettlement = entries.records.find(
+    (record) => normalizeRecordType(record) === "settlement" && record?.evaluationId === evaluationId
+  );
+
+  if (existingSettlement) {
+    throw new AuditIntegrityError(
+      `Evaluation ${evaluationId} already has a settlement; corrections must be recorded as an amendment.`
+    );
+  }
+
+  const settlement = createSettlementRecord(input, options.context);
+  const appendRecordImpl = options.appendRecordImpl ?? appendAuthoritativeRecord;
+  const persistence = await appendRecordImpl(settlement, {
+    ledgerPath: entries.logPath,
+    fsImpl: options.fsImpl
+  });
 
   return {
     settlement,
-    logPath
+    record: settlement,
+    logPath: persistence.ledgerPath,
+    ledgerPath: persistence.ledgerPath,
+    persistedAt: persistence.persistedAt
+  };
+}
+
+function normalizeAmendmentPatch(patch) {
+  if (!isPlainObject(patch) || Object.keys(patch).length === 0) {
+    throw new AuditIntegrityError("Amendment patch must be a non-empty object.");
+  }
+
+  const unknownFields = Object.keys(patch).filter((field) => !AMENDMENT_PATCH_FIELDS.includes(field));
+
+  if (unknownFields.some((field) => ["evaluationId", "settlementId", "id", "clientEventId"].includes(field))) {
+    throw new AuditIntegrityError("Amendments cannot change record references or identifiers.");
+  }
+
+  if (unknownFields.length > 0) {
+    throw new AuditIntegrityError(`Unsupported amendment fields: ${unknownFields.join(", ")}.`);
+  }
+
+  const normalized = {};
+
+  if (patch.outcome !== undefined) {
+    if (!SETTLEMENT_OUTCOMES.includes(patch.outcome)) {
+      throw new AuditIntegrityError(`outcome must be one of: ${SETTLEMENT_OUTCOMES.join(", ")}.`);
+    }
+    normalized.outcome = patch.outcome;
+  }
+
+  if (patch.settledAt !== undefined) {
+    if (typeof patch.settledAt !== "string" || !Number.isFinite(Date.parse(patch.settledAt))) {
+      throw new AuditIntegrityError("settledAt must be a valid timestamp when supplied.");
+    }
+    normalized.settledAt = patch.settledAt;
+  }
+
+  for (const field of ["closingOdds", "closingOppositeOdds"]) {
+    if (patch[field] !== undefined) {
+      if (patch[field] !== null && (!isFiniteNumber(patch[field]) || patch[field] === 0)) {
+        throw new AuditIntegrityError(`${field} must be a non-zero finite number or null.`);
+      }
+      normalized[field] = patch[field];
+    }
+  }
+
+  if (patch.stake !== undefined) {
+    if (patch.stake !== null && (!isFiniteNumber(patch.stake) || patch.stake < 0)) {
+      throw new AuditIntegrityError("stake must be a non-negative finite number or null.");
+    }
+    normalized.stake = patch.stake;
+  }
+
+  if (patch.profit !== undefined) {
+    if (patch.profit !== null && !isFiniteNumber(patch.profit)) {
+      throw new AuditIntegrityError("profit must be a finite number or null.");
+    }
+    normalized.profit = patch.profit;
+  }
+
+  if (patch.notes !== undefined) {
+    const notes = typeof patch.notes === "string" ? [patch.notes] : patch.notes;
+
+    if (!Array.isArray(notes) || notes.some((note) => typeof note !== "string")) {
+      throw new AuditIntegrityError("notes must be a string or an array of strings.");
+    }
+    normalized.notes = notes;
+  }
+
+  return normalized;
+}
+
+async function appendAmendment(input, options = {}) {
+  if (!isPlainObject(input)) {
+    throw new AuditIntegrityError("Amendment input must be an object.");
+  }
+
+  const evaluationId = typeof input.evaluationId === "string" ? input.evaluationId.trim() : "";
+  const settlementId = typeof input.settlementId === "string" ? input.settlementId.trim() : "";
+  const reason = typeof input.reason === "string" ? input.reason.trim() : "";
+
+  if (!evaluationId) {
+    throw new AuditIntegrityError("evaluationId is required.");
+  }
+  if (!settlementId) {
+    throw new AuditIntegrityError("settlementId is required.");
+  }
+  if (!reason) {
+    throw new AuditIntegrityError("reason is required.");
+  }
+
+  const patch = normalizeAmendmentPatch(input.patch);
+  const entries = await readDecisionLogEntries(options);
+  const evaluationExists = entries.records.some(
+    (record) => normalizeRecordType(record) === "evaluation" && record?.id === evaluationId
+  );
+
+  if (!evaluationExists) {
+    throw new AuditIntegrityError(`Referenced evaluation does not exist: ${evaluationId}.`);
+  }
+
+  const settlement = entries.records.find(
+    (record) => normalizeRecordType(record) === "settlement" && record?.id === settlementId
+  );
+
+  if (!settlement) {
+    throw new AuditIntegrityError(`Referenced settlement does not exist: ${settlementId}.`);
+  }
+
+  if (settlement.evaluationId !== evaluationId) {
+    throw new AuditIntegrityError("Settlement does not belong to the referenced evaluation.");
+  }
+
+  const record = createAmendmentRecord({
+    evaluationId,
+    settlementId,
+    reason,
+    patch
+  }, options.context);
+  const appendRecordImpl = options.appendRecordImpl ?? appendAuthoritativeRecord;
+  const persistence = await appendRecordImpl(record, {
+    ledgerPath: entries.logPath,
+    fsImpl: options.fsImpl
+  });
+
+  return {
+    record,
+    amendment: record,
+    logPath: persistence.ledgerPath,
+    ledgerPath: persistence.ledgerPath,
+    persistedAt: persistence.persistedAt
   };
 }
 
 module.exports = {
+  AMENDMENT_PATCH_FIELDS,
+  AuditIntegrityError,
   SETTLEMENT_OUTCOMES,
+  appendAmendment,
   appendSettlement,
   buildValidationGate,
   calculateClosingLineValue,

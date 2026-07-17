@@ -44,6 +44,8 @@ test("HTTP API exposes schemas", async () => {
 
     assert.equal(response.status, 200);
     assert.equal(payload.auditRecord.title, "Bear Edge Authoritative Audit Record");
+    assert.equal(payload.settlementInput.title, "Bear Edge Settlement Input");
+    assert.equal(payload.amendmentInput.title, "Bear Edge Amendment Input");
     assert.equal(payload.liveTicket.type, "object");
     assert.equal(payload.researchPacket.type, "object");
   });
@@ -537,7 +539,12 @@ test("HTTP API exposes release readiness checks", async () => {
     assert.equal(typeof payload.summary.info, "number");
     assert.equal(payload.lanes.some((entry) => entry.id === "local-app"), true);
     assert.equal(payload.lanes.some((entry) => entry.id === "data-edge"), true);
-    assert.equal(payload.evidenceGates.some((entry) => entry.id === "three-win-validation"), true);
+    assert.equal(payload.evidenceGates.some((entry) => entry.id === "recent-win-streak"), true);
+    assert.equal(
+      payload.evidenceGates.find((entry) => entry.id === "recent-win-streak").label,
+      "Recent win streak (descriptive)"
+    );
+    assert.equal(payload.checks.some((entry) => /three-win|win streak/i.test(entry.message)), false);
     assert.equal(payload.nextActions.every((entry) => typeof entry.action === "string"), true);
     assert.equal(payload.checks.some((entry) => entry.area === "security"), true);
     assert.equal(payload.checks.some((entry) => entry.message === "GitHub Actions CI workflow exists"), true);
@@ -1923,8 +1930,26 @@ test("HTTP API persists straight evaluations and summarizes attached settlements
           closingOdds: 100
         })
       });
+      const settlementPayload = await settlementResponse.json();
 
       assert.equal(settlementResponse.status, 200);
+
+      const amendmentResponse = await fetch(`${baseUrl}/api/amend`, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json"
+        },
+        body: JSON.stringify({
+          evaluationId: evaluation.decisionLog.id,
+          settlementId: settlementPayload.settlement.id,
+          reason: "Official scoring correction",
+          patch: { outcome: "push", profit: 0 }
+        })
+      });
+      const amendmentPayload = await amendmentResponse.json();
+
+      assert.equal(amendmentResponse.status, 200);
+      assert.equal(amendmentPayload.record.recordType, "amendment");
 
       const dashboardResponse = await fetch(`${baseUrl}/api/decision-log`);
       const dashboard = await dashboardResponse.json();
@@ -1935,10 +1960,29 @@ test("HTTP API persists straight evaluations and summarizes attached settlements
       assert.equal(dashboard.summary.hitRate, null);
       assert.equal(dashboard.byMarketType[0].marketType, "moneyline");
       assert.ok(Math.abs(dashboard.evaluations[0].closingLineValue - 0.1) < 1e-12);
-      assert.equal(fs.readFileSync(logPath, "utf8").trim().split("\n").length, 2);
+      assert.equal(dashboard.settlements[0].outcome, "push");
+      assert.equal(dashboard.amendments.length, 1);
+      assert.equal(fs.readFileSync(logPath, "utf8").trim().split("\n").length, 3);
     },
     { logPath }
   );
+});
+
+test("settlement API rejects an orphan evaluation reference", async () => {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "bear-edge-orphan-settlement-"));
+  const logPath = path.join(tempDir, "decision_log.jsonl");
+
+  await withServer(async (baseUrl) => {
+    const response = await fetch(`${baseUrl}/api/settle`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ evaluationId: "eval_missing", outcome: "win" })
+    });
+    const payload = await response.json();
+
+    assert.equal(response.status, 400);
+    assert.match(payload.error, /evaluation does not exist/i);
+  }, { logPath });
 });
 
 test("POST /evaluate rejects writeLog false", async () => {

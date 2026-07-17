@@ -4,6 +4,7 @@ const { execFile } = require("node:child_process");
 
 const { getDecisionLogDashboard } = require("./analytics.js");
 const { getProviderSetupStatus } = require("./config/provider-requirements.js");
+const { getDataEdgeAudit } = require("./data-edge.js");
 const { getSystemAudit } = require("./system-audit.js");
 
 function execFileSafe(command, args = [], options = {}) {
@@ -127,7 +128,7 @@ function check(status, area, message, detail = null, nextAction = null) {
     area,
     message,
     detail,
-    nextAction
+    nextAction: status === "pass" ? null : nextAction
   };
 }
 
@@ -222,10 +223,27 @@ async function getReleaseReadiness(options = {}) {
   const decisionLog = await getDecisionLogDashboard({
     logPath: options.logPath
   });
+  const dataEdge = options.dataEdge ?? await getDataEdgeAudit({
+    rootDir,
+    date: options.date ?? "today",
+    days: Number.isInteger(options.days) ? options.days : 1,
+    limit: Number.isInteger(options.limit) ? options.limit : 3,
+    maxCandidates: Number.isInteger(options.maxCandidates) ? options.maxCandidates : 80,
+    maxEventsToPrice: Number.isInteger(options.maxEventsToPrice) ? options.maxEventsToPrice : 10,
+    bankroll: Number.isFinite(options.bankroll) ? options.bankroll : 1000,
+    bookmakers: options.bookmakers ?? "draftkings",
+    regions: options.regions ?? "us",
+    fetchJsonImpl: options.fetchJsonImpl,
+    fetchTextImpl: options.fetchTextImpl,
+    oddsApiKey: options.oddsApiKey,
+    autoUpdateStatus: options.autoUpdateStatus ?? null,
+    autoUpdateSnapshotPath: options.autoUpdateSnapshotPath,
+    logPath: options.logPath
+  });
   const oddsProvider = providerSetup.providers.find((provider) => provider.id === "the-odds-api") ?? null;
   const statsProvider = providerSetup.providers.find((provider) => provider.id === "sportsdataio") ?? null;
   const tennisProvider = providerSetup.providers.find((provider) => provider.id === "tennis-stats") ?? null;
-  const oddsReady = oddsProvider?.status === "configured";
+  const oddsReady = dataEdge.odds?.status === "verified";
   const oddsSaved = Boolean(oddsProvider?.savedLocally);
   const statsReady = Boolean(statsProvider?.configured);
   const tennisReady = Boolean(tennisProvider?.configured);
@@ -240,12 +258,30 @@ async function getReleaseReadiness(options = {}) {
   const apiSurfaceReady = [
     "/api/release-readiness",
     "/api/system-audit",
+    "/api/data-edge-audit",
     "/api/provider-requirements",
     "/api/ocr-snapshot",
     "/api/candidates",
     "/api/best-mlb-targets",
+    "/api/amend",
     "/api/auto-update"
   ].every((endpoint) => serverText.includes(endpoint));
+  const oddsCheckMessage = oddsReady
+    ? "Verified odds provider live pricing is usable"
+    : dataEdge.odds?.status === "provider_error"
+      ? "Verified odds provider live pricing is failing"
+      : dataEdge.odds?.status === "unmatched"
+        ? "Verified odds provider is connected but candidate props are unmatched"
+        : oddsSaved
+          ? "Verified odds provider key is saved locally but live pricing is not verified"
+          : "Verified odds provider is not configured";
+  const oddsNextAction = dataEdge.odds?.status === "provider_error"
+    ? "Fix or replace the verified odds API key before expecting automatic priced DraftKings bets."
+    : dataEdge.odds?.status === "unmatched"
+      ? "Use manual price checks or improve prop-name/line matching until provider props match generated candidates."
+      : oddsSaved
+        ? "Restart the Bear Edge server or test the saved key from the dashboard so live pricing can be verified."
+        : "Add and verify THE_ODDS_API_KEY in the dashboard or .env.local.";
   const evidenceGates = [
     {
       id: "decision-log-quality",
@@ -255,13 +291,13 @@ async function getReleaseReadiness(options = {}) {
       action: "Settle every logged BET call with result, closing line, and false-positive notes."
     },
     {
-      id: "three-win-validation",
-      label: "Three-win validation",
+      id: "recent-win-streak",
+      label: "Recent win streak (descriptive)",
       status: validationGate.complete ? "complete" : "incomplete",
       complete: Boolean(validationGate.complete),
       current: validationGate.currentWinStreak ?? 0,
       required: validationGate.requiredWinStreak ?? 3,
-      action: "Keep the app in validation mode until three logged BET calls win consecutively with complete CLV records."
+      action: "Use this streak as descriptive history only; model calibration and out-of-sample validation control production eligibility."
     },
     {
       id: "licensed-stats-provider",
@@ -294,17 +330,10 @@ async function getReleaseReadiness(options = {}) {
     check(apiSurfaceReady ? "pass" : "fail", "runtime", "Operational API surface exists"),
     check(releaseScriptExists ? "pass" : "warn", "runtime", "Release-readiness audit script exists"),
     check(publicMlbProviderExists && publicNhlProviderExists ? "pass" : "warn", "providers", "Official public MLB/NHL stat adapters exist", null, "Restore src/live/providers/mlb.js and src/live/providers/nhl.js before generating sport stat candidates."),
-    check(
-      oddsReady ? "pass" : oddsSaved ? "warn" : "warn",
-      "providers",
-      oddsReady ? "Verified odds provider is usable now" : oddsSaved ? "Verified odds provider key is saved locally but needs server restart" : "Verified odds provider is not configured",
-      oddsProvider ? { id: oddsProvider.id, status: oddsProvider.status, secretReturned: false } : null,
-      oddsSaved ? "Restart the Bear Edge server so the saved odds key is loaded into the running process." : "Add and verify THE_ODDS_API_KEY in the dashboard or .env.local."
-    ),
+    check(oddsReady ? "pass" : "warn", "providers", oddsCheckMessage, dataEdge.odds, oddsNextAction),
     check(statsReady ? "pass" : "info", "providers", statsReady ? "Licensed stats/injury provider is configured" : "Licensed stats/injury provider is an evidence gate, not a local app blocker", statsProvider ? { id: statsProvider.id, status: statsProvider.status, secretReturned: false } : null, "Add SportsDataIO, Sportradar, or another licensed stats/injury feed before relying on automated injury gates commercially."),
     check(tennisReady ? "pass" : "info", "providers", tennisReady ? "Verified tennis stats provider is configured" : "Tennis automation is locked until a verified provider is configured", tennisProvider ? { id: tennisProvider.id, status: tennisProvider.status, secretReturned: false } : null, "Add a verified tennis data provider before allowing automated tennis picks."),
     check(dataQualityStatus === "ok" ? "pass" : "info", "analytics", `Decision-log data quality is ${dataQualityStatus}`, null, "Settle logged BET calls with result, closing line, and false-positive notes until analytics quality is ok."),
-    check(validationGate.complete ? "pass" : "info", "analytics", `Three-win validation gate is ${validationGate.currentWinStreak ?? 0}/${validationGate.requiredWinStreak ?? 3}`, null, "Keep the app in validation mode until three logged BET calls win consecutively with complete CLV records."),
     check(docsExists ? "pass" : "warn", "documentation", "Production-readiness documentation exists"),
     check(providerDocsExists ? "pass" : "warn", "documentation", "API provider requirements documentation exists")
   ];
@@ -326,6 +355,7 @@ async function getReleaseReadiness(options = {}) {
     },
     git,
     providerSummary: providerSetup.summary,
+    dataEdge,
     lanes,
     evidenceGates,
     nextActions: checks
@@ -367,7 +397,12 @@ function renderReleaseReadinessMarkdown(report) {
     `- Decision evaluations: ${report.decisionLog.totalEvaluations}`,
     `- BET calls: ${report.decisionLog.betCalls}`,
     `- Data quality: ${report.decisionLog.dataQualityStatus}`,
-    `- Validation gate: ${report.decisionLog.validationGate.currentWinStreak ?? 0}/${report.decisionLog.validationGate.requiredWinStreak ?? 3}`,
+    `- Recent win streak (descriptive): ${report.decisionLog.validationGate.currentWinStreak ?? 0}/${report.decisionLog.validationGate.requiredWinStreak ?? 3}`,
+    `- Data-edge status: ${report.dataEdge?.status ?? "-"}`,
+    `- Bet-call permission: ${report.dataEdge?.betCallPermission ?? "-"}`,
+    `- Odds status: ${report.dataEdge?.odds?.status ?? "-"}`,
+    `- Odds evidence: ${report.dataEdge?.odds?.evidence?.status ?? "-"}`,
+    `- Odds evidence reasons: ${(report.dataEdge?.odds?.evidence?.reasonCodes ?? []).join(", ") || "none"}`,
     "",
     "## Readiness Lanes",
     "",
@@ -382,6 +417,23 @@ function renderReleaseReadinessMarkdown(report) {
     "| Gate | Status | Complete | Action |",
     "| --- | --- | --- | --- |",
     ...report.evidenceGates.map((gate) => `| ${gate.label} | ${gate.status} | ${gate.complete ? "yes" : "no"} | ${gate.action} |`),
+    "",
+    "## Data Edge",
+    "",
+    "| Field | Value |",
+    "| --- | --- |",
+    `| Status | ${report.dataEdge?.status ?? "-"} |`,
+    `| Bet-call permission | ${report.dataEdge?.betCallPermission ?? "-"} |`,
+    `| Odds status | ${report.dataEdge?.odds?.status ?? "-"} |`,
+    `| Odds evidence | ${report.dataEdge?.odds?.evidence?.status ?? "-"} |`,
+    `| Evidence permission | ${report.dataEdge?.odds?.evidence?.permission ?? "-"} |`,
+    `| Fresh priced candidates | ${report.dataEdge?.odds?.evidence?.freshPricedCandidates ?? 0} |`,
+    `| Exact bookmaker matches | ${report.dataEdge?.odds?.evidence?.bookmakerMatches ?? 0} |`,
+    `| Evidence reasons | ${(report.dataEdge?.odds?.evidence?.reasonCodes ?? []).join(", ") || "none"} |`,
+    `| Candidates | ${report.dataEdge?.odds?.candidates ?? 0} |`,
+    `| Priced candidates | ${report.dataEdge?.odds?.pricedCandidates ?? 0} |`,
+    `| Live data | ${report.dataEdge?.liveData?.status ?? "-"} |`,
+    `| Data quality | ${report.dataEdge?.analytics?.dataQualityStatus ?? "-"} |`,
     "",
     "## Checks",
     "",
