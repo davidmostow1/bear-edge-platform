@@ -56,7 +56,7 @@ function parseAgeMinutes(value, nowMs) {
     return null;
   }
 
-  return Math.max(0, (nowMs - parsed) / 60000);
+  return (nowMs - parsed) / 60000;
 }
 
 function weightedAverage(entries) {
@@ -85,6 +85,14 @@ function normalizeConsensusEntry(entry, policy, nowMs) {
     return null;
   }
 
+  const bookmaker = typeof entry.bookmaker === "string" && entry.bookmaker.trim()
+    ? entry.bookmaker.trim()
+    : null;
+
+  if (!bookmaker) {
+    return null;
+  }
+
   const normalized = normalizeTwoWayMarket(entry.marketOdds, entry.oppositeOdds);
   const holdForWeight = Math.max(
     policy.minHoldForWeighting,
@@ -97,7 +105,7 @@ function normalizeConsensusEntry(entry, policy, nowMs) {
     : sharpMultiplier / holdForWeight;
 
   return {
-    bookmaker: typeof entry.bookmaker === "string" ? entry.bookmaker : null,
+    bookmaker,
     isSharp: Boolean(entry.isSharp),
     marketOdds: entry.marketOdds,
     oppositeOdds: entry.oppositeOdds ?? null,
@@ -116,12 +124,21 @@ function analyzeLineMovement(history, currentProbability, policy) {
             return null;
           }
 
+          const at = entry.at ?? entry.lastUpdate ?? null;
+          const atMs = Date.parse(at ?? "");
+
+          if (!Number.isFinite(atMs)) {
+            return null;
+          }
+
           return {
-            at: entry.at ?? entry.lastUpdate ?? null,
+            at,
+            atMs,
             ...normalizeTwoWayMarket(entry.marketOdds, entry.oppositeOdds)
           };
         })
         .filter(Boolean)
+        .sort((left, right) => left.atMs - right.atMs)
     : [];
 
   if (normalizedHistory.length === 0) {
@@ -168,11 +185,35 @@ function analyzeMarketIntelligence({
   const nowMs = now instanceof Date ? now.getTime() : Date.parse(now);
   const safeNowMs = Number.isFinite(nowMs) ? nowMs : Date.now();
   const offered = normalizeTwoWayMarket(marketOdds, oppositeOdds);
-  const consensusEntries = Array.isArray(context.consensus)
+  const rawConsensusEntries = Array.isArray(context.consensus)
     ? context.consensus
         .map((entry) => normalizeConsensusEntry(entry, resolvedPolicy, safeNowMs))
         .filter(Boolean)
     : [];
+  const seenBookmakers = new Set();
+  const consensusEntries = rawConsensusEntries.filter((entry) => {
+    if (seenBookmakers.has(entry.bookmaker)) {
+      return false;
+    }
+
+    const usable =
+      entry.ageMinutes !== null &&
+      entry.ageMinutes >= 0 &&
+      entry.ageMinutes <= resolvedPolicy.maxMarketAgeMinutes;
+
+    if (usable) {
+      seenBookmakers.add(entry.bookmaker);
+    }
+
+    return usable;
+  });
+  const staleConsensusCount = rawConsensusEntries.filter((entry) =>
+    entry.ageMinutes !== null && entry.ageMinutes > resolvedPolicy.maxMarketAgeMinutes
+  ).length;
+  const futureConsensusCount = rawConsensusEntries.filter((entry) =>
+    entry.ageMinutes !== null && entry.ageMinutes < 0
+  ).length;
+  const unverifiedConsensusCount = rawConsensusEntries.filter((entry) => entry.ageMinutes === null).length;
   const consensusProbability = weightedAverage(
     consensusEntries.map((entry) => ({
       value: entry.noVigProbability,
@@ -185,6 +226,16 @@ function analyzeMarketIntelligence({
     ? consensusEntries.reduce((sum, entry) => sum + Math.abs(entry.hold ?? 0), 0) / consensusEntries.length
     : null;
   const staleAgeMinutes = parseAgeMinutes(context.offeredLastUpdate, safeNowMs);
+  const marketTimestampStatus =
+    context.offeredLastUpdate === undefined || context.offeredLastUpdate === null || context.offeredLastUpdate === ""
+      ? "missing"
+      : staleAgeMinutes === null
+        ? "invalid"
+        : staleAgeMinutes < 0
+          ? "future"
+          : staleAgeMinutes > resolvedPolicy.maxMarketAgeMinutes
+            ? "stale"
+            : "fresh";
   const referenceProbability = consensusProbability ?? offered.noVigProbability;
   const lineMovement = analyzeLineMovement(context.history, referenceProbability, resolvedPolicy);
   const sharpBookCount = consensusEntries.filter((entry) => entry.isSharp).length;
@@ -196,6 +247,22 @@ function analyzeMarketIntelligence({
       code: "MARKET_CONSENSUS",
       severity: "info",
       message: "Multi-book market consensus was used as the fair-price reference."
+    });
+  }
+
+  if (unverifiedConsensusCount > 0) {
+    riskFlags.push({
+      code: "UNVERIFIED_CONSENSUS_DATA",
+      severity: "medium",
+      message: "Consensus entries without valid timestamps were excluded from the fair-price reference."
+    });
+  }
+
+  if (staleConsensusCount > 0 || futureConsensusCount > 0) {
+    riskFlags.push({
+      code: "STALE_CONSENSUS_DATA",
+      severity: "medium",
+      message: "Stale or future-dated consensus entries were excluded from the fair-price reference."
     });
   }
 
@@ -215,7 +282,25 @@ function analyzeMarketIntelligence({
     });
   }
 
-  if (staleAgeMinutes !== null && staleAgeMinutes > resolvedPolicy.maxMarketAgeMinutes) {
+  if (marketTimestampStatus === "missing") {
+    riskFlags.push({
+      code: "MISSING_MARKET_TIMESTAMP",
+      severity: "high",
+      message: "The offered sportsbook price has no capture timestamp and cannot pass a live freshness gate."
+    });
+  } else if (marketTimestampStatus === "invalid") {
+    riskFlags.push({
+      code: "INVALID_MARKET_TIMESTAMP",
+      severity: "high",
+      message: "The offered sportsbook price timestamp is invalid and cannot be trusted for a live decision."
+    });
+  } else if (marketTimestampStatus === "future") {
+    riskFlags.push({
+      code: "FUTURE_MARKET_TIMESTAMP",
+      severity: "high",
+      message: "The offered sportsbook price timestamp is in the future and indicates a data or clock error."
+    });
+  } else if (marketTimestampStatus === "stale") {
     riskFlags.push({
       code: "STALE_MARKET_PRICE",
       severity: "high",
@@ -256,7 +341,7 @@ function analyzeMarketIntelligence({
       (consensusEntries.length >= 2 ? 0.2 : 0) +
       (sharpBookCount > 0 ? 0.15 : 0) -
       (consensusDispersion > resolvedPolicy.maxConsensusDispersion ? 0.25 : 0) -
-      (staleAgeMinutes !== null && staleAgeMinutes > resolvedPolicy.maxMarketAgeMinutes ? 0.25 : 0) -
+      (marketTimestampStatus !== "fresh" ? 0.25 : 0) -
       (Math.abs(offered.hold ?? 0) > resolvedPolicy.highHoldThreshold ? 0.1 : 0),
     0.1,
     0.85
@@ -285,16 +370,19 @@ function analyzeMarketIntelligence({
     },
     lineMovement,
     staleAgeMinutes,
+    marketTimestampStatus,
     adjustments,
     riskFlags
   };
 }
 
 function applyMarketAdjustments(modelProbability, marketIntelligence) {
-  return (marketIntelligence.adjustments ?? []).reduce(
+  const adjusted = (marketIntelligence.adjustments ?? []).reduce(
     (probability, adjustment) => probability * (adjustment.multiplier ?? 1),
     modelProbability
   );
+
+  return clamp(adjusted, 0, 1);
 }
 
 module.exports = {

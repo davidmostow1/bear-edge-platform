@@ -3,8 +3,14 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#b9ff2c">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Bear Edge">
     <title>Bear Edge Dashboard</title>
     <link rel="stylesheet" href="/dashboard/styles.css">
+    <link rel="manifest" href="/dashboard/manifest.json">
   </head>
   <body>
     <div id="globalDropOverlay" class="global-drop-overlay" aria-hidden="true">
@@ -20,6 +26,8 @@
         <h1>Bet Research Desk</h1>
       </div>
       <div class="status-strip">
+        <button id="installAppButton" type="button" class="secondary install-app-button">Install on phone</button>
+        <span id="appStatus" class="app-status">Local shell loading...</span>
         <span id="healthDot" class="dot"></span>
         <span id="logPath">Loading log...</span>
       </div>
@@ -123,6 +131,8 @@
           <div class="button-row">
             <select id="screenshotParserSelect" aria-label="Screenshot parser">
               <option value="draftkings">DraftKings odds board</option>
+              <option value="espn">ESPN odds page</option>
+              <option value="dk-predictions">DK Predictions / Pick6 props</option>
               <option value="worldcup-goalscorer">World Cup goalscorer</option>
               <option value="statmuse">StatMuse context</option>
             </select>
@@ -269,7 +279,7 @@
         <div class="panel-title">
           <div>
             <h2>StatMuse Snapshot Intake</h2>
-            <p class="panel-subtitle">Paste text or drop/upload a screenshot to parse scores, displayed odds, and musings into audit context.</p>
+            <p class="panel-subtitle">Paste text or drop/upload a screenshot to parse scores, Notes-tab context, displayed odds, and Predictions-tab markets into audit context.</p>
           </div>
           <div class="button-row">
             <label class="file-button">
@@ -280,6 +290,8 @@
             <button id="statMuseSnapshotClearButton" type="button" class="secondary">Clear Snapshot</button>
           </div>
         </div>
+        <label class="snapshot-source-label" for="statMuseSourceUrlInput">Source page URL (optional)</label>
+        <input id="statMuseSourceUrlInput" class="snapshot-source-input" type="url" placeholder="https://www.statmuse.com/mlb/game/..." aria-label="StatMuse source page URL">
         <textarea id="statMuseSnapshotInput" class="snapshot-input" spellcheck="false" aria-label="StatMuse pasted page text"></textarea>
         <p id="statMuseSnapshotStatus" class="form-status" role="status"></p>
         <div id="statMuseSnapshotResult" class="snapshot-result"></div>
@@ -303,6 +315,28 @@
         <textarea id="draftKingsSnapshotInput" class="snapshot-input" spellcheck="false" aria-label="DraftKings pasted board text"></textarea>
         <p id="draftKingsSnapshotStatus" class="form-status" role="status"></p>
         <div id="draftKingsSnapshotResult" class="snapshot-result"></div>
+      </section>
+
+      <section class="panel espn-panel">
+        <div class="panel-title">
+          <div>
+            <h2>ESPN Snapshot Intake</h2>
+            <p class="panel-subtitle">Paste text or drop/upload an ESPN odds-page screenshot to preserve displayed DraftKings lines, props, injuries, recent schedule, and predictor context for manual review.</p>
+          </div>
+          <div class="button-row">
+            <label class="file-button">
+              Upload Screenshot
+              <input id="espnImageInput" type="file" accept="image/png,image/jpeg,image/webp,image/tiff,image/heic,image/heif">
+            </label>
+            <button id="espnSnapshotParseButton" type="button">Parse ESPN</button>
+            <button id="espnSnapshotClearButton" type="button" class="secondary">Clear Snapshot</button>
+          </div>
+        </div>
+        <label class="snapshot-source-label" for="espnSourceUrlInput">Source page URL (optional)</label>
+        <input id="espnSourceUrlInput" class="snapshot-source-input" type="url" placeholder="https://www.espn.com/mlb/odds/_/gameId/..." aria-label="ESPN source page URL">
+        <textarea id="espnSnapshotInput" class="snapshot-input" spellcheck="false" aria-label="ESPN pasted odds page text"></textarea>
+        <p id="espnSnapshotStatus" class="form-status" role="status"></p>
+        <div id="espnSnapshotResult" class="snapshot-result"></div>
       </section>
 
       <section class="panel comparison-panel">

@@ -13,11 +13,19 @@ function parseTimeMs(value) {
 function ageMs(value, nowMs = Date.now()) {
   const parsed = parseTimeMs(value);
 
-  return parsed === null ? null : Math.max(0, nowMs - parsed);
+  return parsed === null ? null : nowMs - parsed;
 }
 
 function providerClass(provider, staleAfterMs, nowMs) {
   const providerAgeMs = ageMs(provider?.fetchedAt, nowMs);
+
+  if (providerAgeMs === null) {
+    return "unavailable";
+  }
+
+  if (providerAgeMs < 0) {
+    return "clock_error";
+  }
 
   if (providerAgeMs !== null && providerAgeMs > staleAfterMs) {
     return "stale";
@@ -39,15 +47,18 @@ function providerClass(provider, staleAfterMs, nowMs) {
 }
 
 function summarizeProvider(provider, staleAfterMs, nowMs) {
+  const providerAgeMs = ageMs(provider.fetchedAt, nowMs);
+
   return {
     provider: provider.provider,
     status: provider.status,
     liveStatus: providerClass(provider, staleAfterMs, nowMs),
     sourceType: provider.sourceType,
     fetchedAt: provider.fetchedAt,
-    ageMs: ageMs(provider.fetchedAt, nowMs),
+    ageMs: providerAgeMs,
     staleAfterMs,
-    stale: ageMs(provider.fetchedAt, nowMs) !== null && ageMs(provider.fetchedAt, nowMs) > staleAfterMs,
+    stale: providerAgeMs !== null && providerAgeMs > staleAfterMs,
+    future: providerAgeMs !== null && providerAgeMs < 0,
     warnings: Array.isArray(provider.warnings) ? provider.warnings.slice(0, 5) : [],
     summary: provider.summary ?? {}
   };
@@ -71,7 +82,7 @@ function sourceCoverage(providers) {
   };
 }
 
-function actionList({ providers, autoUpdateStatus, snapshotAgeMs, staleAfterMs }) {
+function actionList({ providers, autoUpdateStatus, snapshotAgeMs, snapshotClockError, staleAfterMs }) {
   const actions = [];
   const draftKings = byProvider(providers, "DraftKings");
   const tennis = byProvider(providers, "Tennis");
@@ -82,6 +93,8 @@ function actionList({ providers, autoUpdateStatus, snapshotAgeMs, staleAfterMs }
 
   if (snapshotAgeMs === null) {
     actions.push("Run Auto Update Now once to persist a last-good live data snapshot.");
+  } else if (snapshotClockError) {
+    actions.push("The persisted live snapshot is dated in the future; correct the system clock or snapshot writer before trusting it.");
   } else if (snapshotAgeMs > staleAfterMs) {
     actions.push("Run Auto Update Now; the persisted live snapshot is stale.");
   }
@@ -111,6 +124,9 @@ function summarizeLiveDataHealth({
   const blockedProviders = providerHealth.filter((provider) => provider.liveStatus === "blocked").map((provider) => provider.provider);
   const degradedProviders = providerHealth.filter((provider) => provider.liveStatus === "degraded").map((provider) => provider.provider);
   const staleProviders = providerHealth.filter((provider) => provider.liveStatus === "stale").map((provider) => provider.provider);
+  const clockErrorProviders = providerHealth
+    .filter((provider) => provider.liveStatus === "clock_error")
+    .map((provider) => provider.provider);
   const liveProviders = providerHealth.filter((provider) => provider.liveStatus === "live").map((provider) => provider.provider);
   const espn = byProvider(providerHealth, "ESPN");
   const draftKings = byProvider(providerHealth, "DraftKings");
@@ -118,15 +134,26 @@ function summarizeLiveDataHealth({
   const tennis = byProvider(providerHealth, "Tennis");
   const snapshotGeneratedAt = snapshotInfo?.snapshot?.generatedAt ?? snapshotInfo?.snapshot?.sourceStatus?.fetchedAt ?? null;
   const snapshotAgeMs = ageMs(snapshotGeneratedAt, nowMs);
+  const snapshotClockError = snapshotAgeMs !== null && snapshotAgeMs < 0;
+  const snapshotStale = snapshotAgeMs === null || snapshotClockError || snapshotAgeMs > staleAfterMs;
   const scoreboardsUsable = ["live", "degraded"].includes(espn?.liveStatus);
   const researchUsable = ["live", "degraded"].includes(statMuse?.liveStatus);
   const oddsUsable = draftKings?.liveStatus === "live";
   const tennisAutomated = tennis?.liveStatus === "live";
   const sourceStatusAgeMs = ageMs(sourceStatus?.fetchedAt, nowMs);
-  const dataFresh = staleProviders.length === 0 && sourceStatusAgeMs !== null && sourceStatusAgeMs <= staleAfterMs;
+  const sourceStatusClockError = sourceStatusAgeMs !== null && sourceStatusAgeMs < 0;
+  const dataFresh =
+    staleProviders.length === 0 &&
+    clockErrorProviders.length === 0 &&
+    !sourceStatusClockError &&
+    !snapshotStale &&
+    sourceStatusAgeMs !== null &&
+    sourceStatusAgeMs <= staleAfterMs;
   const status =
     !scoreboardsUsable
       ? "blocked"
+      : clockErrorProviders.length > 0 || sourceStatusClockError || snapshotClockError
+        ? "clock-error"
       : !dataFresh
         ? "stale"
         : blockedProviders.length > 0 || degradedProviders.length > 0 || !oddsUsable
@@ -165,7 +192,7 @@ function summarizeLiveDataHealth({
       path: snapshotInfo?.snapshotPath ?? null,
       generatedAt: snapshotGeneratedAt,
       ageMs: snapshotAgeMs,
-      stale: snapshotAgeMs === null ? true : snapshotAgeMs > staleAfterMs
+      stale: snapshotStale
     },
     coverage: sourceCoverage(providerHealth),
     requirements: {
@@ -180,11 +207,17 @@ function summarizeLiveDataHealth({
       degradedProviders,
       blockedProviders,
       staleProviders,
+      clockErrorProviders,
       allLiveDataReady: status === "live",
       manualOddsRequired: !oddsUsable,
       manualTennisRequired: !tennisAutomated
     },
-    actions: actionList({ providers: providerHealth, autoUpdateStatus, snapshotAgeMs, staleAfterMs })
+    actions: [
+      ...(clockErrorProviders.length > 0 || sourceStatusClockError || snapshotClockError
+        ? ["One or more source timestamps are in the future; correct the system clock or provider data before trusting live status."]
+        : []),
+      ...actionList({ providers: providerHealth, autoUpdateStatus, snapshotAgeMs, snapshotClockError, staleAfterMs })
+    ].slice(0, 8)
   };
 }
 

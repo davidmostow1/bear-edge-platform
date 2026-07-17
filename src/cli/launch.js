@@ -2,6 +2,7 @@
 
 const fs = require("node:fs");
 const http = require("node:http");
+const os = require("node:os");
 const path = require("node:path");
 const { spawn } = require("node:child_process");
 
@@ -37,6 +38,11 @@ function parseArgs(argv) {
     if (value === "--host") {
       options.host = String(args[index + 1] ?? "").trim();
       index += 1;
+      continue;
+    }
+
+    if (value === "--lan") {
+      options.host = "0.0.0.0";
       continue;
     }
 
@@ -88,11 +94,33 @@ function urlHost(host) {
   return host === "0.0.0.0" ? "127.0.0.1" : host;
 }
 
+function preferredLanAddress() {
+  const interfaces = os.networkInterfaces();
+
+  for (const entries of Object.values(interfaces)) {
+    for (const entry of entries ?? []) {
+      if (entry.family === "IPv4" && !entry.internal) {
+        return entry.address;
+      }
+    }
+  }
+
+  return "127.0.0.1";
+}
+
+function displayHost(host) {
+  return host === "0.0.0.0" ? preferredLanAddress() : host;
+}
+
+function healthHost(host) {
+  return host === "0.0.0.0" ? preferredLanAddress() : urlHost(host);
+}
+
 function healthCheck(port, host = "127.0.0.1") {
   return new Promise((resolve) => {
     const request = http.get(
       {
-        hostname: urlHost(host),
+        hostname: healthHost(host),
         path: "/health",
         port,
         timeout: 1500
@@ -159,7 +187,7 @@ function startServer(options) {
 }
 
 function openDashboard(port, host = "127.0.0.1") {
-  const url = `http://${urlHost(host)}:${port}/dashboard`;
+  const url = `http://${displayHost(host)}:${port}/dashboard`;
 
   if (process.platform === "darwin") {
     const child = spawn("open", [url], {
@@ -179,6 +207,11 @@ async function launch(options) {
   let startedPid = null;
 
   if (!alreadyRunning) {
+    if (options.host === "0.0.0.0" && await healthCheck(options.port, "127.0.0.1")) {
+      throw new Error(
+        `Port ${options.port} is already used by a local-only Bear Edge server. Stop it or choose another port for LAN mode.`
+      );
+    }
     startedPid = startServer(options);
   }
 
@@ -192,7 +225,7 @@ async function launch(options) {
 
   const url = options.openBrowser
     ? openDashboard(options.port, options.host)
-    : `http://${urlHost(options.host)}:${options.port}/dashboard`;
+    : `http://${displayHost(options.host)}:${options.port}/dashboard`;
 
   return {
     alreadyRunning,
@@ -232,7 +265,10 @@ module.exports = {
   main,
   openDashboard,
   parseArgs,
+  preferredLanAddress,
   startServer,
+  displayHost,
+  healthHost,
   urlHost,
   waitForHealth
 };

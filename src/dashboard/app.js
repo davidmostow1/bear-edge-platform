@@ -2,6 +2,8 @@
 
 const els = {
   globalDropOverlay: document.querySelector("#globalDropOverlay"),
+  installAppButton: document.querySelector("#installAppButton"),
+  appStatus: document.querySelector("#appStatus"),
   healthDot: document.querySelector("#healthDot"),
   logPath: document.querySelector("#logPath"),
   bankrollInput: document.querySelector("#bankrollInput"),
@@ -52,11 +54,19 @@ const els = {
   onlineOpportunitiesSportsSelect: document.querySelector("#onlineOpportunitiesSportsSelect"),
   onlineOpportunitiesTimestamp: document.querySelector("#onlineOpportunitiesTimestamp"),
   statMuseSnapshotInput: document.querySelector("#statMuseSnapshotInput"),
+  statMuseSourceUrlInput: document.querySelector("#statMuseSourceUrlInput"),
   statMuseImageInput: document.querySelector("#statMuseImageInput"),
   statMuseSnapshotParseButton: document.querySelector("#statMuseSnapshotParseButton"),
   statMuseSnapshotClearButton: document.querySelector("#statMuseSnapshotClearButton"),
   statMuseSnapshotStatus: document.querySelector("#statMuseSnapshotStatus"),
   statMuseSnapshotResult: document.querySelector("#statMuseSnapshotResult"),
+  espnSnapshotInput: document.querySelector("#espnSnapshotInput"),
+  espnSourceUrlInput: document.querySelector("#espnSourceUrlInput"),
+  espnImageInput: document.querySelector("#espnImageInput"),
+  espnSnapshotParseButton: document.querySelector("#espnSnapshotParseButton"),
+  espnSnapshotClearButton: document.querySelector("#espnSnapshotClearButton"),
+  espnSnapshotStatus: document.querySelector("#espnSnapshotStatus"),
+  espnSnapshotResult: document.querySelector("#espnSnapshotResult"),
   draftKingsSnapshotInput: document.querySelector("#draftKingsSnapshotInput"),
   draftKingsImageInput: document.querySelector("#draftKingsImageInput"),
   draftKingsSnapshotParseButton: document.querySelector("#draftKingsSnapshotParseButton"),
@@ -267,8 +277,108 @@ window.__bearEdgeAutoUpdate = null;
 const storageKeys = Object.freeze({
   bankroll: "bearEdge.bankroll",
   sportsbookMinimum: "bearEdge.sportsbookMinimum",
-  riskMode: "bearEdge.riskMode"
+  riskMode: "bearEdge.riskMode",
+  ticketDraft: "bearEdge.ticketDraft"
 });
+
+let deferredInstallPrompt = null;
+let latestEspnSnapshotPayload = null;
+
+function espnSnapshotConfirmationStorageKey(payload) {
+  const identity = [
+    payload?.sourceUrl ?? "",
+    payload?.event?.eventId ?? "",
+    payload?.capturedAt ?? ""
+  ].join("|");
+
+  return `bearEdge.espnSnapshotConfirmation.${encodeURIComponent(identity)}`;
+}
+
+function readEspnSnapshotConfirmation(payload) {
+  if (payload?.manualConfirmation?.status === "manually_confirmed") {
+    return payload.manualConfirmation;
+  }
+
+  try {
+    const saved = window.localStorage.getItem(espnSnapshotConfirmationStorageKey(payload));
+    const parsed = saved ? JSON.parse(saved) : null;
+    return parsed?.status === "manually_confirmed" ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+function updateEspnConfirmationButtonState() {
+  const button = els.espnSnapshotResult?.querySelector("[data-espn-confirm]");
+
+  if (!button) {
+    return;
+  }
+
+  const checks = [...els.espnSnapshotResult.querySelectorAll("[data-espn-confirm-check]")];
+  button.disabled = checks.length !== 3 || !checks.every((check) => check.checked);
+}
+
+function setAppShellStatus(message, isError = false) {
+  if (!els.appStatus) {
+    return;
+  }
+
+  els.appStatus.textContent = message;
+  els.appStatus.classList.toggle("error", isError);
+}
+
+function setupInstallableApp() {
+  const securePhoneOrigin = window.isSecureContext && "serviceWorker" in navigator;
+
+  if (securePhoneOrigin) {
+    navigator.serviceWorker.register("/dashboard/sw.js", { scope: "/dashboard/" })
+      .then(() => setAppShellStatus(navigator.onLine ? "Phone shell ready" : "Offline shell ready"))
+      .catch(() => setAppShellStatus("Phone shell unavailable", true));
+  } else if (location.protocol === "http:" && !["localhost", "127.0.0.1"].includes(location.hostname)) {
+    setAppShellStatus("Phone browser mode (LAN HTTP)");
+  } else {
+    setAppShellStatus(navigator.onLine ? "Local app ready" : "Offline: local server required");
+  }
+
+  window.addEventListener("online", () => setAppShellStatus("Phone shell ready"));
+  window.addEventListener("offline", () => setAppShellStatus("Offline: live data unavailable"));
+  window.addEventListener("beforeinstallprompt", (event) => {
+    event.preventDefault();
+    deferredInstallPrompt = event;
+    if (els.installAppButton) {
+      els.installAppButton.textContent = "Install on phone";
+    }
+  });
+  window.addEventListener("appinstalled", () => {
+    deferredInstallPrompt = null;
+    if (els.installAppButton) {
+      els.installAppButton.textContent = "Installed";
+      els.installAppButton.disabled = true;
+    }
+    setAppShellStatus("Installed on this device");
+  });
+
+  els.installAppButton?.addEventListener("click", async () => {
+    if (!deferredInstallPrompt) {
+      setAppShellStatus("On iPhone: use Share, then Add to Home Screen");
+      return;
+    }
+
+    deferredInstallPrompt.prompt();
+    const choice = await deferredInstallPrompt.userChoice;
+    deferredInstallPrompt = null;
+    setAppShellStatus(choice.outcome === "accepted" ? "Installing on phone" : "Install dismissed");
+  });
+}
+
+function restoreTicketDraft() {
+  const saved = window.localStorage.getItem(storageKeys.ticketDraft);
+
+  if (saved) {
+    setTicketInputValue(saved);
+  }
+}
 
 function escapeHtml(value) {
   return String(value ?? "")
@@ -851,6 +961,11 @@ function renderTicketPreflightFromText() {
 
 function setTicketInputValue(value) {
   els.ticketInput.value = typeof value === "string" ? value : JSON.stringify(value, null, 2);
+  if (els.ticketInput.value.trim()) {
+    window.localStorage.setItem(storageKeys.ticketDraft, els.ticketInput.value);
+  } else {
+    window.localStorage.removeItem(storageKeys.ticketDraft);
+  }
   renderTicketPreflightFromText();
 }
 
@@ -1703,6 +1818,7 @@ function renderReleaseReadiness(payload) {
   const lanes = Array.isArray(payload?.lanes) ? payload.lanes : [];
   const nextActions = Array.isArray(payload?.nextActions) ? payload.nextActions : [];
   const evidenceGates = Array.isArray(payload?.evidenceGates) ? payload.evidenceGates : [];
+  const oddsEvidence = payload?.dataEdge?.odds?.evidence ?? {};
   const importantChecks = checks
     .filter((entry) => entry.status !== "pass")
     .concat(checks.filter((entry) => entry.status === "pass").slice(0, 5));
@@ -1739,6 +1855,10 @@ function renderReleaseReadiness(payload) {
         ["Info gates", summary.info ?? 0],
         ["Tracked files", payload?.trackedFiles?.count ?? 0],
         ["BET calls", payload?.decisionLog?.betCalls ?? 0],
+        ["Odds status", payload?.dataEdge?.odds?.status ?? "-"],
+        ["Bet permission", payload?.dataEdge?.betCallPermission ?? "-"],
+        ["Fresh prices", oddsEvidence.freshPricedCandidates ?? 0],
+        ["Bookmaker matches", oddsEvidence.bookmakerMatches ?? 0],
         ["3-win gate", payload?.decisionLog?.validationGate?.complete ? "complete" : `${payload?.decisionLog?.validationGate?.currentWinStreak ?? 0}/${payload?.decisionLog?.validationGate?.requiredWinStreak ?? 3}`]
       ]
         .map(([label, value]) => `<article class="metric compact"><span>${escapeHtml(label)}</span><strong>${escapeHtml(value)}</strong></article>`)
@@ -1776,6 +1896,28 @@ function renderReleaseReadiness(payload) {
           </div>
         </div>`
       : ""}
+    <div class="release-evidence odds-evidence-panel">
+      <h3>Odds Evidence</h3>
+      <p>${escapeHtml(oddsEvidence.permission ?? payload?.dataEdge?.betCallPermission ?? "PRICE_CHECK_ONLY")} / ${escapeHtml(oddsEvidence.status ?? "blocked")}</p>
+      <div class="release-evidence-grid">
+        <article>
+          <strong>Fresh priced candidates</strong>
+          <small>${escapeHtml(oddsEvidence.freshPricedCandidates ?? 0)}</small>
+        </article>
+        <article>
+          <strong>Exact bookmaker matches</strong>
+          <small>${escapeHtml(oddsEvidence.bookmakerMatches ?? 0)} / ${escapeHtml(oddsEvidence.requiredBookmaker ?? "draftkings")}</small>
+        </article>
+        <article>
+          <strong>Oldest price age</strong>
+          <small>${oddsEvidence.oldestPriceAgeMinutes === null || oddsEvidence.oldestPriceAgeMinutes === undefined ? "missing" : `${escapeHtml(Math.round(oddsEvidence.oldestPriceAgeMinutes * 10) / 10)} minutes`}</small>
+        </article>
+        <article>
+          <strong>Reason</strong>
+          <small>${escapeHtml((oddsEvidence.reasonCodes ?? ["none"])[0])}</small>
+        </article>
+      </div>
+    </div>
     ${nextActions.length > 0
       ? `<div class="release-actions">
           <h3>Next Actions</h3>
@@ -1946,11 +2088,11 @@ async function testSavedOddsApiKey() {
 }
 
 function setupStatusClass(status) {
-  if (status === "configured") {
+  if (status === "configured" || status === "verified") {
     return "ok";
   }
 
-  if (status === "restart_needed") {
+  if (status === "restart_needed" || status === "configured_only") {
     return "medium";
   }
 
@@ -1960,6 +2102,10 @@ function setupStatusClass(status) {
 function setupStatusLabel(status) {
   if (status === "restart_needed") {
     return "restart needed";
+  }
+
+  if (status === "configured_only") {
+    return "configured only";
   }
 
   return status ?? "unknown";
@@ -1992,6 +2138,16 @@ function renderProviderSetup(payload) {
     <div class="provider-card-grid">
       ${providers
         .map((provider) => {
+          const liveOdds = provider.id === "the-odds-api" ? payload.liveAudit?.odds : null;
+          const liveWarnings = provider.id === "the-odds-api" ? (payload.liveAudit?.bestTargets?.warnings ?? []) : [];
+          const quotaExhausted = liveWarnings.some((warning) => /OUT_OF_USAGE_CREDITS|usage quota|credits? (?:has been )?reached/i.test(warning));
+          const liveVerified = liveOdds?.liveVerifiedOdds === true;
+          const providerRejected = liveOdds?.status === "provider_error";
+          const displayStatus = liveVerified
+            ? "verified"
+            : provider.configured && (providerRejected || liveOdds?.manualOddsRequired)
+              ? "configured_only"
+              : provider.status;
           const keySummary = (provider.keyStatuses ?? [])
             .map((key) => {
               const state = key.configured
@@ -2020,8 +2176,14 @@ function renderProviderSetup(payload) {
                   <h3>${escapeHtml(provider.name)}</h3>
                   <p class="sources">${escapeHtml(provider.tier)} / ${escapeHtml(keySummary || "no key required")}</p>
                 </div>
-                <span class="tag ${setupStatusClass(provider.status)}">${escapeHtml(setupStatusLabel(provider.status))}</span>
+                <span class="tag ${setupStatusClass(displayStatus)}">${escapeHtml(setupStatusLabel(displayStatus))}</span>
               </header>
+              ${provider.id === "the-odds-api" && provider.configured
+                ? `<p class="provider-live-status ${liveVerified ? "ok" : "error"}">
+                    Live verification: ${liveVerified ? "verified" : quotaExhausted ? "valid key, quota exhausted (500/500 credits)" : providerRejected ? "provider rejected the key" : "not verified"}<br>
+                    Automatic bet permission: ${escapeHtml(payload.liveAudit?.betCallPermission ?? "PRICE_CHECK_ONLY")}
+                  </p>`
+                : ""}
               <ul>
                 ${(provider.unlocks ?? []).slice(0, 4).map((item) => `<li>${escapeHtml(item)}</li>`).join("")}
               </ul>
@@ -2052,14 +2214,18 @@ async function loadProviderSetup() {
   els.providerSetupBoard.innerHTML = '<p class="muted auto-update-empty">Checking provider setup...</p>';
 
   try {
-    const response = await fetch("/api/provider-requirements");
+    const [response, auditResponse] = await Promise.all([
+      fetch("/api/provider-requirements"),
+      fetch("/api/data-edge-audit")
+    ]);
     const payload = await response.json();
+    const liveAudit = auditResponse.ok ? await auditResponse.json() : null;
 
     if (!response.ok) {
       throw new Error(payload.error ?? "Unable to load provider setup.");
     }
 
-    renderProviderSetup(payload);
+    renderProviderSetup({ ...payload, liveAudit });
   } catch (error) {
     els.providerSetupBoard.innerHTML = `<p class="muted auto-update-empty">${escapeHtml(error.message)}</p>`;
     els.providerSetupTimestamp.textContent = "Provider check failed";
@@ -2153,11 +2319,94 @@ function setSnapshotStatus(message, isError = false) {
   els.statMuseSnapshotStatus.style.color = isError ? "var(--red)" : "var(--muted)";
 }
 
+function renderStatMuseGamePage(gamePage) {
+  const teams = Array.isArray(gamePage?.teams) ? gamePage.teams : [];
+  const odds = gamePage?.odds ?? {};
+  const marketRows = [
+    ...(odds.moneyline ?? []).map((market) => ({ label: `${market.team ?? market.side} moneyline`, market })),
+    ...(odds.runLine ?? []).map((market) => ({ label: `${market.team ?? market.side} run line ${market.line}`, market })),
+    ...(odds.total ?? []).map((market) => ({ label: `${market.side} ${market.line}`, market })),
+    ...(odds.openTotals ?? []).map((market) => ({ label: `Open over ${market.line}`, market })),
+    ...(odds.props ?? []).map((market) => ({ label: `${market.player} ${market.side} ${market.line} ${market.market.replace(/_/g, " ")}`, market }))
+  ];
+  const predictionRows = Array.isArray(gamePage?.predictions) ? gamePage.predictions : [];
+  const pitcherRows = Array.isArray(gamePage?.probablePitchers) ? gamePage.probablePitchers : [];
+  const injuryRows = Array.isArray(gamePage?.injuries) ? gamePage.injuries : [];
+  const teamStatRows = teams.map((team, index) => {
+    const side = index === 0 ? "away" : "home";
+    const stats = gamePage?.teamStats?.[side]?.stats ?? {};
+    return `<article class="snapshot-context-card"><strong>${escapeHtml(team.fullName ?? team.name ?? side)}</strong><span>${escapeHtml(team.record ?? "record unavailable")}</span><div class="snapshot-stat-list">${Object.entries(stats)
+      .map(([label, value]) => `<span><b>${escapeHtml(label)}</b> ${escapeHtml(value)}</span>`)
+      .join("")}</div></article>`;
+  });
+  const gameInfo = gamePage?.gameInfo ?? {};
+  const sourceTime = gamePage?.evidence?.capturedAt ?? "not supplied";
+
+  return `
+    <section class="snapshot-game-page" aria-label="StatMuse game page context">
+      <header class="snapshot-context-header">
+        <div>
+          <strong>${escapeHtml(gamePage.game ?? "StatMuse game page")}</strong>
+          <span>${escapeHtml(gamePage.startTime ?? gamePage.gameDate ?? "scheduled time unavailable")}${gamePage.network ? ` / ${escapeHtml(gamePage.network)}` : ""}</span>
+        </div>
+        <span class="tag medium">Context only / odds unverified</span>
+      </header>
+      <p class="sources">Captured: ${escapeHtml(sourceTime)}${gameInfo.venue ? ` / ${escapeHtml(gameInfo.venue)}` : ""}${gameInfo.temperature ? ` / ${escapeHtml(gameInfo.temperature)}` : ""}${gameInfo.wind ? ` / ${escapeHtml(gameInfo.wind)}` : ""}</p>
+      <div class="snapshot-context-grid">
+        <article class="snapshot-context-card">
+          <strong>Displayed prices</strong>
+          <div class="snapshot-market-table">
+            ${marketRows.length > 0
+              ? marketRows.map(({ label, market }) => `<div><span>${escapeHtml(label)}</span><b>${escapeHtml(formatOdds(market.odds))}</b></div>`).join("")
+              : '<span class="muted">No prices parsed.</span>'}
+          </div>
+        </article>
+        <article class="snapshot-context-card">
+          <strong>Probable pitchers</strong>
+          <div class="snapshot-pitchers">
+            ${pitcherRows.length > 0
+              ? pitcherRows.map((pitcher) => `<div><b>${escapeHtml(pitcher.name)}</b><span>${escapeHtml(pitcher.team ?? pitcher.side)} / ${escapeHtml(Object.entries(pitcher.stats ?? {}).map(([label, value]) => `${label} ${value}`).join(" / ") || "stats unavailable")}</span></div>`).join("")
+              : '<span class="muted">No probable pitchers parsed.</span>'}
+          </div>
+        </article>
+        <article class="snapshot-context-card snapshot-predictions-card">
+          <strong>Displayed prediction markets (${predictionRows.length})</strong>
+          <p class="sources">Predictions-tab context only. Verify every player, line, price, lineup, and roster status before using it.</p>
+          <div class="snapshot-prediction-table">
+            ${predictionRows.length > 0
+              ? predictionRows.slice(0, 80).map((prediction) => {
+                const marketLabel = String(prediction.market ?? "market").replace(/_/g, " ");
+                const underPrice = prediction.underOdds === null || typeof prediction.underOdds === "undefined"
+                  ? ""
+                  : ` / Under ${formatOdds(prediction.underOdds)}`;
+                return `<div><span>${escapeHtml(`${prediction.player ?? "Unknown player"} / ${marketLabel} / ${prediction.line ?? "-"}`)}</span><b>${escapeHtml(`Over ${formatOdds(prediction.overOdds)}${underPrice}`)}</b></div>`;
+              }).join("")
+              : '<span class="muted">No Predictions-tab markets parsed.</span>'}
+          </div>
+          ${predictionRows.length > 80 ? `<p class="sources">Showing the first 80 of ${predictionRows.length} displayed markets.</p>` : ""}
+        </article>
+        <article class="snapshot-context-card">
+          <strong>Team stats</strong>
+          <div class="snapshot-team-stats">${teamStatRows.join("") || '<span class="muted">No team stats parsed.</span>'}</div>
+        </article>
+        <article class="snapshot-context-card">
+          <strong>Injuries requiring confirmation</strong>
+          <div class="snapshot-injuries">${injuryRows.length > 0
+            ? injuryRows.map((injury) => `<div><b>${escapeHtml(injury.player)}</b><span>${escapeHtml(injury.status)} / ${escapeHtml(injury.detail)} / ${escapeHtml(injury.team ?? injury.side)}</span></div>`).join("")
+            : '<span class="muted">No injuries parsed.</span>'}</div>
+        </article>
+      </div>
+      <p class="warning-inline">This capture is useful for research and reconciliation. It does not authorize a BET verdict, replace a licensed odds feed, or verify injuries and lineups.</p>
+    </section>
+  `;
+}
+
 function renderStatMuseSnapshot(payload) {
   const games = Array.isArray(payload?.games) ? payload.games : [];
   const musings = Array.isArray(payload?.musings) ? payload.musings : [];
   const warnings = Array.isArray(payload?.warnings) ? payload.warnings : [];
   const summary = payload?.summary ?? {};
+  const gamePageMarkup = payload?.gamePage ? renderStatMuseGamePage(payload.gamePage) : "";
 
   els.statMuseSnapshotResult.innerHTML = `
     <div class="snapshot-summary">
@@ -2167,7 +2416,10 @@ function renderStatMuseSnapshot(payload) {
         ["Final", summary.finalGames ?? 0],
         ["Scheduled", summary.scheduledGames ?? 0],
         ["Displayed Odds", summary.displayedOdds ?? 0],
-        ["Musings", summary.musings ?? 0]
+        ["Musings", summary.musings ?? 0],
+        ["Game Pages", summary.gamePages ?? 0],
+        ["Game Markets", summary.gamePageMarkets ?? 0],
+        ["Prediction Markets", summary.predictionMarkets ?? 0]
       ]
         .map(([label, value]) => `<article class="metric compact"><span>${escapeHtml(label)}</span><strong>${escapeHtml(value)}</strong></article>`)
         .join("")}
@@ -2177,6 +2429,7 @@ function renderStatMuseSnapshot(payload) {
         ? `<div class="warning-list snapshot-warnings">${warnings.map((warning) => `<p>${escapeHtml(warning)}</p>`).join("")}</div>`
         : ""
     }
+    ${gamePageMarkup}
     ${
       games.length > 0
         ? `<div class="snapshot-games">${games
@@ -2195,7 +2448,7 @@ function renderStatMuseSnapshot(payload) {
             `
             )
             .join("")}</div>`
-        : '<p class="muted">No games parsed from this snapshot.</p>'
+        : gamePageMarkup ? "" : '<p class="muted">No games parsed from this snapshot.</p>'
     }
     ${
       musings.length > 0
@@ -2226,7 +2479,7 @@ async function parseStatMuseSnapshot() {
       },
       body: JSON.stringify({
         text,
-        sourceUrl: "https://www.statmuse.com/",
+        sourceUrl: els.statMuseSourceUrlInput.value.trim() || "https://www.statmuse.com/",
         capturedAt: new Date().toISOString()
       })
     });
@@ -2237,9 +2490,253 @@ async function parseStatMuseSnapshot() {
     }
 
     renderStatMuseSnapshot(payload);
-    setSnapshotStatus(`Parsed ${payload.summary.games} games and ${payload.summary.musings} StatMuse notes.`);
+    setSnapshotStatus(`Parsed ${payload.summary.games} games, ${payload.summary.gamePages ?? 0} game pages, ${payload.summary.predictionMarkets ?? 0} prediction markets, and ${payload.summary.musings} StatMuse notes.`);
   } catch (error) {
     setSnapshotStatus(error.message, true);
+  }
+}
+
+function setEspnSnapshotStatus(message, isError = false) {
+  els.espnSnapshotStatus.textContent = message;
+  els.espnSnapshotStatus.style.color = isError ? "var(--red)" : "var(--muted)";
+}
+
+function renderEspnOddsTable(odds) {
+  const rows = [
+    ...(odds?.moneyline ?? []).map((market) => ({
+      label: `${market.team ?? market.side} moneyline`,
+      value: formatOdds(market.odds)
+    })),
+    ...(odds?.total ?? []).map((market) => ({
+      label: `${market.side} ${market.line}`,
+      value: formatOdds(market.odds)
+    })),
+    ...(odds?.runLine ?? []).map((market) => ({
+      label: `${market.team ?? market.side} ${market.line > 0 ? "+" : ""}${market.line}`,
+      value: formatOdds(market.odds)
+    }))
+  ];
+
+  return rows.length > 0
+    ? rows.map((row) => `<div><span>${escapeHtml(row.label)}</span><b>${escapeHtml(row.value)}</b></div>`).join("")
+    : '<span class="muted">No game odds mapped.</span>';
+}
+
+function renderEspnProps(props) {
+  if (!Array.isArray(props) || props.length === 0) {
+    return '<span class="muted">No prop rows parsed.</span>';
+  }
+
+  return `
+    <div class="snapshot-table-wrap">
+      <table>
+        <thead><tr><th>Market</th><th>Player / Team</th><th>Line</th><th>Over</th><th>Under</th></tr></thead>
+        <tbody>
+          ${props.slice(0, 80).map((prop) => `
+            <tr>
+              <td>${escapeHtml(String(prop.market ?? "prop").replace(/_/g, " "))}</td>
+              <td>${escapeHtml(`${prop.player ?? "-"}${prop.position ? ` / ${prop.position}` : ""}${prop.team ? ` (${prop.team})` : ""}`)}</td>
+              <td>${escapeHtml(prop.line ?? "-")}</td>
+              <td>${escapeHtml(formatOdds(prop.overOdds))}</td>
+              <td>${escapeHtml(prop.underOdds === null || typeof prop.underOdds === "undefined" ? "locked/missing" : formatOdds(prop.underOdds))}</td>
+            </tr>
+          `).join("")}
+        </tbody>
+      </table>
+    </div>
+    ${props.length > 80 ? `<p class="sources">Showing the first 80 of ${props.length} displayed prop rows.</p>` : ""}
+  `;
+}
+
+function renderEspnManualConfirmation(confirmation) {
+  if (confirmation?.status === "manually_confirmed") {
+    return `
+      <section class="manual-confirmation-panel confirmed" aria-label="Manual ESPN confirmation">
+        <div class="manual-confirmation-header">
+          <strong>Manual review recorded</strong>
+          <span class="tag ok">Manually confirmed</span>
+        </div>
+        <p>Checked ${escapeHtml(formatDate(confirmation.confirmedAt))} against the displayed event, lines, and roster/injury context.</p>
+        <p class="warning-inline">This is a timestamped visual-review acknowledgement only. ESPN/DraftKings API verification remains off, and the capture must be reviewed again if odds or player status changes.</p>
+      </section>
+    `;
+  }
+
+  return `
+    <section class="manual-confirmation-panel" aria-label="Manual ESPN confirmation">
+      <div class="manual-confirmation-header">
+        <div>
+          <strong>Manual confirmation</strong>
+          <p>Review the capture above before checking all three items.</p>
+        </div>
+        <span class="tag medium">Review required</span>
+      </div>
+      <label><input type="checkbox" data-espn-confirm-check="event"> I confirmed the teams, game, and capture source.</label>
+      <label><input type="checkbox" data-espn-confirm-check="odds"> I confirmed the displayed odds, lines, and markets.</label>
+      <label><input type="checkbox" data-espn-confirm-check="roster"> I checked the current roster and injury context.</label>
+      <div class="button-row manual-confirmation-actions">
+        <button type="button" class="secondary" data-espn-confirm disabled>Mark Manually Confirmed</button>
+        <span class="manual-confirmation-status" data-espn-confirm-status role="status"></span>
+      </div>
+    </section>
+  `;
+}
+
+function renderEspnSnapshot(payload) {
+  latestEspnSnapshotPayload = payload;
+  const event = payload?.event ?? {};
+  const odds = event.odds ?? {};
+  const warnings = Array.isArray(payload?.warnings) ? payload.warnings : [];
+  const summary = payload?.summary ?? {};
+  const predictor = event.matchupPredictor;
+  const schedule = Array.isArray(event.recentSchedule) ? event.recentSchedule : [];
+  const injuries = Array.isArray(event.injuries) ? event.injuries : [];
+  const confirmation = readEspnSnapshotConfirmation(payload);
+
+  els.espnSnapshotResult.innerHTML = `
+    <div class="snapshot-summary">
+      ${[
+        ["Events", summary.events ?? 0],
+        ["Moneyline", summary.moneylineMarkets ?? 0],
+        ["Totals", summary.totalMarkets ?? 0],
+        ["Run Line", summary.runLineMarkets ?? 0],
+        ["Props", summary.propMarkets ?? 0],
+        ["Injuries", summary.injuryRecords ?? 0],
+        ["Recent Games", summary.recentGames ?? 0],
+        ["Predictor", summary.predictorMarkets ?? 0]
+      ].map(([label, value]) => `<article class="metric compact"><span>${escapeHtml(label)}</span><strong>${escapeHtml(value)}</strong></article>`).join("")}
+    </div>
+    ${warnings.length > 0 ? `<div class="warning-list snapshot-warnings">${warnings.map((warning) => `<p>${escapeHtml(warning)}</p>`).join("")}</div>` : ""}
+    <section class="snapshot-game-page" aria-label="ESPN odds page context">
+      <header class="snapshot-context-header">
+        <div>
+          <strong>${escapeHtml(event.game ?? "ESPN game context")}</strong>
+          <span>${escapeHtml(event.startTime ?? "scheduled time unavailable")} / ${escapeHtml(event.eventId ?? "event id unavailable")}</span>
+        </div>
+        <span class="tag ${confirmation ? "ok" : "medium"}">${confirmation ? "Manually confirmed" : "Context only / unverified"}</span>
+      </header>
+      <p class="sources">${escapeHtml(event.away?.record ?? "-")} away ${escapeHtml(event.away?.name ?? "Away")} vs ${escapeHtml(event.home?.record ?? "-")} home ${escapeHtml(event.home?.name ?? "Home")}${payload?.sourceUrl ? ` / ${escapeHtml(payload.sourceUrl)}` : ""}</p>
+      ${renderEspnManualConfirmation(confirmation)}
+      <div class="snapshot-context-grid">
+        <article class="snapshot-context-card">
+          <strong>Displayed game odds</strong>
+          <p class="sources">Odds by DraftKings on ESPN. Verify current book, timestamp, and side before use.</p>
+          <div class="snapshot-market-table">${renderEspnOddsTable(odds)}</div>
+        </article>
+        <article class="snapshot-context-card">
+          <strong>ESPN Analytics predictor</strong>
+          ${predictor
+            ? `<div class="snapshot-market-table"><div><span>${escapeHtml(predictor.awayTeam ?? "Away")}</span><b>${escapeHtml(`${(predictor.awayProbability * 100).toFixed(1)}%`)}</b></div><div><span>${escapeHtml(predictor.homeTeam ?? "Home")}</span><b>${escapeHtml(`${(predictor.homeProbability * 100).toFixed(1)}%`)}</b></div></div><p class="warning-inline">Context only. This is not Bear Edge fair probability.</p>`
+            : '<span class="muted">No predictor percentages parsed.</span>'}
+        </article>
+        <article class="snapshot-context-card">
+          <strong>Recent schedule (${schedule.length})</strong>
+          ${schedule.length > 0 ? `<div class="snapshot-market-table">${schedule.slice(0, 10).map((row) => `<div><span>${escapeHtml(`${row.date} ${row.opponent}`)}</span><b>${escapeHtml(`${row.result}${row.total === null ? "" : ` / ${row.total}`}`)}</b></div>`).join("")}</div>` : '<span class="muted">No recent schedule rows parsed.</span>'}
+        </article>
+        <article class="snapshot-context-card">
+          <strong>Injuries requiring confirmation (${injuries.length})</strong>
+          ${injuries.length > 0 ? `<div class="snapshot-injuries">${injuries.map((injury) => `<div><b>${escapeHtml(injury.player)}</b><span>${escapeHtml(`${injury.team ?? "-"} / ${injury.position ?? "-"} / ${injury.status}`)}</span></div>`).join("")}</div>` : '<span class="muted">No injury rows parsed.</span>'}
+        </article>
+      </div>
+      <article class="snapshot-context-card">
+        <strong>Displayed props (${summary.propMarkets ?? 0})</strong>
+        <p class="sources">Prop prices are preserved for reconciliation only. They are not current verified lines or model inputs.</p>
+        ${renderEspnProps(event.props)}
+      </article>
+      <p class="warning-inline">${confirmation ? "Manual confirmation is recorded, but this capture still does not authorize a BET verdict or replace licensed odds and injury data." : "This capture is research evidence only. It does not authorize a BET verdict, verify roster status, or replace licensed odds and injury data."}</p>
+    </section>
+  `;
+
+  updateEspnConfirmationButtonState();
+}
+
+async function parseEspnSnapshot() {
+  const text = els.espnSnapshotInput.value.trim();
+
+  if (!text) {
+    setEspnSnapshotStatus("Paste ESPN odds-page text first.", true);
+    return;
+  }
+
+  setEspnSnapshotStatus("Parsing ESPN snapshot...");
+
+  try {
+    const response = await fetch("/api/espn-snapshot", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json"
+      },
+      body: JSON.stringify({
+        text,
+        sourceUrl: els.espnSourceUrlInput.value.trim() || "https://www.espn.com/mlb/odds/",
+        capturedAt: new Date().toISOString()
+      })
+    });
+    const payload = await response.json();
+
+    if (!response.ok) {
+      throw new Error(payload.error ?? "Unable to parse ESPN snapshot.");
+    }
+
+    renderEspnSnapshot(payload);
+    setEspnSnapshotStatus(`Parsed ${payload.summary.events} ESPN event, ${payload.summary.moneylineMarkets} moneyline prices, ${payload.summary.propMarkets} prop rows, and ${payload.summary.injuryRecords} injury rows. Verify before use.`);
+  } catch (error) {
+    setEspnSnapshotStatus(error.message, true);
+  }
+}
+
+async function confirmEspnSnapshot(button) {
+  if (!latestEspnSnapshotPayload) {
+    return;
+  }
+
+  const checks = {};
+  els.espnSnapshotResult.querySelectorAll("[data-espn-confirm-check]").forEach((check) => {
+    checks[check.dataset.espnConfirmCheck] = check.checked;
+  });
+
+  button.disabled = true;
+  const status = els.espnSnapshotResult.querySelector("[data-espn-confirm-status]");
+  status.textContent = "Recording manual confirmation...";
+
+  try {
+    const snapshot = {
+      sourceUrl: latestEspnSnapshotPayload.sourceUrl,
+      capturedAt: latestEspnSnapshotPayload.capturedAt,
+      event: latestEspnSnapshotPayload.event
+    };
+    const response = await fetch("/api/snapshot-confirmation", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json"
+      },
+      body: JSON.stringify({ snapshot, checks })
+    });
+    const confirmation = await response.json();
+
+    if (!response.ok) {
+      throw new Error(confirmation.error ?? "Unable to record manual confirmation.");
+    }
+
+    latestEspnSnapshotPayload = {
+      ...latestEspnSnapshotPayload,
+      manualConfirmation: confirmation
+    };
+
+    try {
+      window.localStorage.setItem(
+        espnSnapshotConfirmationStorageKey(latestEspnSnapshotPayload),
+        JSON.stringify(confirmation)
+      );
+    } catch {
+      // The server response remains authoritative for the current page.
+    }
+
+    renderEspnSnapshot(latestEspnSnapshotPayload);
+    setEspnSnapshotStatus("Manual confirmation recorded. API/provider verification remains off.");
+  } catch (error) {
+    status.textContent = error.message;
+    button.disabled = false;
   }
 }
 
@@ -2610,6 +3107,45 @@ function renderDraftKingsSnapshot(payload) {
   `;
 }
 
+function renderPredictionsMarketRows(payload) {
+  const markets = Array.isArray(payload?.markets) ? payload.markets : [];
+  const propMarkets = markets.filter((market) => market.source_market_kind === "playerProp");
+  const visibleMarkets = (propMarkets.length > 0 ? propMarkets : markets).slice(0, 18);
+
+  if (visibleMarkets.length === 0) {
+    return '<p class="muted">No DK Predictions prices were parsed from this screenshot.</p>';
+  }
+
+  return `
+    <div class="snapshot-table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Selection</th>
+            <th>Market</th>
+            <th>Odds / Yes</th>
+            <th>No</th>
+            <th>Game</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${visibleMarkets
+            .map((market) => `
+              <tr>
+                <td>${escapeHtml(market.team_or_player ?? "-")}</td>
+                <td>${escapeHtml(market.market_name ?? "-")}</td>
+                <td>${escapeHtml(formatOdds(market.odds))}</td>
+                <td>${escapeHtml(market.source_market_kind === "playerProp" ? market.opposite_odds === null ? "locked/missing" : formatOdds(market.opposite_odds) : "-")}</td>
+                <td>${escapeHtml(market.game ?? "-")}</td>
+              </tr>
+            `)
+            .join("")}
+        </tbody>
+      </table>
+    </div>
+  `;
+}
+
 function renderScreenshotIntakeResult(payload) {
   const warnings = Array.isArray(payload?.warnings) ? payload.warnings : [];
   const ocrWarnings = Array.isArray(payload?.ocr?.warnings) ? payload.ocr.warnings : [];
@@ -2617,19 +3153,58 @@ function renderScreenshotIntakeResult(payload) {
   const summary = payload?.summary ?? {};
   const parserLabel = payload?.parser === "statmuse"
     ? "StatMuse"
+    : payload?.parser === "espn"
+      ? "ESPN odds page"
     : payload?.parser === "worldcup-goalscorer"
       ? "World Cup Goalscorer"
-      : "DraftKings";
+      : payload?.parser === "dk-predictions"
+        ? "DK Predictions / Pick6"
+        : "DraftKings";
   const parsedCount = payload?.parser === "statmuse"
-    ? summary.games ?? 0
+    ? (summary.games ?? 0) + (summary.gamePages ?? 0)
+    : payload?.parser === "espn"
+      ? summary.events ?? 0
     : payload?.parser === "worldcup-goalscorer"
       ? summary.players ?? 0
-      : summary.events ?? 0;
+      : payload?.parser === "dk-predictions"
+        ? (summary.playerPropMarkets ?? 0) || (summary.events ?? 0)
+        : summary.events ?? 0;
   const priceCount = payload?.parser === "statmuse"
     ? summary.displayedOdds ?? 0
+    : payload?.parser === "espn"
+      ? (summary.moneylineMarkets ?? 0) + (summary.totalMarkets ?? 0) + (summary.runLineMarkets ?? 0)
     : payload?.parser === "worldcup-goalscorer"
       ? summary.pricedMarkets ?? 0
-      : summary.moneylineMarkets ?? 0;
+      : payload?.parser === "dk-predictions"
+        ? (summary.playerPropMarkets ?? 0) || (summary.markets ?? 0)
+        : summary.moneylineMarkets ?? 0;
+  const extraMetrics = payload?.parser === "statmuse"
+    ? [
+      ["Game Pages", summary.gamePages ?? 0],
+      ["Prediction Markets", summary.predictionMarkets ?? 0],
+      ["Game Markets", summary.gamePageMarkets ?? 0]
+    ]
+    : payload?.parser === "espn"
+      ? [
+        ["Props", summary.propMarkets ?? 0],
+        ["Injuries", summary.injuryRecords ?? 0],
+        ["Recent Games", summary.recentGames ?? 0],
+        ["Predictor", summary.predictorMarkets ?? 0]
+      ]
+    : payload?.parser === "dk-predictions"
+      ? [
+        ["Total Bases", summary.totalBasesMarkets ?? 0],
+        ["Strikeouts", summary.strikeoutMarkets ?? 0],
+        ["Moneylines", summary.moneylineMarkets ?? 0],
+        ["Spreads", summary.spreadMarkets ?? 0],
+        ["Run Lines", summary.runLineMarkets ?? 0],
+        ["Totals", summary.totalMarkets ?? 0],
+        ["Basketball Events", summary.basketballEvents ?? 0],
+        ["Tennis Events", summary.tennisEvents ?? 0],
+        ["Live Events", summary.liveEvents ?? 0],
+        ["Locked No", summary.lockedOrMissingNoPrices ?? 0]
+      ]
+    : [];
 
   els.screenshotIntakeResult.innerHTML = `
     <div class="snapshot-summary">
@@ -2639,6 +3214,7 @@ function renderScreenshotIntakeResult(payload) {
         ["Characters", payload?.ocr?.characters ?? 0],
         ["Parsed Rows", parsedCount],
         ["Prices", priceCount],
+        ...extraMetrics,
         ["File", payload?.ocr?.fileName ?? "-"]
       ]
         .map(([label, value]) => `<article class="metric compact"><span>${escapeHtml(label)}</span><strong>${escapeHtml(value)}</strong></article>`)
@@ -2652,6 +3228,7 @@ function renderScreenshotIntakeResult(payload) {
             .join("")}</div>`
         : ""
     }
+    ${payload?.parser === "dk-predictions" ? renderPredictionsMarketRows(payload) : ""}
     <details class="ocr-text-preview">
       <summary>Extracted OCR Text</summary>
       <pre>${escapeHtml(text || "No text extracted.")}</pre>
@@ -2702,9 +3279,33 @@ function snapshotConfig(parser) {
       input: els.statMuseSnapshotInput,
       resultRenderer: renderStatMuseSnapshot,
       setStatus: setSnapshotStatus,
-      sourceUrl: "https://www.statmuse.com/",
+      sourceUrl: els.statMuseSourceUrlInput?.value.trim() || "https://www.statmuse.com/",
       successMessage(payload) {
-        return `OCR parsed ${payload.summary.games} StatMuse games from ${payload.ocr.lines} text lines. Verify extracted text before using it.`;
+        return `OCR parsed ${payload.summary.games} StatMuse games, ${payload.summary.gamePages ?? 0} game pages, and ${payload.summary.predictionMarkets ?? 0} prediction markets from ${payload.ocr.lines} text lines. Verify extracted text before using it.`;
+      }
+    };
+  }
+
+  if (parser === "espn") {
+    return {
+      input: els.espnSnapshotInput,
+      resultRenderer: renderEspnSnapshot,
+      setStatus: setEspnSnapshotStatus,
+      sourceUrl: els.espnSourceUrlInput?.value.trim() || "https://www.espn.com/mlb/odds/",
+      successMessage(payload) {
+        return `OCR parsed ${payload.summary.events ?? 0} ESPN event, ${payload.summary.propMarkets ?? 0} prop rows, and ${payload.summary.injuryRecords ?? 0} injury rows. Verify every displayed line before evaluating.`;
+      }
+    };
+  }
+
+  if (parser === "dk-predictions") {
+    return {
+      input: els.candidateOddsImportInput,
+      resultRenderer() {},
+      setStatus: setScreenshotIntakeStatus,
+      sourceUrl: "https://sportsbook.draftkings.com/",
+      successMessage(payload) {
+        return `OCR parsed ${payload.summary.playerPropMarkets ?? 0} DK Predictions prop prices from ${payload.ocr.lines} text lines. Verify every price before evaluating.`;
       }
     };
   }
@@ -2759,7 +3360,7 @@ async function parseSnapshotImage(file, parser = "draftkings") {
     config.setStatus(config.successMessage(payload));
     setScreenshotIntakeStatus(config.successMessage(payload));
 
-    if (parser === "draftkings") {
+    if (parser === "draftkings" || parser === "dk-predictions") {
       els.candidateOddsImportInput.value = payload.extractedText ?? "";
       await importCandidateOddsText();
     }
@@ -4486,7 +5087,14 @@ els.simulateTicketButton.addEventListener("click", async () => {
     setStatus(error.message, true);
   }
 });
-els.ticketInput.addEventListener("input", renderTicketPreflightFromText);
+els.ticketInput.addEventListener("input", () => {
+  if (els.ticketInput.value.trim()) {
+    window.localStorage.setItem(storageKeys.ticketDraft, els.ticketInput.value);
+  } else {
+    window.localStorage.removeItem(storageKeys.ticketDraft);
+  }
+  renderTicketPreflightFromText();
+});
 [
   els.bankrollInput,
   els.sportsbookMinInput,
@@ -4787,8 +5395,39 @@ els.statMuseImageInput.addEventListener("change", async () => {
 });
 els.statMuseSnapshotClearButton.addEventListener("click", () => {
   els.statMuseSnapshotInput.value = "";
+  els.statMuseSourceUrlInput.value = "";
   els.statMuseSnapshotResult.innerHTML = "";
   setSnapshotStatus("");
+});
+els.espnSnapshotParseButton.addEventListener("click", () => {
+  parseEspnSnapshot();
+});
+els.espnImageInput.addEventListener("change", async () => {
+  const file = els.espnImageInput.files?.[0];
+
+  if (file) {
+    await parseSnapshotImage(file, "espn");
+    els.espnImageInput.value = "";
+  }
+});
+els.espnSnapshotResult.addEventListener("change", (event) => {
+  if (event.target.matches("[data-espn-confirm-check]")) {
+    updateEspnConfirmationButtonState();
+  }
+});
+els.espnSnapshotResult.addEventListener("click", (event) => {
+  const button = event.target.closest("[data-espn-confirm]");
+
+  if (button) {
+    confirmEspnSnapshot(button);
+  }
+});
+els.espnSnapshotClearButton.addEventListener("click", () => {
+  els.espnSnapshotInput.value = "";
+  els.espnSourceUrlInput.value = "";
+  els.espnSnapshotResult.innerHTML = "";
+  latestEspnSnapshotPayload = null;
+  setEspnSnapshotStatus("");
 });
 els.draftKingsSnapshotParseButton.addEventListener("click", () => {
   parseDraftKingsSnapshot();
@@ -4960,6 +5599,7 @@ function setupSnapshotDropZone(selector, parserOrGetter) {
 
 setupSnapshotDropZone("#screenshotIntakePanel", selectedScreenshotParser);
 setupSnapshotDropZone(".statmuse-panel", "statmuse");
+setupSnapshotDropZone(".espn-panel", "espn");
 setupSnapshotDropZone(".draftkings-panel", "draftkings");
 
 let fileDragDepth = 0;
@@ -5017,7 +5657,9 @@ document.addEventListener("drop", async (event) => {
   await parseSnapshotImage(file, selectedScreenshotParser());
 });
 
+setupInstallableApp();
 initializeBankrollControls();
+restoreTicketDraft();
 renderOperatorBoards();
 renderDeferredPanelPlaceholders();
 
