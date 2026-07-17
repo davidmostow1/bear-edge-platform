@@ -6,12 +6,20 @@ const path = require("node:path");
 const { spawnSync } = require("node:child_process");
 
 const { evaluateLiveTicket } = require("../src/live/evaluate-live-ticket.js");
+const { parseArgs: parseEvaluateLiveArgs } = require("../src/cli/evaluate-live.js");
 const { LiveDataCache } = require("../src/live/cache.js");
 const { fetchJson } = require("../src/live/fixture-fetch.js");
+const { evaluateLiveLeg } = require("../src/live/estimate-prop.js");
 const { validateLiveTicket } = require("../src/validate-live-ticket.js");
 
+function freshMarketContext() {
+  return {
+    offeredLastUpdate: new Date().toISOString()
+  };
+}
+
 test("validateLiveTicket accepts a 2-leg alt-prop parlay", () => {
-  const ticket = validateLiveTicket({
+  const ticket = /** @type {any} */ (validateLiveTicket({
     kind: "parlay",
     selection: "2-leg alt parlay",
     bankroll: 1000,
@@ -36,11 +44,184 @@ test("validateLiveTicket accepts a 2-leg alt-prop parlay", () => {
         source: { playerId: 2, statKey: "points" }
       }
     ]
-  });
+  }));
 
   assert.equal(ticket.kind, "parlay");
   assert.equal(ticket.legs.length, 2);
   assert.equal(ticket.legs[0].modelProbabilityOverride, 0.58);
+  assert.equal(ticket.legs[0].calibrationStatus, "research_only");
+});
+
+test("validateLiveTicket preserves and validates parlay-level staking controls", () => {
+  const ticket = /** @type {any} */ (validateLiveTicket({
+    kind: "parlay",
+    bankroll: 1000,
+    minEvRoi: 0.02,
+    minKellyFraction: 0.01,
+    minStake: 2,
+    kellyMultiplier: 0.15,
+    maxStake: 25,
+    maxBankrollFraction: 0.01,
+    legs: [
+      {
+        id: "leg-a",
+        provider: "mlb",
+        marketType: "prop",
+        side: "over",
+        line: 0.5,
+        marketOdds: 120,
+        source: { playerId: 1, statGroup: "hitting", statKey: "runs" }
+      },
+      {
+        id: "leg-b",
+        provider: "nhl",
+        marketType: "prop",
+        side: "over",
+        line: 0.5,
+        marketOdds: 120,
+        source: { playerId: 2, statKey: "points" }
+      }
+    ]
+  }));
+
+  assert.equal(ticket.minEvRoi, 0.02);
+  assert.equal(ticket.minKellyFraction, 0.01);
+  assert.equal(ticket.minStake, 2);
+  assert.equal(ticket.kellyMultiplier, 0.15);
+  assert.equal(ticket.maxStake, 25);
+  assert.equal(ticket.maxBankrollFraction, 0.01);
+  assert.equal(ticket.livePolicy.minEvRoi, 0.02);
+  assert.equal(ticket.livePolicy.minKellyFraction, 0.01);
+  assert.equal(ticket.livePolicy.minStake, 2);
+  assert.equal(ticket.livePolicy.kellyMultiplier, 0.15);
+  assert.equal(ticket.livePolicy.maxStake, 25);
+  assert.equal(ticket.livePolicy.maxBankrollFraction, 0.01);
+});
+
+test("evaluateLiveTicket waits for an unvalidated probability override", async () => {
+  const ticket = validateLiveTicket({
+    kind: "single",
+    bankroll: 1000,
+    legs: [
+      {
+        id: "unvalidated-override",
+        provider: "mlb",
+        marketType: "prop",
+        side: "over",
+        line: 0.5,
+        marketOdds: 120,
+        modelProbabilityOverride: 0.7,
+        marketContext: freshMarketContext(),
+        source: { playerId: 1, statGroup: "hitting", statKey: "runs" }
+      }
+    ]
+  });
+
+  const result = await evaluateLiveTicket(ticket, { fetchJsonImpl: fetchJson });
+
+  assert.equal(result.verdict, "WAIT");
+  assert.ok(result.riskFlags.some((flag) => flag.code === "MODEL_CALIBRATION_REQUIRED"));
+});
+
+test("evaluateLiveLeg waits for a future statistics timestamp", () => {
+  const ticket = validateLiveTicket({
+    kind: "single",
+    bankroll: 1000,
+    legs: [
+      {
+        id: "future-source",
+        provider: "mlb",
+        marketType: "prop",
+        side: "over",
+        line: 0.5,
+        marketOdds: 120,
+        calibrationStatus: "validated",
+        modelProbabilityOverride: 0.7,
+        marketContext: freshMarketContext(),
+        source: { playerId: 1, statGroup: "hitting", statKey: "runs" }
+      }
+    ]
+  });
+  const snapshot = {
+    fetchedAt: new Date(Date.now() + 60_000).toISOString(),
+    season: { perGame: 1 },
+    recent: { perGame: 1 },
+    liveGame: null
+  };
+
+  const result = evaluateLiveLeg(ticket.legs[0], snapshot, {
+    bankroll: ticket.bankroll,
+    livePolicy: ticket.livePolicy
+  });
+
+  assert.equal(result.verdict, "WAIT");
+  assert.ok(result.riskFlags.some((flag) => flag.code === "FUTURE_SOURCE_TIMESTAMP"));
+});
+
+test("validateLiveTicket rejects unsafe policy overrides and invalid leg counts", () => {
+  assert.throws(
+    () => validateLiveTicket({
+      kind: "parlay",
+      bankroll: 1000,
+      livePolicy: {
+        maxParlayLegs: 4,
+        allowCorrelatedLegs: "yes"
+      },
+      legs: [
+        {
+          id: "leg-a",
+          provider: "mlb",
+          marketType: "prop",
+          side: "over",
+          line: 0.5,
+          marketOdds: 120,
+          source: { playerId: 1, statGroup: "hitting", statKey: "runs" }
+        },
+        {
+          id: "leg-b",
+          provider: "nhl",
+          marketType: "prop",
+          side: "over",
+          line: 0.5,
+          marketOdds: 120,
+          source: { playerId: 2, statKey: "points" }
+        }
+      ]
+    }),
+    (error) => {
+      const issues = /** @type {any} */ (error).issues;
+      return issues.some((issue) => issue.path === "livePolicy.maxParlayLegs") &&
+        issues.some((issue) => issue.path === "livePolicy.allowCorrelatedLegs");
+    }
+  );
+
+  assert.throws(
+    () => validateLiveTicket({
+      kind: "single",
+      bankroll: 1000,
+      legs: [
+        {
+          id: "leg-a",
+          provider: "mlb",
+          marketType: "prop",
+          side: "over",
+          line: 0.5,
+          marketOdds: 120,
+          source: { playerId: 1, statGroup: "hitting", statKey: "runs" }
+        },
+        {
+          id: "leg-b",
+          provider: "nhl",
+          marketType: "prop",
+          side: "over",
+          line: 0.5,
+          marketOdds: 120,
+          source: { playerId: 2, statKey: "points" }
+        }
+      ]
+    }),
+    (error) => /** @type {any} */ (error).issues.some((issue) => issue.message.includes("exactly one leg"))
+  );
 });
 
 test("evaluateLiveTicket prices a cross-sport live parlay from official-source snapshots", async () => {
@@ -57,6 +238,9 @@ test("evaluateLiveTicket prices a cross-sport live parlay from official-source s
         side: "over",
         line: 1.5,
         marketOdds: 120,
+        modelProbabilityOverride: 0.7,
+        calibrationStatus: "validated",
+        marketContext: freshMarketContext(),
         source: { playerId: 1, statGroup: "hitting", statKey: "totalBases", recentLimit: 10 }
       },
       {
@@ -67,6 +251,9 @@ test("evaluateLiveTicket prices a cross-sport live parlay from official-source s
         side: "over",
         line: 1.5,
         marketOdds: 125,
+        modelProbabilityOverride: 0.7,
+        calibrationStatus: "validated",
+        marketContext: freshMarketContext(),
         source: { playerId: 2, statKey: "points", recentLimit: 5 }
       }
     ]
@@ -99,6 +286,9 @@ test("evaluateLiveTicket carries contextual leg risk flags into parlay output", 
         side: "over",
         line: 1.5,
         marketOdds: 120,
+        modelProbabilityOverride: 0.7,
+        calibrationStatus: "validated",
+        marketContext: freshMarketContext(),
         riskFlags: [
           {
             code: "LINEUP_NOT_CONFIRMED",
@@ -116,6 +306,9 @@ test("evaluateLiveTicket carries contextual leg risk flags into parlay output", 
         side: "over",
         line: 1.5,
         marketOdds: 125,
+        modelProbabilityOverride: 0.7,
+        calibrationStatus: "validated",
+        marketContext: freshMarketContext(),
         source: { playerId: 2, statKey: "points", recentLimit: 5 }
       }
     ]
@@ -127,7 +320,7 @@ test("evaluateLiveTicket carries contextual leg risk flags into parlay output", 
   const parlayResult = /** @type {any} */ (result);
 
   assert.equal(parlayResult.kind, "parlay");
-  assert.equal(parlayResult.verdict, "BET");
+  assert.equal(parlayResult.verdict, "WAIT");
   assert.ok(parlayResult.legs[0].riskFlags.some((flag) => flag.code === "LINEUP_NOT_CONFIRMED"));
   assert.ok(parlayResult.riskFlags.some((flag) => flag.code === "LEG_LINEUP_NOT_CONFIRMED"));
 });
@@ -146,6 +339,7 @@ test("evaluateLiveTicket uses official current-game MLB stats when gamePk is sup
         side: "over",
         line: 1.5,
         marketOdds: -110,
+        marketContext: freshMarketContext(),
         source: {
           playerId: 1,
           statGroup: "hitting",
@@ -162,13 +356,87 @@ test("evaluateLiveTicket uses official current-game MLB stats when gamePk is sup
   });
 
   assert.equal(result.kind, "single");
-  assert.equal(result.verdict, "BET");
+  assert.equal(result.verdict, "PASS");
   const singleResult = /** @type {any} */ (result);
   assert.equal(singleResult.derived.currentGameValue, 2);
   assert.equal(singleResult.derived.liveDeterministicOutcome, true);
   assert.equal(singleResult.derived.adjustedProbability, 1);
   assert.equal(result.researchPacket.sources[0].gamePk, 1);
   assert.equal(result.researchPacket.sources[0].currentGameValue, 2);
+});
+
+test("resolved live outcome cannot be bypassed by a validated probability override", () => {
+  const ticket = validateLiveTicket({
+    kind: "single",
+    selection: "Resolved override guard",
+    bankroll: 1000,
+    legs: [
+      {
+        id: "resolved-override",
+        provider: "mlb",
+        marketType: "prop",
+        side: "over",
+        line: 1.5,
+        marketOdds: 120,
+        modelProbabilityOverride: 0.7,
+        calibrationStatus: "validated",
+        marketContext: freshMarketContext(),
+        source: { playerId: 1, statGroup: "hitting", statKey: "totalBases" }
+      }
+    ]
+  });
+  const snapshot = {
+    fetchedAt: new Date().toISOString(),
+    season: { perGame: 1 },
+    recent: { perGame: 1 },
+    liveGame: {
+      status: "in_progress",
+      currentValue: 2,
+      remainingOpportunityFactor: 1
+    }
+  };
+
+  const result = evaluateLiveLeg(ticket.legs[0], snapshot, {
+    bankroll: ticket.bankroll,
+    livePolicy: ticket.livePolicy
+  });
+
+  assert.equal(result.verdict, "PASS");
+  assert.equal(result.derived.liveDeterministicOutcome, true);
+  assert.ok(result.riskFlags.some((flag) => flag.code === "MARKET_OUTCOME_RESOLVED"));
+});
+
+test("evaluateLiveTicket waits on stale injury or lineup evidence", async () => {
+  const ticket = validateLiveTicket({
+    kind: "single",
+    bankroll: 1000,
+    legs: [
+      {
+        id: "stale-injury-leg",
+        provider: "mlb",
+        marketType: "prop",
+        side: "over",
+        line: 0.5,
+        marketOdds: 120,
+        modelProbabilityOverride: 0.7,
+        calibrationStatus: "validated",
+        marketContext: freshMarketContext(),
+        riskFlags: [
+          {
+            code: "STALE_INJURY",
+            severity: "medium",
+            message: "Injury report is older than the allowed window."
+          }
+        ],
+        source: { playerId: 1, statGroup: "hitting", statKey: "runs" }
+      }
+    ]
+  });
+
+  const result = await evaluateLiveTicket(ticket, { fetchJsonImpl: fetchJson });
+
+  assert.equal(result.verdict, "WAIT");
+  assert.ok(result.reasons.some((reason) => reason.includes("manual confirmation")));
 });
 
 test("evaluateLiveTicket rejects correlated parlays by default", async () => {
@@ -208,6 +476,167 @@ test("evaluateLiveTicket rejects correlated parlays by default", async () => {
   assert.ok(result.riskFlags.some((flag) => flag.code === "CORRELATION_RISK"));
 });
 
+test("live ticket derives correlation risk from shared source event IDs", async () => {
+  const ticket = validateLiveTicket({
+    kind: "parlay",
+    selection: "Implicit same-game correlation",
+    bankroll: 1000,
+    legs: [
+      {
+        id: "implicit-a",
+        provider: "mlb",
+        marketType: "prop",
+        side: "over",
+        line: 0.5,
+        marketOdds: -105,
+        source: { playerId: 1, gameId: 123, statGroup: "hitting", statKey: "runs" }
+      },
+      {
+        id: "implicit-b",
+        provider: "mlb",
+        marketType: "alt-prop",
+        side: "over",
+        line: 1.5,
+        marketOdds: 120,
+        source: { playerId: 2, gameId: 123, statGroup: "hitting", statKey: "totalBases" }
+      }
+    ]
+  });
+
+  const result = await evaluateLiveTicket(ticket, { fetchJsonImpl: fetchJson });
+
+  assert.equal(ticket.legs[0].correlationKey, "mlb:event:123");
+  assert.equal(result.verdict, "PASS");
+  assert.ok(result.riskFlags.some((flag) => flag.code === "CORRELATION_RISK"));
+});
+
+test("parlay correlation penalties cannot inflate combined probability", async () => {
+  const ticket = validateLiveTicket({
+    kind: "parlay",
+    selection: "Bounded correlation penalty",
+    bankroll: 1000,
+    livePolicy: { correlationPenalty: 0.75 },
+    legs: [
+      {
+        id: "bounded-a",
+        provider: "mlb",
+        marketType: "prop",
+        side: "over",
+        line: 0.5,
+        marketOdds: -105,
+        correlationKey: "same-game",
+        source: { playerId: 1, statGroup: "hitting", statKey: "runs" }
+      },
+      {
+        id: "bounded-b",
+        provider: "mlb",
+        marketType: "alt-prop",
+        side: "over",
+        line: 1.5,
+        marketOdds: 120,
+        correlationKey: "same-game",
+        source: { playerId: 1, statGroup: "hitting", statKey: "totalBases" }
+      }
+    ]
+  });
+
+  const result = /** @type {any} */ (await evaluateLiveTicket(ticket, { fetchJsonImpl: fetchJson }));
+
+  assert.ok(result.combined.probability >= 0);
+  assert.ok(result.combined.probability <= 1);
+  assert.equal(result.combined.correlationPenaltyFactor, 0.75);
+});
+
+test("explicit correlated-leg allowance still applies a penalty and records the override", async () => {
+  const ticket = validateLiveTicket({
+    kind: "parlay",
+    bankroll: 1000,
+    livePolicy: { allowCorrelatedLegs: true, correlationPenalty: 0.8 },
+    legs: [
+      {
+        id: "correlated-a",
+        provider: "mlb",
+        marketType: "prop",
+        side: "over",
+        line: 0.5,
+        marketOdds: 120,
+        modelProbabilityOverride: 0.7,
+        calibrationStatus: "validated",
+        marketContext: freshMarketContext(),
+        correlationKey: "same-game",
+        source: { playerId: 1, statGroup: "hitting", statKey: "runs" }
+      },
+      {
+        id: "correlated-b",
+        provider: "mlb",
+        marketType: "alt-prop",
+        side: "over",
+        line: 1.5,
+        marketOdds: 120,
+        modelProbabilityOverride: 0.7,
+        calibrationStatus: "validated",
+        marketContext: freshMarketContext(),
+        correlationKey: "same-game",
+        source: { playerId: 2, statGroup: "hitting", statKey: "totalBases" }
+      }
+    ]
+  });
+
+  const result = /** @type {any} */ (await evaluateLiveTicket(ticket, { fetchJsonImpl: fetchJson }));
+
+  assert.equal(result.combined.correlationPenaltyFactor, 0.8);
+  assert.ok(result.riskFlags.some((flag) => flag.code === "CORRELATION_OVERRIDE"));
+});
+
+test("evaluateLiveTicket waits on missing market timestamps", async () => {
+  const ticket = validateLiveTicket({
+    kind: "single",
+    bankroll: 1000,
+    legs: [
+      {
+        id: "missing-market-timestamp",
+        provider: "mlb",
+        marketType: "prop",
+        side: "over",
+        line: 0.5,
+        marketOdds: 120,
+        modelProbabilityOverride: 0.7,
+        calibrationStatus: "validated",
+        source: { playerId: 1, statGroup: "hitting", statKey: "runs" }
+      }
+    ]
+  });
+
+  const result = await evaluateLiveTicket(ticket, { fetchJsonImpl: fetchJson });
+
+  assert.equal(result.verdict, "WAIT");
+  assert.ok(result.riskFlags.some((flag) => flag.code === "MISSING_MARKET_TIMESTAMP"));
+});
+
+test("evaluateLiveTicket waits instead of betting an uncalibrated Poisson baseline", async () => {
+  const ticket = validateLiveTicket({
+    kind: "single",
+    bankroll: 1000,
+    legs: [
+      {
+        id: "uncalibrated-baseline",
+        provider: "mlb",
+        marketType: "prop",
+        side: "over",
+        line: 0.5,
+        marketOdds: 120,
+        marketContext: freshMarketContext(),
+        source: { playerId: 1, statGroup: "hitting", statKey: "runs" }
+      }
+    ]
+  });
+
+  const result = await evaluateLiveTicket(ticket, { fetchJsonImpl: fetchJson });
+
+  assert.equal(result.verdict, "WAIT");
+  assert.ok(result.riskFlags.some((flag) => flag.code === "MODEL_CALIBRATION_REQUIRED"));
+});
+
 test("evaluateLiveTicket uses multi-book market intelligence for consensus shrinkage", async () => {
   const ticket = validateLiveTicket({
     kind: "single",
@@ -224,6 +653,7 @@ test("evaluateLiveTicket uses multi-book market intelligence for consensus shrin
         marketOdds: 120,
         oppositeOdds: -140,
         modelProbabilityOverride: 0.68,
+        calibrationStatus: "validated",
         marketContext: {
           offeredLastUpdate: new Date().toISOString(),
           consensus: [
@@ -277,6 +707,7 @@ test("evaluateLiveTicket waits when the offered sportsbook price is stale", asyn
         marketOdds: 120,
         oppositeOdds: -135,
         modelProbabilityOverride: 0.68,
+        calibrationStatus: "validated",
         marketContext: {
           offeredLastUpdate: "2026-01-01T00:00:00.000Z"
         },
@@ -310,6 +741,7 @@ test("evaluateLiveTicket applies longshot tax when no sharp confirmation exists"
         marketOdds: 500,
         oppositeOdds: -700,
         modelProbabilityOverride: 0.26,
+        calibrationStatus: "validated",
         source: { playerId: 1, statGroup: "hitting", statKey: "hits" }
       }
     ]
@@ -341,10 +773,12 @@ test("evaluateLiveTicket waits when books disagree too much on the fair probabil
         marketOdds: 120,
         oppositeOdds: -140,
         modelProbabilityOverride: 0.68,
+        calibrationStatus: "validated",
         marketContext: {
+          offeredLastUpdate: new Date().toISOString(),
           consensus: [
-            { bookmaker: "book-a", marketOdds: -160, oppositeOdds: 140 },
-            { bookmaker: "book-b", marketOdds: 180, oppositeOdds: -220 }
+            { bookmaker: "book-a", marketOdds: -160, oppositeOdds: 140, lastUpdate: new Date().toISOString() },
+            { bookmaker: "book-b", marketOdds: 180, oppositeOdds: -220, lastUpdate: new Date().toISOString() }
           ]
         },
         source: { playerId: 1, statGroup: "hitting", statKey: "runs" }
@@ -400,14 +834,22 @@ test("LiveDataCache reuses a provider response within the refresh window", async
   assert.equal(secondResult.researchPacket.sources[0].cache.hit, true);
 });
 
-test("live CLI can evaluate a ticket from stdin without logging", () => {
+test("live CLI evaluates stdin and persists an authoritative record", () => {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "bear-edge-live-cli-"));
+  const logPath = path.join(tempDir, "decision_log.jsonl");
   const env = {
     ...process.env,
     BEAR_EDGE_TEST_MODE: "1"
   };
   const command = spawnSync(
     process.execPath,
-    [path.resolve(__dirname, "../src/cli/evaluate-live.js"), "--stdin", "--no-log", "--compact"],
+    [
+      path.resolve(__dirname, "../src/cli/evaluate-live.js"),
+      "--stdin",
+      "--log-path",
+      logPath,
+      "--compact"
+    ],
     {
       cwd: path.resolve(__dirname, ".."),
       encoding: "utf8",
@@ -442,8 +884,21 @@ test("live CLI can evaluate a ticket from stdin without logging", () => {
 
   assert.equal(command.status, 0, command.stderr);
   const output = JSON.parse(command.stdout);
+  const persisted = JSON.parse(fs.readFileSync(logPath, "utf8").trim());
+
   assert.equal(output.kind, "parlay");
-  assert.equal(output.logPath, null);
+  assert.equal(output.logPath, logPath);
+  assert.match(output.recordId, /^eval_/);
+  assert.match(output.contentDigest, /^[a-f0-9]{64}$/);
+  assert.equal(persisted.schemaVersion, "2.0.0");
+  assert.equal(persisted.id, output.recordId);
+});
+
+test("live CLI rejects the removed --no-log option", () => {
+  assert.throws(
+    () => parseEvaluateLiveArgs(["ticket.json", "--no-log"]),
+    /Unexpected argument: --no-log/
+  );
 });
 
 test("watch CLI can run a single evaluation iteration", () => {

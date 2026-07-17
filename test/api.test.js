@@ -43,6 +43,7 @@ test("HTTP API exposes schemas", async () => {
     const payload = await response.json();
 
     assert.equal(response.status, 200);
+    assert.equal(payload.auditRecord.title, "Bear Edge Authoritative Audit Record");
     assert.equal(payload.liveTicket.type, "object");
     assert.equal(payload.researchPacket.type, "object");
   });
@@ -87,6 +88,83 @@ test("HTTP API parses DK Predictions visible board snapshots", async () => {
   });
 });
 
+test("HTTP API parses DK Predictions raw OCR prop snapshots", async () => {
+  const text = `
+Michael Wacha Total Strikeouts
+Kansas City Royals @ New York Mets
+Over 4.5
+Over 5.5
+Over 3.5
+Sean Manaea Total Strikeouts
+Kansas City Royals @ New York Mets
+Over 4.5
+Over 5.5
+Over 3.5
+$114.45 +
+Starts in: 03:11:03
+Today 1:10 PM
+Strikeouts
+Yes
+-133
+Yes
++156
+Yes
+-317
+No
++113
+No
+-300
+No
++186
+More >
+Yes
+-150
+Yes
++133
+Yes
+-376
+No
++138
+No
+-186
+No
++212
+More >
+`;
+
+  await withServer(async (baseUrl) => {
+    const response = await fetch(`${baseUrl}/api/dk-predictions-board-snapshot`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json"
+      },
+      body: JSON.stringify({
+        text,
+        capturedAt: "2026-07-09T13:58:57.000Z",
+        sourceFile: "kc-mets-strikeouts.png"
+      })
+    });
+    const payload = await response.json();
+
+    assert.equal(response.status, 200);
+    assert.equal(payload.summary.events, 1);
+    assert.equal(payload.summary.playerPropMarkets, 6);
+    assert.equal(payload.summary.strikeoutMarkets, 6);
+    assert.equal(payload.summary.totalBasesMarkets, 0);
+    assert.equal(payload.bankroll, 114.45);
+
+    const wacha = payload.markets.find((market) => market.team_or_player === "Michael Wacha" && market.line === 4.5);
+    const manaea = payload.markets.find((market) => market.team_or_player === "Sean Manaea" && market.line === 5.5);
+
+    assert.equal(wacha.market_type, "MLB_pitcher_strikeouts");
+    assert.equal(wacha.market_name, "over 4.5 strikeouts");
+    assert.equal(wacha.odds, -133);
+    assert.equal(wacha.opposite_odds, 113);
+    assert.equal(manaea.odds, 133);
+    assert.equal(manaea.opposite_odds, -186);
+  });
+});
+
 test("HTTP API simulates a verified betting card", async () => {
   await withServer(async (baseUrl) => {
     const response = await fetch(`${baseUrl}/api/simulate-card`, {
@@ -128,7 +206,7 @@ test("HTTP API reports live data health with provider freshness", async () => {
       const payload = await response.json();
 
       assert.equal(response.status, 200);
-      assert.ok(["live", "live-with-warnings", "stale", "blocked"].includes(payload.status));
+      assert.ok(["live", "live-with-warnings", "stale", "clock-error", "blocked"].includes(payload.status));
       assert.equal(payload.heartbeatMs, 60000);
       assert.equal(typeof payload.requirements.officialScoreboards, "boolean");
       assert.ok(payload.providers.some((provider) => provider.provider === "ESPN"));
@@ -146,6 +224,9 @@ test("HTTP API serves the local dashboard", async () => {
   await withServer(async (baseUrl) => {
     const dashboardResponse = await fetch(`${baseUrl}/dashboard`);
     const jsResponse = await fetch(`${baseUrl}/dashboard/app.js`);
+    const manifestResponse = await fetch(`${baseUrl}/dashboard/manifest.json`);
+    const serviceWorkerResponse = await fetch(`${baseUrl}/dashboard/sw.js`);
+    const iconResponse = await fetch(`${baseUrl}/dashboard/icon.svg`);
 
     assert.equal(dashboardResponse.status, 200);
     const dashboardHtml = await dashboardResponse.text();
@@ -161,6 +242,7 @@ test("HTTP API serves the local dashboard", async () => {
     assert.match(dashboardHtml, /globalDropOverlay/);
     assert.match(dashboardHtml, /screenshotImageInput/);
     assert.match(dashboardHtml, /screenshotParserSelect/);
+    assert.match(dashboardHtml, /dk-predictions/);
     assert.match(dashboardHtml, /worldcup-goalscorer/);
     assert.match(dashboardHtml, /screenshotDropZone/);
     assert.match(dashboardHtml, /Auto Update/);
@@ -175,6 +257,7 @@ test("HTTP API serves the local dashboard", async () => {
     assert.match(dashboardHtml, /oddsApiKeyInput/);
     assert.match(dashboardHtml, /Online Opportunities/);
     assert.match(dashboardHtml, /StatMuse Snapshot Intake/);
+    assert.match(dashboardHtml, /ESPN Snapshot Intake/);
     assert.match(dashboardHtml, /DraftKings Board Intake/);
     assert.match(dashboardHtml, /Recording Prop Comparison/);
     assert.match(dashboardHtml, /Provider Setup Checklist/);
@@ -187,11 +270,16 @@ test("HTTP API serves the local dashboard", async () => {
     assert.match(dashboardHtml, /Auto 2-Leg/);
     assert.match(dashboardHtml, /Auto 3-Leg/);
     assert.match(dashboardHtml, /statMuseImageInput/);
+    assert.match(dashboardHtml, /statMuseSourceUrlInput/);
+    assert.match(dashboardHtml, /espnImageInput/);
+    assert.match(dashboardHtml, /espnSourceUrlInput/);
     assert.match(dashboardHtml, /draftKingsImageInput/);
     assert.match(dashboardHtml, /recordingComparisonCsvInput/);
     assert.match(dashboardHtml, /recordingComparisonBoardInput/);
     assert.match(dashboardHtml, /onlineOpportunitiesRefreshButton/);
     assert.match(dashboardHtml, /Upload Screenshot/);
+    assert.match(dashboardHtml, /manifest.json/);
+    assert.match(dashboardHtml, /installAppButton/);
     assert.equal(jsResponse.status, 200);
     const dashboardScript = await jsResponse.text();
 
@@ -215,6 +303,10 @@ test("HTTP API serves the local dashboard", async () => {
     assert.match(dashboardScript, /\/api\/release-readiness/);
     assert.match(dashboardScript, /release-lane/);
     assert.match(dashboardScript, /release-evidence/);
+    assert.match(dashboardScript, /freshPricedCandidates/);
+    assert.match(dashboardScript, /bookmakerMatches/);
+    assert.match(dashboardScript, /oldestPriceAgeMinutes/);
+    assert.match(dashboardScript, /Odds Evidence/);
     assert.match(dashboardScript, /Evidence Gates/);
     assert.match(dashboardScript, /Next Actions/);
     assert.match(dashboardScript, /loadOddsKeyStatus/);
@@ -232,6 +324,10 @@ test("HTTP API serves the local dashboard", async () => {
     assert.match(dashboardScript, /runAutoUpdateNow/);
     assert.match(dashboardScript, /loadSourceStatus/);
     assert.match(dashboardScript, /parseStatMuseSnapshot/);
+    assert.match(dashboardScript, /renderStatMuseGamePage/);
+    assert.match(dashboardScript, /\/api\/snapshot-confirmation/);
+    assert.match(dashboardScript, /data-espn-confirm/);
+    assert.match(dashboardScript, /Mark Manually Confirmed/);
     assert.match(dashboardScript, /parseDraftKingsSnapshot/);
     assert.match(dashboardScript, /runRecordingComparison/);
     assert.match(dashboardScript, /renderRecordingComparison/);
@@ -239,6 +335,7 @@ test("HTTP API serves the local dashboard", async () => {
     assert.match(dashboardScript, /\/api\/online-opportunities/);
     assert.match(dashboardScript, /parseSnapshotImage/);
     assert.match(dashboardScript, /renderScreenshotIntakeResult/);
+    assert.match(dashboardScript, /DK Predictions/);
     assert.match(dashboardScript, /selectedScreenshotParser/);
     assert.match(dashboardScript, /\/api\/ocr-snapshot/);
     assert.match(dashboardScript, /importCandidateOddsText/);
@@ -276,6 +373,8 @@ test("HTTP API serves the local dashboard", async () => {
     assert.match(dashboardScript, /loadInitialDashboardPanels/);
     assert.match(dashboardScript, /loadDeferredDashboardPanels/);
     assert.match(dashboardScript, /deferDashboardWork/);
+    assert.match(dashboardScript, /serviceWorker.register/);
+    assert.match(dashboardScript, /bearEdge.ticketDraft/);
     const startupIndex = dashboardScript.lastIndexOf("loadHealth()\n  .then");
     assert.notEqual(startupIndex, -1);
     const startupBlock = dashboardScript.slice(startupIndex);
@@ -283,6 +382,15 @@ test("HTTP API serves the local dashboard", async () => {
     assert.match(startupBlock, /deferDashboardWork\(\(\) => loadDeferredDashboardPanels\(\)\)/);
     assert.doesNotMatch(startupBlock, /loadBestTargets\("today"\)/);
     assert.doesNotMatch(startupBlock, /loadCandidates\("today"\)/);
+    assert.equal(manifestResponse.status, 200);
+    assert.equal(manifestResponse.headers.get("content-type"), "application/manifest+json; charset=utf-8");
+    const manifest = await manifestResponse.json();
+    assert.equal(manifest.display, "standalone");
+    assert.equal(manifest.start_url, "/dashboard");
+    assert.equal(serviceWorkerResponse.status, 200);
+    assert.match(await serviceWorkerResponse.text(), /Never cache API responses/);
+    assert.equal(iconResponse.status, 200);
+    assert.match(await iconResponse.text(), /Bear Edge/);
   });
 });
 
@@ -437,6 +545,54 @@ test("HTTP API exposes release readiness checks", async () => {
     assert.deepEqual(payload.trackedFiles.blockedMatches, []);
     assert.equal(JSON.stringify(payload).includes(process.env.THE_ODDS_API_KEY ?? "unlikely-secret-marker"), false);
   });
+});
+
+test("release readiness warns when a configured odds key fails live pricing", async () => {
+  const previousOddsApiKey = process.env.THE_ODDS_API_KEY;
+
+  process.env.THE_ODDS_API_KEY = "test-odds-key";
+
+  try {
+    await withServer(
+      async (baseUrl) => {
+        const response = await fetch(`${baseUrl}/api/release-readiness`);
+        const payload = await response.json();
+        const dataEdge = payload.lanes.find((entry) => entry.id === "data-edge");
+
+        assert.equal(response.status, 200);
+        assert.equal(payload.dataEdge.odds.status, "provider_error");
+        assert.equal(payload.dataEdge.bestTargets.status, "odds_error");
+        assert.equal(payload.dataEdge.betCallPermission, "PRICE_CHECK_ONLY");
+        assert.equal(dataEdge.status, "needs-work");
+        assert.ok(payload.checks.some((entry) =>
+          entry.area === "providers" &&
+          entry.status === "warn" &&
+          entry.message === "Verified odds provider live pricing is failing"
+        ));
+        assert.ok(payload.nextActions.some((entry) =>
+          entry.area === "providers" &&
+          entry.action.includes("Fix or replace the verified odds API key")
+        ));
+        assert.equal(JSON.stringify(payload).includes("test-odds-key"), false);
+      },
+      {
+        fetchJsonImpl: async (url) => {
+          if (String(url).includes("api.the-odds-api.com/v4/sports/baseball_mlb/odds")) {
+            throw new Error("Failed to fetch apiKey=test-odds-key: 401 Unauthorized");
+          }
+
+          return fetchJson(url);
+        },
+        fetchTextImpl: fetchText
+      }
+    );
+  } finally {
+    if (previousOddsApiKey === undefined) {
+      delete process.env.THE_ODDS_API_KEY;
+    } else {
+      process.env.THE_ODDS_API_KEY = previousOddsApiKey;
+    }
+  }
 });
 
 test("HTTP API exposes auto-update status and manual run", async () => {
@@ -776,6 +932,40 @@ test("HTTP API ranks best MLB targets as price checks without an odds key", asyn
   }
 });
 
+test("HTTP API exposes explicit odds evidence and price-check permission", async () => {
+  const previousOddsApiKey = process.env.THE_ODDS_API_KEY;
+  const previousAltOddsApiKey = process.env.ODDS_API_KEY;
+
+  delete process.env.THE_ODDS_API_KEY;
+  delete process.env.ODDS_API_KEY;
+
+  try {
+    await withServer(async (baseUrl) => {
+      const response = await fetch(`${baseUrl}/api/data-edge-audit?date=2026-06-17&days=1`);
+      const payload = await response.json();
+
+      assert.equal(response.status, 200);
+      assert.equal(payload.betCallPermission, "PRICE_CHECK_ONLY");
+      assert.equal(payload.odds.evidence.status, "blocked");
+      assert.equal(payload.odds.evidence.permission, "PRICE_CHECK_ONLY");
+      assert.ok(payload.odds.evidence.reasonCodes.includes("ODDS_PROVIDER_UNVERIFIED"));
+      assert.equal(payload.odds.evidence.freshPricedCandidates, 0);
+    });
+  } finally {
+    if (previousOddsApiKey === undefined) {
+      delete process.env.THE_ODDS_API_KEY;
+    } else {
+      process.env.THE_ODDS_API_KEY = previousOddsApiKey;
+    }
+
+    if (previousAltOddsApiKey === undefined) {
+      delete process.env.ODDS_API_KEY;
+    } else {
+      process.env.ODDS_API_KEY = previousAltOddsApiKey;
+    }
+  }
+});
+
 test("HTTP API prices and evaluates best MLB targets with a configured odds key", async () => {
   const previousOddsApiKey = process.env.THE_ODDS_API_KEY;
 
@@ -796,7 +986,8 @@ test("HTTP API prices and evaluates best MLB targets with a configured odds key"
       assert.equal(payload.best[0].status, "priced");
       assert.equal(payload.best[0].odds.bookmaker.key, "draftkings");
       assert.ok(payload.best[0].odds.marketContext.consensus.length >= 2);
-      assert.equal(payload.best[0].evaluation.marketIntelligence.consensus.bookCount >= 2, true);
+      assert.equal(payload.best[0].evaluation.marketIntelligence.consensus.bookCount, 0);
+      assert.ok(payload.best[0].evaluation.riskFlags.some((flag) => flag.code === "STALE_MARKET_PRICE"));
       assert.equal(typeof payload.best[0].odds.marketOdds, "number");
       assert.equal(payload.best[0].odds.match.confidence, 1);
       assert.equal(payload.best[0].ticketDraft.legs[0].marketOdds, payload.best[0].odds.marketOdds);
@@ -996,6 +1187,157 @@ Get the latest news and updates from StatMuse
   });
 });
 
+test("HTTP API parses ESPN odds-page snapshots and keeps them unverified", async () => {
+  await withServer(async (baseUrl) => {
+    const text = [
+      "New York Mets @ Philadelphia Phillies",
+      "New York Mets",
+      "40-57",
+      "Philadelphia Phillies",
+      "54-43",
+      "7:00 PM",
+      "Game Odds",
+      "NYM",
+      "\x2b112",
+      "o9.5 -111",
+      "\x2b1.5 -181",
+      "PHI",
+      "-147",
+      "u9.5 -109",
+      "-1.5 +149",
+      "Matchup Predictor",
+      "51.5",
+      "%",
+      "48.5",
+      "%",
+      "Hitting Props",
+      "Bo Bichette",
+      "NYM SS",
+      "o1.5",
+      "\x2b193",
+      "u1.5",
+      "-262",
+      "Injury Report",
+      "New York Mets",
+      "Bo Bichette",
+      "SS",
+      "Day-To-Day"
+    ].join("\n");
+    const response = await fetch(`${baseUrl}/api/espn-snapshot`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json"
+      },
+      body: JSON.stringify({
+        sourceUrl: "https://www.espn.com/mlb/odds/_/gameId/401816143",
+        capturedAt: "2026-07-16T16:10:00.000Z",
+        text
+      })
+    });
+    const payload = await response.json();
+
+    assert.equal(response.status, 200);
+    assert.equal(payload.provider, "ESPN");
+    assert.equal(payload.event.eventId, "401816143");
+    assert.equal(payload.summary.moneylineMarkets, 2);
+    assert.equal(payload.summary.totalMarkets, 2);
+    assert.equal(payload.summary.runLineMarkets, 2);
+    assert.equal(payload.summary.propMarkets, 1);
+    assert.equal(payload.summary.injuryRecords, 1);
+    assert.equal(payload.event.odds.moneyline[0].verified, false);
+    assert.ok(payload.warnings.some((warning) => warning.includes("browser-visible ESPN")));
+  });
+});
+
+test("HTTP API records manual ESPN snapshot confirmation separately from provider verification", async () => {
+  await withServer(async (baseUrl) => {
+    const response = await fetch(`${baseUrl}/api/snapshot-confirmation`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json"
+      },
+      body: JSON.stringify({
+        snapshot: {
+          sourceUrl: "https://www.espn.com/mlb/odds/_/gameId/401816143",
+          capturedAt: "2026-07-16T16:10:00.000Z",
+          event: { eventId: "401816143" }
+        },
+        checks: {
+          event: true,
+          odds: true,
+          roster: true
+        },
+        confirmedAt: "2026-07-16T16:15:00.000Z"
+      })
+    });
+    const payload = await response.json();
+
+    assert.equal(response.status, 200);
+    assert.equal(payload.status, "manually_confirmed");
+    assert.equal(payload.confirmationType, "manual_visual_review");
+    assert.equal(payload.eventId, "401816143");
+    assert.equal(payload.verifiedOdds, false);
+    assert.equal(payload.verifiedInjuries, false);
+    assert.equal(payload.verifiedProbabilities, false);
+  });
+});
+
+test("HTTP API OCR endpoint dispatches ESPN screenshots to the ESPN parser", async () => {
+  const ocrText = [
+    "New York Mets @ Philadelphia Phillies",
+    "New York Mets",
+    "40-57",
+    "Philadelphia Phillies",
+    "54-43",
+    "Game Odds",
+    "NYM",
+    "\x2b112",
+    "o9.5 -111",
+    "\x2b1.5 -181",
+    "PHI",
+    "-147",
+    "u9.5 -109",
+    "-1.5 +149"
+  ].join("\n");
+
+  await withServer(
+    async (baseUrl) => {
+      const response = await fetch(`${baseUrl}/api/ocr-snapshot`, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json"
+        },
+        body: JSON.stringify({
+          parser: "espn",
+          imageBase64: "data:image/png;base64,ZmFrZS1pbWFnZQ==",
+          mimeType: "image/png",
+          fileName: "espn-mets-phillies.png",
+          sourceUrl: "https://www.espn.com/mlb/odds/_/gameId/401816143"
+        })
+      });
+      const payload = await response.json();
+
+      assert.equal(response.status, 200);
+      assert.equal(payload.inputType, "image");
+      assert.equal(payload.parser, "espn");
+      assert.equal(payload.ocr.engine, "fake_ocr");
+      assert.equal(payload.event.odds.moneyline.length, 2);
+      assert.ok(payload.warnings.some((warning) => warning.includes("Parsed from OCR text")));
+    },
+    {
+      recognizeTextFromImageImpl: async () => ({
+        engine: "fake_ocr",
+        fileName: "espn-mets-phillies.png",
+        mimeType: "image/png",
+        bytes: 10,
+        text: ocrText,
+        lines: ocrText.split(/\r?\n/),
+        warnings: []
+      })
+    }
+  );
+});
+
 test("HTTP API parses visible DraftKings game-line snapshots with explicit sides", async () => {
   await withServer(async (baseUrl) => {
     const text = `
@@ -1185,6 +1527,73 @@ More Bets
   );
 });
 
+test("HTTP API OCR endpoint extracts DK Predictions prop screenshots", async () => {
+  const ocrText = `
+Jac Caglianone Total Bases
+Kansas City Royals @ New York Mets
+Over 1.5
+Over 2.5
+Over 3.5
+$114.45 +
+Today 1:10 PM
+Total Bases
+Yes
++122
+Yes
++194
+Yes
++212
+No
+-194
+No
+No
+More >
+`;
+
+  await withServer(
+    async (baseUrl) => {
+      const response = await fetch(`${baseUrl}/api/ocr-snapshot`, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json"
+        },
+        body: JSON.stringify({
+          parser: "dk-predictions",
+          imageBase64: "data:image/png;base64,ZmFrZS1pbWFnZQ==",
+          mimeType: "image/png",
+          fileName: "kc-mets-total-bases.png",
+          capturedAt: "2026-07-09T13:59:00.000Z"
+        })
+      });
+      const payload = await response.json();
+
+      assert.equal(response.status, 200);
+      assert.equal(payload.inputType, "image");
+      assert.equal(payload.parser, "dk-predictions");
+      assert.equal(payload.provider, "DraftKings Predictions");
+      assert.equal(payload.summary.playerPropMarkets, 3);
+      assert.equal(payload.summary.totalBasesMarkets, 3);
+      assert.equal(payload.bankroll, 114.45);
+      assert.equal(payload.ocr.fileName, "kc-mets-total-bases.png");
+      assert.equal(payload.markets[0].team_or_player, "Jac Caglianone");
+      assert.equal(payload.markets[0].odds, 122);
+      assert.equal(payload.markets[0].opposite_odds, -194);
+      assert.ok(payload.warnings.some((warning) => warning.includes("Parsed from OCR text")));
+    },
+    {
+      recognizeTextFromImageImpl: async () => ({
+        engine: "fake_ocr",
+        fileName: "kc-mets-total-bases.png",
+        mimeType: "image/png",
+        bytes: 10,
+        text: ocrText.trim(),
+        lines: ocrText.trim().split(/\r?\n/),
+        warnings: []
+      })
+    }
+  );
+});
+
 test("HTTP API imports pasted odds text into matching research candidates", async () => {
   const candidates = [
     {
@@ -1318,8 +1727,10 @@ test("HTTP API compares recording props against a current DraftKings board", asy
     assert.equal(payload.rows[0].current_odds_american, 169);
     assert.equal(payload.rows[0].resolved_game_pk, 1);
     assert.equal(payload.rows[0].app_current_game_tb, 2);
-    assert.equal(payload.rows[0].app_verdict, "BET");
+    assert.equal(payload.rows[0].app_verdict, "WAIT");
+    assert.match(payload.rows[0].app_risk_flags, /STALE_MARKET_PRICE/);
     assert.equal(payload.rows[0].ticketDraft.legs[0].source.gamePk, 1);
+    assert.equal(payload.rows[0].ticketDraft.legs[0].marketContext.offeredLastUpdate, "2026-06-17T22:30:00.000Z");
     assert.ok(payload.notes.some((note) => note.includes("gamePk")));
   });
 });
@@ -1419,7 +1830,7 @@ test("HTTP API parses World Cup goalscorer snapshot rows with payout math", asyn
   });
 });
 
-test("HTTP API logs straight evaluations and summarizes settlements", async () => {
+test("HTTP API persists straight evaluations and summarizes attached settlements", async () => {
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "bear-edge-api-log-"));
   const logPath = path.join(tempDir, "decision_log.jsonl");
 
@@ -1447,8 +1858,12 @@ test("HTTP API logs straight evaluations and summarizes settlements", async () =
       const evaluation = await evaluationResponse.json();
 
       assert.equal(evaluationResponse.status, 200);
-      assert.equal(evaluation.verdict, "BET");
+      assert.equal(evaluation.verdict, "WAIT");
       assert.equal(evaluation.logPath, logPath);
+      assert.equal(evaluation.decisionLog.schemaVersion, "2.0.0");
+      assert.equal(evaluation.recordId, evaluation.decisionLog.id);
+      assert.equal(evaluation.clientEventId, evaluation.decisionLog.clientEventId);
+      assert.equal(evaluation.contentDigest, evaluation.decisionLog.contentDigest);
       assert.match(evaluation.decisionLog.id, /^eval_/);
 
       const settlementResponse = await fetch(`${baseUrl}/api/settle`, {
@@ -1470,14 +1885,35 @@ test("HTTP API logs straight evaluations and summarizes settlements", async () =
 
       assert.equal(dashboardResponse.status, 200);
       assert.equal(dashboard.summary.totalEvaluations, 1);
-      assert.equal(dashboard.summary.falsePositiveBetCalls, 1);
-      assert.equal(dashboard.summary.hitRate, 0);
+      assert.equal(dashboard.summary.falsePositiveBetCalls, 0);
+      assert.equal(dashboard.summary.hitRate, null);
       assert.equal(dashboard.byMarketType[0].marketType, "moneyline");
       assert.ok(Math.abs(dashboard.evaluations[0].closingLineValue - 0.1) < 1e-12);
       assert.equal(fs.readFileSync(logPath, "utf8").trim().split("\n").length, 2);
     },
     { logPath }
   );
+});
+
+test("POST /evaluate rejects writeLog false", async () => {
+  await withServer(async (baseUrl) => {
+    const response = await fetch(`${baseUrl}/evaluate`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        selection: "No-log attempt",
+        marketOdds: 120,
+        oppositeOdds: -135,
+        modelProbability: 0.59,
+        bankroll: 1000,
+        writeLog: false
+      })
+    });
+    const payload = await response.json();
+
+    assert.equal(response.status, 400);
+    assert.match(payload.error, /logging cannot be disabled/i);
+  });
 });
 
 test("HTTP API pulls official games for a date window", async () => {
@@ -1544,7 +1980,10 @@ test("HTTP API generates odds-needed research candidates from official game stat
   });
 });
 
-test("HTTP API evaluates a live ticket", async () => {
+test("HTTP API evaluates a live ticket only after authoritative persistence", async () => {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "bear-edge-live-api-"));
+  const logPath = path.join(tempDir, "decision_log.jsonl");
+
   await withServer(async (baseUrl) => {
     const response = await fetch(`${baseUrl}/evaluate/live`, {
       method: "POST",
@@ -1559,7 +1998,6 @@ test("HTTP API evaluates a live ticket", async () => {
           maxParlayLegs: 3,
           maxAltPropLegs: 2
         },
-        writeLog: false,
         legs: [
           {
             id: "leg-a",
@@ -1587,6 +2025,37 @@ test("HTTP API evaluates a live ticket", async () => {
     assert.equal(response.status, 200);
     assert.equal(payload.kind, "parlay");
     assert.equal(payload.researchPacket.ticketKind, "parlay");
+    assert.equal(payload.logPath, logPath);
+    assert.match(payload.recordId, /^eval_/);
+    assert.match(payload.contentDigest, /^[a-f0-9]{64}$/);
+    assert.equal(JSON.parse(fs.readFileSync(logPath, "utf8").trim()).id, payload.recordId);
+  }, { logPath });
+});
+
+test("POST /evaluate/live rejects writeLog false", async () => {
+  await withServer(async (baseUrl) => {
+    const response = await fetch(`${baseUrl}/evaluate/live`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        kind: "single",
+        bankroll: 1000,
+        writeLog: false,
+        legs: [{
+          id: "no-log-live",
+          provider: "mlb",
+          marketType: "prop",
+          side: "over",
+          line: 0.5,
+          marketOdds: 120,
+          source: { playerId: 1, statGroup: "hitting", statKey: "runs" }
+        }]
+      })
+    });
+    const payload = await response.json();
+
+    assert.equal(response.status, 400);
+    assert.match(payload.error, /logging cannot be disabled/i);
   });
 });
 

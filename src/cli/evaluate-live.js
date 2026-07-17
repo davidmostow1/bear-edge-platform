@@ -10,8 +10,8 @@ const { LiveTicketValidationError, validateLiveTicket } = require("../validate-l
 function printUsage() {
   console.error(
     [
-      "Usage: npm run evaluate:live -- <ticket.json> [--log-path <path>] [--no-log] [--compact]",
-      "       npm run evaluate:live -- --stdin [--log-path <path>] [--no-log] [--compact]"
+      "Usage: npm run evaluate:live -- <ticket.json> [--log-path <path>] [--compact]",
+      "       npm run evaluate:live -- --stdin [--log-path <path>] [--compact]"
     ].join("\n")
   );
 }
@@ -22,18 +22,12 @@ function parseArgs(argv) {
   let logPath;
   let readFromStdin = false;
   let compact = false;
-  let writeLog = true;
 
   for (let index = 0; index < args.length; index += 1) {
     const value = args[index];
 
     if (value === "--stdin") {
       readFromStdin = true;
-      continue;
-    }
-
-    if (value === "--no-log") {
-      writeLog = false;
       continue;
     }
 
@@ -64,8 +58,7 @@ function parseArgs(argv) {
     inputPath,
     logPath,
     readFromStdin,
-    compact,
-    writeLog
+    compact
   };
 }
 
@@ -102,7 +95,14 @@ async function main(argv = process.argv.slice(2)) {
   const ticket = validateLiveTicket(rawInput);
   const result = await evaluateLiveTicketAndLog(ticket, {
     logPath: parsedArgs.logPath,
-    writeLog: parsedArgs.writeLog,
+    auditContext: {
+      origin: {
+        channel: "cli",
+        actorType: "operator",
+        sessionId: null,
+        requestId: null
+      }
+    },
     fetchJsonImpl: process.env.BEAR_EDGE_TEST_MODE ? fetchJson : undefined
   });
 

@@ -16,6 +16,7 @@ const { fetchJson: liveFetchJson } = require("../src/live/fetch-json.js");
 const { saveOddsApiKey, upsertEnvValue, validateOddsApiKey } = require("../src/config/odds-key-settings.js");
 const { parseArgs: parseLaunchArgs } = require("../src/cli/launch.js");
 const { parseArgs: parseServeArgs } = require("../src/cli/serve.js");
+const { parseArgs: parseEvaluateArgs } = require("../src/cli/evaluate.js");
 
 test("validateBetInput normalizes a valid CLI payload", () => {
   const normalized = validateBetInput({
@@ -79,6 +80,7 @@ test("serve CLI parses auto-update controls", () => {
       host: "localhost",
       port: 3031
     });
+    assert.equal(parseServeArgs(["--lan", "--no-auto-update"]).host, "0.0.0.0");
   } finally {
     if (originalAutoUpdate === undefined) {
       delete process.env.BEAR_EDGE_AUTO_UPDATE;
@@ -142,6 +144,7 @@ test("launch CLI parses local app controls", () => {
         timeoutMs: 5000
       }
     );
+    assert.equal(parseLaunchArgs(["--lan", "--no-open"]).host, "0.0.0.0");
   } finally {
     if (originalPort === undefined) {
       delete process.env.PORT;
@@ -280,6 +283,36 @@ test("live fetch errors redact API keys from URLs", async () => {
   }
 });
 
+test("live fetch errors preserve provider quota codes without secrets", async () => {
+  const originalFetch = globalThis.fetch;
+
+  globalThis.fetch = /** @type {any} */ (async () => ({
+    ok: false,
+    status: 401,
+    statusText: "Unauthorized",
+    text: async () => JSON.stringify({
+      error_code: "OUT_OF_USAGE_CREDITS",
+      message: "Usage quota has been reached."
+    })
+  }));
+
+  try {
+    await assert.rejects(
+      () => liveFetchJson("https://example.test/v1?apiKey=super-secret-provider-key"),
+      (error) => {
+        const message = error instanceof Error ? error.message : String(error);
+
+        assert.match(message, /OUT_OF_USAGE_CREDITS/);
+        assert.match(message, /Usage quota has been reached/);
+        assert.equal(message.includes("super-secret-provider-key"), false);
+        return true;
+      }
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test("appendDecisionLog writes JSONL output to the requested path", async () => {
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "bear-edge-log-"));
   const logPath = path.join(tempDir, "decision_log.jsonl");
@@ -334,35 +367,22 @@ test("CLI evaluates valid input and appends a log line", () => {
   const output = JSON.parse(command.stdout);
   const logLines = fs.readFileSync(logPath, "utf8").trim().split("\n");
 
-  assert.equal(output.verdict, "BET");
+  assert.equal(output.verdict, "WAIT");
   assert.equal(output.logPath, logPath);
+  assert.match(output.recordId, /^eval_/);
+  assert.match(output.clientEventId, /^[0-9a-f-]{36}$/);
+  assert.match(output.contentDigest, /^[a-f0-9]{64}$/);
+  assert.equal(typeof output.persistedAt, "string");
   assert.equal(logLines.length, 1);
-  assert.equal(JSON.parse(logLines[0]).verdict, "BET");
+  assert.equal(JSON.parse(logLines[0]).schemaVersion, "2.0.0");
+  assert.equal(JSON.parse(logLines[0]).verdict, "WAIT");
 });
 
-test("CLI can evaluate stdin without writing a log", () => {
-  const command = spawnSync(
-    process.execPath,
-    [path.resolve(__dirname, "../src/cli/evaluate.js"), "--stdin", "--no-log", "--compact"],
-    {
-      cwd: path.resolve(__dirname, ".."),
-      encoding: "utf8",
-      input: JSON.stringify({
-        selection: "Lakers ML",
-        marketOdds: 120,
-        oppositeOdds: -135,
-        modelProbability: 0.59,
-        bankroll: 2500
-      })
-    }
+test("parseArgs rejects the removed --no-log option", () => {
+  assert.throws(
+    () => parseEvaluateArgs(["example.json", "--no-log"]),
+    /Unexpected argument: --no-log/
   );
-
-  assert.equal(command.status, 0, command.stderr);
-
-  const output = JSON.parse(command.stdout);
-
-  assert.equal(output.verdict, "BET");
-  assert.equal(output.logPath, null);
 });
 
 test("CLI can print the input schema", () => {

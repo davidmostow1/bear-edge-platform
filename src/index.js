@@ -11,6 +11,10 @@ const {
   validateAuditRecord
 } = require("./audit/record-contract.js");
 const {
+  appendAuthoritativeRecord
+} = require("./audit/authoritative-ledger.js");
+const { contentDigest } = require("./audit/canonical-json.js");
+const {
   DEFAULT_DECISION_LOG_PATH,
   appendDecisionLog,
   resolveDecisionLogPath
@@ -586,8 +590,155 @@ function evaluateBetDecision(input) {
   };
 }
 
+function createStraightEvaluationAuditRecord(input, result, context = {}) {
+  const createdAt = context.createdAt ?? new Date().toISOString();
+  const modelStatus = context.model?.modelStatus ?? "research_only";
+  const permission = context.permission ?? "PRICE_CHECK_ONLY";
+  const reasons = [...result.reasons];
+  const riskFlags = result.riskFlags.map((flag) => ({ ...flag }));
+  let verdict = result.verdict;
+
+  if (modelStatus !== "validated") {
+    addRiskFlag(
+      riskFlags,
+      "MODEL_CALIBRATION_REQUIRED",
+      "high",
+      "The supplied probability is not linked to a validated model and calibration report."
+    );
+  }
+
+  if (permission !== "VERIFIED_BETS_ALLOWED") {
+    addRiskFlag(
+      riskFlags,
+      "ODDS_PROVIDER_UNVERIFIED",
+      "high",
+      "The offered price was entered manually and is not authorized as verified sportsbook evidence."
+    );
+  }
+
+  if (verdict === "BET" && (modelStatus !== "validated" || permission !== "VERIFIED_BETS_ALLOWED")) {
+    verdict = "WAIT";
+
+    if (modelStatus !== "validated" && !reasons.includes("Model calibration is required before a BET verdict.")) {
+      reasons.push("Model calibration is required before a BET verdict.");
+    }
+
+    if (permission !== "VERIFIED_BETS_ALLOWED" && !reasons.includes("Verified sportsbook evidence is required before a BET verdict.")) {
+      reasons.push("Verified sportsbook evidence is required before a BET verdict.");
+    }
+  }
+
+  const sourceDigest = contentDigest({
+    selection: input.selection,
+    marketType: input.marketType,
+    marketOdds: input.marketOdds,
+    oppositeOdds: input.oppositeOdds,
+    modelProbability: input.modelProbability,
+    bankroll: input.bankroll
+  });
+  const configurationDigest = contentDigest({
+    marketWeight: result.decisionLog.inputs.marketWeight,
+    thresholds: result.decisionLog.inputs.thresholds,
+    stakePolicy: result.decisionLog.inputs.stakePolicy
+  });
+
+  return createEvaluationRecord({
+    origin: {
+      channel: context.origin?.channel ?? "internal",
+      actorType: context.origin?.actorType ?? "operator",
+      sessionId: context.origin?.sessionId ?? null,
+      requestId: context.origin?.requestId ?? null
+    },
+    event: context.event ?? {},
+    market: {
+      marketFamily: context.market?.marketFamily ?? input.marketType,
+      marketType: context.market?.marketType ?? input.marketType,
+      participantId: context.market?.participantId ?? null,
+      participantName: context.market?.participantName ?? null,
+      selection: input.selection,
+      side: context.market?.side ?? null,
+      line: context.market?.line ?? null
+    },
+    price: {
+      sportsbook: context.price?.sportsbook ?? null,
+      marketOdds: input.marketOdds,
+      oppositeOdds: input.oppositeOdds,
+      priceCapturedAt: context.price?.priceCapturedAt ?? createdAt,
+      priceSourceTime: context.price?.priceSourceTime ?? null
+    },
+    sources: context.sources ?? [{
+      provider: "operator_input",
+      sourceType: "manual_input",
+      sourceLocator: context.sourceLocator ?? null,
+      parserVersion: "1.0.0",
+      capturedAt: createdAt,
+      sourceTime: null,
+      digest: sourceDigest,
+      freshness: "unknown",
+      verificationStatus: "unverified"
+    }],
+    model: {
+      modelId: context.model?.modelId ?? "operator_probability_input",
+      modelVersion: context.model?.modelVersion ?? "1.0.0",
+      probabilityMethod: context.model?.probabilityMethod ?? "operator_supplied",
+      modelStatus,
+      calibrationReportId: context.model?.calibrationReportId ?? null,
+      trainingCutoff: context.model?.trainingCutoff ?? null,
+      sampleSize: context.model?.sampleSize ?? null
+    },
+    probability: {
+      rawModelProbability: input.modelProbability,
+      adjustedProbability: result.adjustedProbability,
+      marketImpliedProbability: result.market.impliedA,
+      marketNoVigProbability: result.market.noVigA
+    },
+    edge: {
+      fairEdge: result.fairEdge,
+      priceEdge: result.priceEdge,
+      expectedValueRoi: result.expectedValue.roi,
+      kellyFraction: result.kelly.fraction
+    },
+    stake: {
+      recommendedStake: result.stakeRecommendation.recommendedStake,
+      bankroll: input.bankroll,
+      stakePolicyVersion: "1.0.0"
+    },
+    decision: {
+      verdict,
+      permission,
+      reasons,
+      riskFlags,
+      gateResults: [
+        {
+          gate: "model_calibration",
+          passed: modelStatus === "validated",
+          reasonCode: modelStatus === "validated" ? null : "MODEL_CALIBRATION_REQUIRED"
+        },
+        {
+          gate: "operational_permission",
+          passed: permission === "VERIFIED_BETS_ALLOWED",
+          reasonCode: permission === "VERIFIED_BETS_ALLOWED" ? null : "ODDS_PROVIDER_UNVERIFIED"
+        }
+      ]
+    },
+    audit: {
+      codeVersion: context.codeVersion ?? null,
+      configurationDigest,
+      calculationVersion: "straight_evaluation_v2",
+      evidenceCompleteness: permission === "VERIFIED_BETS_ALLOWED" ? "verified" : "operator_input_unverified",
+      warnings: permission === "VERIFIED_BETS_ALLOWED"
+        ? []
+        : ["Manual odds input is retained as research evidence, not verified sportsbook authorization."]
+    }
+  }, {
+    clientEventId: context.clientEventId,
+    createdAt
+  });
+}
+
 module.exports = {
   AUDIT_RECORD_SCHEMA_VERSION,
+  appendAuthoritativeRecord,
   appendDecisionLog,
   appendSettlement,
   BET_DECISION_SCHEMA,
@@ -614,6 +765,7 @@ module.exports = {
   createDecisionLogTemplate,
   createAmendmentRecord,
   createEvaluationRecord,
+  createStraightEvaluationAuditRecord,
   createId,
   createSettlementAuditRecord,
   createSettlementRecord,

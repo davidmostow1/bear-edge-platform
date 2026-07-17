@@ -2,7 +2,7 @@ const http = require("node:http");
 const fs = require("node:fs/promises");
 const path = require("node:path");
 
-const { appendDecisionLog } = require("./decision-log.js");
+const { appendAuthoritativeRecord } = require("./audit/authoritative-ledger.js");
 const {
   appendSettlement,
   getDecisionLogDashboard
@@ -24,17 +24,21 @@ const { simulateBetCard } = require("./live/probability-causality.js");
 const { compareRecordingPropsWithCurrentBoard } = require("./live/recording-prop-compare.js");
 const { fetchOnlineOpportunities } = require("./live/online-opportunities.js");
 const { recognizeTextFromImage } = require("./live/image-ocr.js");
+const { parseEspnSnapshot } = require("./live/espn-snapshot.js");
+const { createManualSnapshotConfirmation } = require("./live/snapshot-confirmation.js");
 const { parseStatMuseSnapshot } = require("./live/statmuse-snapshot.js");
 const { parseWorldCupGoalscorerSnapshot } = require("./live/worldcup-goalscorer-snapshot.js");
 const { fetchOddsApiMarkets, fetchOddsApiSports } = require("./live/odds-api.js");
 const { fetchJson, fetchText } = require("./live/fixture-fetch.js");
 const { getSystemAudit } = require("./system-audit.js");
 const { getReleaseReadiness } = require("./release-readiness.js");
+const { getDataEdgeAudit } = require("./data-edge.js");
 const { getOddsKeyStatus, saveOddsApiKey, validateOddsApiKey } = require("./config/odds-key-settings.js");
 const { getProviderSetupStatus } = require("./config/provider-requirements.js");
 const { saveProviderApiKey } = require("./config/provider-key-settings.js");
 const { safeErrorMessage } = require("./config/secrets.js");
 const {
+  AUDIT_RECORD_SCHEMA,
   BET_DECISION_SCHEMA,
   BET_INPUT_SCHEMA,
   LIVE_DECISION_SCHEMA,
@@ -45,6 +49,15 @@ const { BetInputValidationError, validateBetInput } = require("./validate-bet-in
 const { LiveTicketValidationError, validateLiveTicket } = require("./validate-live-ticket.js");
 
 const PROJECT_ROOT = path.resolve(__dirname, "..");
+const OCR_PARSER_ALIASES = Object.freeze({
+  draftkings: "draftkings",
+  espn: "espn",
+  statmuse: "statmuse",
+  "worldcup-goalscorer": "worldcup-goalscorer",
+  "dk-predictions": "dk-predictions",
+  predictions: "dk-predictions",
+  pick6: "dk-predictions"
+});
 
 function jsonResponse(response, statusCode, payload) {
   response.writeHead(statusCode, {
@@ -101,6 +114,18 @@ function createServer(options = {}) {
         return staticResponse(response, "app.js", "text/javascript; charset=utf-8");
       }
 
+      if (request.method === "GET" && url.pathname === "/dashboard/manifest.json") {
+        return staticResponse(response, "manifest.json", "application/manifest+json; charset=utf-8");
+      }
+
+      if (request.method === "GET" && url.pathname === "/dashboard/icon.svg") {
+        return staticResponse(response, "icon.svg", "image/svg+xml; charset=utf-8");
+      }
+
+      if (request.method === "GET" && url.pathname === "/dashboard/sw.js") {
+        return staticResponse(response, "sw.js", "text/javascript; charset=utf-8");
+      }
+
       if (request.method === "GET" && url.pathname === "/health") {
         return jsonResponse(response, 200, { ok: true });
       }
@@ -113,7 +138,39 @@ function createServer(options = {}) {
 
       if (request.method === "GET" && url.pathname === "/api/release-readiness") {
         const result = await getReleaseReadiness({
-          rootDir: options.settingsRootDir ?? PROJECT_ROOT
+          rootDir: options.settingsRootDir ?? PROJECT_ROOT,
+          fetchJsonImpl: process.env.BEAR_EDGE_TEST_MODE ? fetchJson : options.fetchJsonImpl,
+          fetchTextImpl: process.env.BEAR_EDGE_TEST_MODE ? fetchText : options.fetchTextImpl,
+          oddsApiKey: process.env.THE_ODDS_API_KEY ?? process.env.ODDS_API_KEY,
+          autoUpdateStatus: typeof options.autoUpdateService?.getStatus === "function"
+            ? options.autoUpdateService.getStatus()
+            : null,
+          autoUpdateSnapshotPath: options.autoUpdateSnapshotPath,
+          logPath: options.logPath
+        });
+
+        return jsonResponse(response, 200, result);
+      }
+
+      if (request.method === "GET" && url.pathname === "/api/data-edge-audit") {
+        const result = await getDataEdgeAudit({
+          rootDir: options.settingsRootDir ?? PROJECT_ROOT,
+          date: url.searchParams.get("date") ?? "today",
+          days: Number(url.searchParams.get("days") ?? 1),
+          limit: Number(url.searchParams.get("limit") ?? 3),
+          maxCandidates: Number(url.searchParams.get("maxCandidates") ?? 80),
+          maxEventsToPrice: Number(url.searchParams.get("maxEventsToPrice") ?? 10),
+          bankroll: Number(url.searchParams.get("bankroll") ?? 1000),
+          bookmakers: url.searchParams.get("bookmakers") ?? "draftkings",
+          regions: url.searchParams.get("regions") ?? "us",
+          fetchJsonImpl: process.env.BEAR_EDGE_TEST_MODE ? fetchJson : options.fetchJsonImpl,
+          fetchTextImpl: process.env.BEAR_EDGE_TEST_MODE ? fetchText : options.fetchTextImpl,
+          oddsApiKey: process.env.THE_ODDS_API_KEY ?? process.env.ODDS_API_KEY,
+          autoUpdateStatus: typeof options.autoUpdateService?.getStatus === "function"
+            ? options.autoUpdateService.getStatus()
+            : null,
+          autoUpdateSnapshotPath: options.autoUpdateSnapshotPath,
+          logPath: options.logPath
         });
 
         return jsonResponse(response, 200, result);
@@ -258,6 +315,7 @@ function createServer(options = {}) {
 
       if (request.method === "GET" && url.pathname === "/schemas") {
         return jsonResponse(response, 200, {
+          auditRecord: AUDIT_RECORD_SCHEMA,
           betInput: BET_INPUT_SCHEMA,
           betDecision: BET_DECISION_SCHEMA,
           liveTicket: LIVE_TICKET_SCHEMA,
@@ -451,6 +509,20 @@ function createServer(options = {}) {
         return jsonResponse(response, 200, result);
       }
 
+      if (request.method === "POST" && url.pathname === "/api/espn-snapshot") {
+        const body = await readJsonBody(request);
+        const result = parseEspnSnapshot(body);
+
+        return jsonResponse(response, 200, result);
+      }
+
+      if (request.method === "POST" && url.pathname === "/api/snapshot-confirmation") {
+        const body = await readJsonBody(request);
+        const result = createManualSnapshotConfirmation(body);
+
+        return jsonResponse(response, 200, result);
+      }
+
       if (request.method === "POST" && url.pathname === "/api/draftkings-snapshot") {
         const body = await readJsonBody(request);
         const result = parseDraftKingsSnapshot(body);
@@ -498,11 +570,12 @@ function createServer(options = {}) {
 
       if (request.method === "POST" && url.pathname === "/api/ocr-snapshot") {
         const body = await readJsonBody(request);
-        const parser = String(body.parser ?? "").toLowerCase();
+        const requestedParser = String(body.parser ?? "").toLowerCase();
+        const parser = OCR_PARSER_ALIASES[requestedParser];
 
-        if (!["draftkings", "statmuse", "worldcup-goalscorer"].includes(parser)) {
+        if (!parser) {
           return jsonResponse(response, 400, {
-            error: "parser must be draftkings, statmuse, or worldcup-goalscorer."
+            error: "parser must be draftkings, espn, dk-predictions, statmuse, or worldcup-goalscorer."
           });
         }
 
@@ -510,17 +583,22 @@ function createServer(options = {}) {
         const parseInput = {
           text: ocr.text,
           sourceUrl: body.sourceUrl,
-          capturedAt: body.capturedAt ?? new Date().toISOString()
+          capturedAt: body.capturedAt ?? new Date().toISOString(),
+          sourceFile: body.fileName ?? ocr.fileName ?? null
         };
         const parsed = parser === "draftkings"
           ? parseDraftKingsSnapshot(parseInput)
+          : parser === "espn"
+            ? parseEspnSnapshot(parseInput)
           : parser === "statmuse"
             ? parseStatMuseSnapshot(parseInput)
-            : parseWorldCupGoalscorerSnapshot({
-                ...parseInput,
-                sourceUrl: body.sourceUrl ?? "https://sportsbook.draftkings.com/",
-                event: body.event
-              });
+            : parser === "dk-predictions"
+              ? parseDkPredictionsBoardSnapshot(parseInput)
+              : parseWorldCupGoalscorerSnapshot({
+                  ...parseInput,
+                  sourceUrl: body.sourceUrl ?? "https://sportsbook.draftkings.com/",
+                  event: body.event
+                });
 
         return jsonResponse(response, 200, {
           ...parsed,
@@ -554,28 +632,72 @@ function createServer(options = {}) {
       if (request.method === "POST" && url.pathname === "/evaluate") {
         const body = await readJsonBody(request);
         const { writeLog = true, logPath, ...inputBody } = body;
+
+        if (writeLog === false) {
+          return jsonResponse(response, 400, {
+            error: "Authoritative logging cannot be disabled."
+          });
+        }
+
         const input = validateBetInput(inputBody);
-        const { evaluateBetDecision } = require("./index.js");
+        const {
+          createStraightEvaluationAuditRecord,
+          evaluateBetDecision
+        } = require("./index.js");
         const result = evaluateBetDecision(input);
-        const resolvedLogPath =
-          writeLog === false
-            ? null
-            : await appendDecisionLog(result.decisionLog, {
-                logPath: logPath ?? options.logPath
-              });
+        const auditRecord = createStraightEvaluationAuditRecord(input, result, {
+          origin: {
+            channel: "http_api",
+            actorType: "operator",
+            sessionId: null,
+            requestId: typeof request.headers["x-request-id"] === "string"
+              ? request.headers["x-request-id"]
+              : null
+          },
+          sourceLocator: "/evaluate"
+        });
+        const persistence = await appendAuthoritativeRecord(auditRecord, {
+          logPath: logPath ?? options.logPath
+        });
 
         return jsonResponse(response, 200, {
           ...result,
-          logPath: resolvedLogPath
+          verdict: auditRecord.verdict,
+          reasons: auditRecord.reasons,
+          riskFlags: auditRecord.riskFlags,
+          decisionLog: auditRecord,
+          recordId: auditRecord.id,
+          clientEventId: auditRecord.clientEventId,
+          contentDigest: auditRecord.contentDigest,
+          persistedAt: persistence.persistedAt,
+          logPath: persistence.ledgerPath,
+          ledgerPath: persistence.ledgerPath
         });
       }
 
       if (request.method === "POST" && url.pathname === "/evaluate/live") {
         const body = await readJsonBody(request);
-        const ticket = validateLiveTicket(body);
+        const { writeLog = true, logPath, ...ticketBody } = body;
+
+        if (writeLog === false) {
+          return jsonResponse(response, 400, {
+            error: "Authoritative logging cannot be disabled."
+          });
+        }
+
+        const ticket = validateLiveTicket(ticketBody);
         const result = await evaluateLiveTicketAndLog(ticket, {
-          writeLog: body.writeLog !== false,
-          logPath: body.logPath ?? options.logPath,
+          logPath: logPath ?? options.logPath,
+          auditContext: {
+            origin: {
+              channel: "http_api",
+              actorType: "operator",
+              sessionId: null,
+              requestId: typeof request.headers["x-request-id"] === "string"
+                ? request.headers["x-request-id"]
+                : null
+            }
+          },
           fetchJsonImpl: process.env.BEAR_EDGE_TEST_MODE ? fetchJson : options.fetchJsonImpl
         });
 

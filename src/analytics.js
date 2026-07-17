@@ -120,6 +120,10 @@ function getResult(record) {
 }
 
 function getKind(record) {
+  if (record?.market?.marketFamily === "parlay") {
+    return "parlay";
+  }
+
   const result = getResult(record);
 
   if (typeof result?.kind === "string") {
@@ -138,6 +142,10 @@ function getKind(record) {
 }
 
 function getMarketType(record) {
+  if (typeof record?.market?.marketType === "string") {
+    return record.market.marketType;
+  }
+
   const result = getResult(record);
   const kind = getKind(record);
 
@@ -161,6 +169,10 @@ function getMarketType(record) {
 }
 
 function getMarketOdds(record) {
+  if (isFiniteNumber(record?.price?.marketOdds)) {
+    return record.price.marketOdds;
+  }
+
   const result = getResult(record);
 
   if (isFiniteNumber(result?.combined?.americanOdds)) {
@@ -179,6 +191,10 @@ function getMarketOdds(record) {
 }
 
 function getExpectedValueRoi(record) {
+  if (isFiniteNumber(record?.edge?.expectedValueRoi)) {
+    return record.edge.expectedValueRoi;
+  }
+
   const result = getResult(record);
 
   if (isFiniteNumber(result?.expectedValue?.roi)) {
@@ -193,6 +209,10 @@ function getExpectedValueRoi(record) {
 }
 
 function getRecommendedStake(record) {
+  if (isFiniteNumber(record?.stake?.recommendedStake)) {
+    return record.stake.recommendedStake;
+  }
+
   const result = getResult(record);
 
   if (isFiniteNumber(result?.stakeRecommendation?.recommendedStake)) {
@@ -226,6 +246,10 @@ function getExpectedProfitAtStake(record) {
 }
 
 function getKellyFraction(record) {
+  if (isFiniteNumber(record?.edge?.kellyFraction)) {
+    return record.edge.kellyFraction;
+  }
+
   const result = getResult(record);
 
   if (isFiniteNumber(result?.kelly?.fraction)) {
@@ -250,6 +274,12 @@ function getLegRiskFlags(record) {
 }
 
 function getSourceTimestamps(record) {
+  if (Array.isArray(record?.sources)) {
+    return record.sources
+      .flatMap((source) => [source?.sourceTime, source?.capturedAt])
+      .filter((timestamp) => typeof timestamp === "string" && timestamp.trim());
+  }
+
   const sources = Array.isArray(record?.researchPacket?.sources) ? record.researchPacket.sources : [];
 
   return sources
@@ -258,6 +288,19 @@ function getSourceTimestamps(record) {
 }
 
 function getSourceAgeMinutes(record) {
+  if (Array.isArray(record?.sources)) {
+    const evaluationTime = Date.parse(record.createdAt ?? "");
+
+    if (!Number.isFinite(evaluationTime)) {
+      return [];
+    }
+
+    return record.sources
+      .map((source) => Date.parse(source?.sourceTime ?? source?.capturedAt ?? ""))
+      .filter(Number.isFinite)
+      .map((sourceTime) => Math.max(0, (evaluationTime - sourceTime) / 60000));
+  }
+
   const sources = Array.isArray(record?.researchPacket?.sources) ? record.researchPacket.sources : [];
 
   return sources
@@ -268,6 +311,14 @@ function getSourceAgeMinutes(record) {
 function getStaleDataStatus(record, riskFlags) {
   if (riskFlags.some((flag) => flag.code.includes("STALE"))) {
     return "stale";
+  }
+
+  if (Array.isArray(record?.sources)) {
+    if (record.sources.some((source) => source?.freshness === "stale")) {
+      return "stale";
+    }
+
+    return record.sources.length > 0 ? "fresh" : "not_tracked";
   }
 
   const sources = Array.isArray(record?.researchPacket?.sources) ? record.researchPacket.sources : [];
@@ -339,9 +390,13 @@ function extractEvaluation(record, sequence) {
     id: getEvaluationId(record, sequence),
     hasOriginalId,
     sequence,
-    timestamp: typeof record?.timestamp === "string" ? record.timestamp : null,
+    timestamp: typeof record?.createdAt === "string"
+      ? record.createdAt
+      : typeof record?.timestamp === "string" ? record.timestamp : null,
     kind: getKind(record),
-    selection: typeof result?.selection === "string" ? result.selection : record?.selection ?? "",
+    selection: typeof record?.market?.selection === "string"
+      ? record.market.selection
+      : typeof result?.selection === "string" ? result.selection : record?.selection ?? "",
     verdict: typeof result?.verdict === "string" ? result.verdict : record?.verdict ?? "UNKNOWN",
     marketType: getMarketType(record),
     marketOdds: getMarketOdds(record),
@@ -364,7 +419,9 @@ function extractSettlement(record, sequence) {
   return {
     id: getSettlementId(record, sequence),
     sequence,
-    timestamp: typeof record?.timestamp === "string" ? record.timestamp : null,
+    timestamp: typeof record?.createdAt === "string"
+      ? record.createdAt
+      : typeof record?.timestamp === "string" ? record.timestamp : null,
     evaluationId: typeof record?.evaluationId === "string" ? record.evaluationId : "",
     settledAt: typeof record?.settledAt === "string" ? record.settledAt : record?.timestamp ?? null,
     outcome: SETTLEMENT_OUTCOMES.includes(outcome) ? outcome : "pending",
