@@ -9,7 +9,8 @@ const SECRET_ENV_KEYS = Object.freeze([
   "SPORTDEVS_API_KEY",
   "OPENWEATHER_API_KEY",
   "EXA_API_KEY",
-  "OPENAI_API_KEY"
+  "OPENAI_API_KEY",
+  "SUPABASE_SERVICE_ROLE_KEY"
 ]);
 
 function escapeRegExp(value) {
