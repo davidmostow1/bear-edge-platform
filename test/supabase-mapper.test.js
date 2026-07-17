@@ -126,12 +126,17 @@ test("mapDecisionRecord preserves canonical identity and complete snapshots", ()
   assert.equal(row.authority, "local");
   assert.equal(row.canonical_event_id, "401816143");
   assert.equal(row.market_kind, "PLAYER_PROP");
-  assert.equal(row.market_type, "PITCHER_STRIKEOUTS");
+  assert.equal(row.market_type, "Primary Prop");
   assert.equal(row.line_value, 5.5);
   assert.equal(row.odds, 103);
   assert.equal(row.counterpart_odds, -131);
   assert.equal(row.p_user, 0.55);
   assert.equal(row.probability_provenance_status, "BLOCK");
+  assert.equal(row.probability_method, "MANUAL_RESEARCH");
+  assert.equal(row.price_integrity_status, "REVIEW");
+  assert.equal(row.market_identity_status, "BLOCK");
+  assert.equal(row.data_quality, "legacy_incomplete");
+  assert.equal(row.is_live, false);
   assert.equal(row.reason_code, "MODEL_CALIBRATION_REQUIRED");
   assert.equal(row.reason, "Model calibration is incomplete.");
   assert.equal(row.created_at, CREATED_AT);
@@ -154,7 +159,38 @@ test("mapDecisionRecord blocks provenance for every model status except validate
 
   assert.equal(
     mapDecisionRecord(validated, OWNER_USER_ID).probability_provenance_status,
-    "PASS"
+    "COMPLETE"
+  );
+  assert.equal(
+    mapDecisionRecord(validated, OWNER_USER_ID).probability_method,
+    "CALIBRATED_MODEL"
+  );
+});
+
+test("mapDecisionRecord keeps market identity blocked when remote-only identity fields are absent", () => {
+  const evaluation = evaluationRecord();
+  const withPassingIdentityGates = createEvaluationRecord({
+    ...evaluation,
+    decision: {
+      verdict: evaluation.verdict,
+      permission: evaluation.permission,
+      reasons: evaluation.reasons,
+      riskFlags: evaluation.riskFlags,
+      gateResults: [
+        { code: "EVENT_MATCH", status: "pass" },
+        { code: "PARTICIPANT_MATCH", status: "pass" },
+        { code: "MARKET_MATCH", status: "pass" },
+        { code: "LINE_MATCH", status: "pass" }
+      ]
+    }
+  }, {
+    clientEventId: EVALUATION_EVENT_ID,
+    createdAt: CREATED_AT
+  });
+
+  assert.equal(
+    mapDecisionRecord(withPassingIdentityGates, OWNER_USER_ID).market_identity_status,
+    "BLOCK"
   );
 });
 

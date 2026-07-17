@@ -127,7 +127,7 @@ function priceIntegrityStatus(record) {
     source?.verificationStatus === "verified" && source?.freshness === "fresh"
   ));
 
-  return sourceVerified ? "PASS" : "UNVERIFIED";
+  return sourceVerified ? "CLEAR" : "REVIEW";
 }
 
 function marketIdentityStatus(record) {
@@ -142,7 +142,48 @@ function marketIdentityStatus(record) {
     return "BLOCK";
   }
 
-  return identityGates.length > 0 ? "PASS" : "UNVERIFIED";
+  const identityComplete = (
+    identityGates.length > 0 &&
+    record.event.sport &&
+    record.event.league &&
+    record.event.eventId &&
+    record.market.marketFamily &&
+    record.market.selection &&
+    record.market.marketPeriod &&
+    record.market.marketFingerprint &&
+    (!['PLAYER_PROP', 'TEAM_PROP'].includes(record.market.marketFamily) || (
+      record.market.participantId || record.market.participantName
+    ))
+  );
+
+  return identityComplete ? "COMPLETE" : "BLOCK";
+}
+
+function remoteMarketType(record) {
+  if (record.origin?.channel === "in_game_live") {
+    return "Live Bet";
+  }
+
+  return {
+    MONEYLINE: "Main Side",
+    SPREAD: "Main Side",
+    TOTAL: "Main Total",
+    PLAYER_PROP: "Primary Prop",
+    TEAM_PROP: "Derivative Prop"
+  }[record.market.marketFamily] ?? "Derivative Prop";
+}
+
+function remoteProbabilityMethod(record) {
+  const method = normalizedText(record.model.probabilityMethod, "").toLowerCase();
+
+  if (record.model.modelStatus === "validated") {
+    return method.includes("ensemble") ? "ENSEMBLE" : "CALIBRATED_MODEL";
+  }
+  if (method.includes("historical") || method.includes("base_rate")) {
+    return "HISTORICAL_BASE_RATE";
+  }
+
+  return "MANUAL_RESEARCH";
 }
 
 function mapDecisionRecord(record, ownerUserId) {
@@ -168,7 +209,7 @@ function mapDecisionRecord(record, ownerUserId) {
       evaluation.market.marketFamily,
       normalizedText(evaluation.market.marketType, "UNKNOWN")
     ),
-    market_type: normalizedText(evaluation.market.marketType, "UNKNOWN"),
+    market_type: remoteMarketType(evaluation),
     odds: nullableInteger(evaluation.price.marketOdds, "Market odds"),
     p_user: adjustedProbability ?? rawProbability ?? null,
     tier: null,
@@ -194,25 +235,27 @@ function mapDecisionRecord(record, ownerUserId) {
       evidence_completeness: evaluation.audit.evidenceCompleteness
     },
     source: remoteSource(evaluation),
-    data_quality: normalizedText(evaluation.audit.evidenceCompleteness, "incomplete"),
+    data_quality: evaluation.audit.evidenceCompleteness === "complete"
+      ? "complete"
+      : "legacy_incomplete",
     created_at: evaluation.createdAt,
     event_label: eventLabel(evaluation),
     sportsbook: evaluation.price.sportsbook,
     selection_label: evaluation.market.selection,
     counterpart_odds: nullableInteger(evaluation.price.oppositeOdds, "Opposite odds"),
     offer_captured_at: evaluation.price.priceCapturedAt,
-    is_live: remoteSource(evaluation) === "live_ui",
+    is_live: evaluation.origin.channel === "in_game_live",
     live_state: null,
     evidence_ref: evidenceReference(evaluation),
     price_overround: null,
     price_integrity_status: priceIntegrityStatus(evaluation),
-    probability_method: evaluation.model.probabilityMethod,
+    probability_method: remoteProbabilityMethod(evaluation),
     probability_source: evaluation.model.modelId,
     probability_model_version: evaluation.model.modelVersion,
     probability_sample_size: nullableInteger(sampleSize, "Probability sample size"),
     probability_evidence_at: evaluation.model.trainingCutoff,
     probability_notes: evaluation.reasons.join(" ") || null,
-    probability_provenance_status: evaluation.model.modelStatus === "validated" ? "PASS" : "BLOCK",
+    probability_provenance_status: evaluation.model.modelStatus === "validated" ? "COMPLETE" : "BLOCK",
     sport_code: evaluation.event.sport,
     league_code: evaluation.event.league,
     canonical_event_id: evaluation.event.eventId,
