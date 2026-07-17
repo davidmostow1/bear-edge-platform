@@ -1,0 +1,158 @@
+{
+  "schemaVersion": "1.0.0",
+  "policyVersion": "1.0.0",
+  "policyRegisteredAt": "2026-07-17T09:23:53.000Z",
+  "policyDigest": "bb8f5bd702648894e8e21be04d6d08024645821d83c4bbacb40c872657830df7",
+  "promotionPolicy": {
+    "minimumSettledPredictions": 500,
+    "minimumBucketObservations": 100,
+    "minimumSettlementCoverage": 0.95,
+    "maximumExpectedCalibrationError": 0.03,
+    "minimumCalibrationSlope": 0.8,
+    "maximumCalibrationSlope": 1.2,
+    "maximumAbsoluteCalibrationIntercept": 0.05,
+    "requireNoMaterialBaselineDegradation": true,
+    "requireNonNegativeClosingLineValueInterval": true,
+    "reliabilityBucketBoundaries": [
+      0,
+      0.2,
+      0.4,
+      0.6,
+      0.8,
+      1
+    ],
+    "requiredBaseline": {
+      "baselineId": "no_vig_market",
+      "method": "two_way_proportional_normalization",
+      "methodVersion": "1.0.0"
+    },
+    "requiredUncertaintyMethod": "percentile_bootstrap",
+    "minimumBootstrapResamples": 2000,
+    "minimumConfidenceLevel": 0.95
+  },
+  "models": [
+    {
+      "modelId": "poisson_count_v1",
+      "modelVersion": "1.0.0",
+      "marketFamily": "pitcher_strikeouts",
+      "featureSet": [
+        "line",
+        "recent_per_game",
+        "recent_sample_limit",
+        "recent_weight",
+        "season_per_game",
+        "side"
+      ],
+      "dataSources": [
+        "official_mlb_statsapi_player_stats",
+        "official_mlb_statsapi_schedule"
+      ],
+      "trainingCutoff": null,
+      "calculationImplementation": {
+        "modules": [
+          "src/live/candidates.js",
+          "src/live/estimate-prop.js"
+        ],
+        "probabilityExport": "estimateCountProbability",
+        "version": "1.0.0",
+        "implementationDigest": null
+      },
+      "modelStatus": "research_only",
+      "calibrationReportId": null,
+      "calibrationReportDigest": null
+    },
+    {
+      "modelId": "poisson_count_v1",
+      "modelVersion": "1.0.0",
+      "marketFamily": "batter_hits",
+      "featureSet": [
+        "line",
+        "recent_per_game",
+        "recent_sample_limit",
+        "recent_weight",
+        "season_per_game",
+        "side"
+      ],
+      "dataSources": [
+        "official_mlb_statsapi_player_stats",
+        "official_mlb_statsapi_roster",
+        "official_mlb_statsapi_schedule"
+      ],
+      "trainingCutoff": null,
+      "calculationImplementation": {
+        "modules": [
+          "src/live/candidates.js",
+          "src/live/estimate-prop.js"
+        ],
+        "probabilityExport": "estimateCountProbability",
+        "version": "1.0.0",
+        "implementationDigest": null
+      },
+      "modelStatus": "research_only",
+      "calibrationReportId": null,
+      "calibrationReportDigest": null
+    },
+    {
+      "modelId": "poisson_count_v1",
+      "modelVersion": "1.0.0",
+      "marketFamily": "batter_runs_scored",
+      "featureSet": [
+        "line",
+        "recent_per_game",
+        "recent_sample_limit",
+        "recent_weight",
+        "season_per_game",
+        "side"
+      ],
+      "dataSources": [
+        "official_mlb_statsapi_player_stats",
+        "official_mlb_statsapi_roster",
+        "official_mlb_statsapi_schedule"
+      ],
+      "trainingCutoff": null,
+      "calculationImplementation": {
+        "modules": [
+          "src/live/candidates.js",
+          "src/live/estimate-prop.js"
+        ],
+        "probabilityExport": "estimateCountProbability",
+        "version": "1.0.0",
+        "implementationDigest": null
+      },
+      "modelStatus": "research_only",
+      "calibrationReportId": null,
+      "calibrationReportDigest": null
+    },
+    {
+      "modelId": "poisson_count_v1",
+      "modelVersion": "1.0.0",
+      "marketFamily": "batter_total_bases",
+      "featureSet": [
+        "line",
+        "recent_per_game",
+        "recent_sample_limit",
+        "recent_weight",
+        "season_per_game",
+        "side"
+      ],
+      "dataSources": [
+        "official_mlb_statsapi_player_stats",
+        "official_mlb_statsapi_roster",
+        "official_mlb_statsapi_schedule"
+      ],
+      "trainingCutoff": null,
+      "calculationImplementation": {
+        "modules": [
+          "src/live/candidates.js",
+          "src/live/estimate-prop.js"
+        ],
+        "probabilityExport": "estimateCountProbability",
+        "version": "1.0.0",
+        "implementationDigest": null
+      },
+      "modelStatus": "research_only",
+      "calibrationReportId": null,
+      "calibrationReportDigest": null
+    }
+  ]
+}
