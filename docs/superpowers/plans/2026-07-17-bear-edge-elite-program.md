@@ -37,12 +37,14 @@
 ## Program Progress
 
 - [x] Plan 1: Authoritative local ledger, persisted user-facing evaluations, displayed-target persistence, settlements, and amendments.
-- [ ] Plan 2: Supabase outbox and optional remote projection.
+- [x] Plan 2: Supabase outbox and optional remote projection.
 - [ ] Plan 3: Calibration, chronological backtests, model registry, and promotion policy.
 - [ ] Plan 4: Operations interface, provenance display, and LAN write protection.
 - [ ] Plan 5: Full retained evidence audit and final traceability gate.
 
 Plan 1 completed through commit `79e3eee85bd6a3b5cfa5612116acd425a68d3851`. Full verification passed 166 of 166 tests, while release readiness remained truthfully limited to `PRICE_CHECK_ONLY` by provider, pricing, and calibration evidence gates.
+
+Plan 2 completed through the resilient synchronization worker implementation. The remote schema migrations are applied and verified, 107 focused tests and all 211 repository tests pass, and local operation remains independent of Supabase. Live remote projection is configuration-gated because the checkout has no Supabase environment values and the connected project has no Auth owner; this is an external setup gate, not hidden software completion.
 
 ## Working-Tree Strategy
 
