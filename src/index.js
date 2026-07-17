@@ -4,6 +4,13 @@ const {
   validateBetInput
 } = require("./validate-bet-input.js");
 const {
+  AUDIT_RECORD_SCHEMA_VERSION,
+  createAmendmentRecord,
+  createEvaluationRecord,
+  createSettlementAuditRecord,
+  validateAuditRecord
+} = require("./audit/record-contract.js");
+const {
   DEFAULT_DECISION_LOG_PATH,
   appendDecisionLog,
   resolveDecisionLogPath
@@ -71,7 +78,7 @@ const {
 
 const DEFAULT_THRESHOLDS = Object.freeze({
   minEdge: 0.02,
-  minEvRoi: 0,
+  minEvRoi: 0.01,
   minKellyFraction: 0.005
 });
 
@@ -152,6 +159,14 @@ function assertPositiveNumber(value, name) {
 
   if (value <= 0) {
     throw new RangeError(`${name} must be greater than 0.`);
+  }
+}
+
+function assertDecimalOdds(value, name) {
+  assertFiniteNumber(value, name);
+
+  if (value <= 1) {
+    throw new RangeError(`${name} must be greater than 1.`);
   }
 }
 
@@ -247,7 +262,7 @@ function calculateExpectedValue({ winProbability, americanOdds, decimalOdds, sta
   assertPositiveNumber(stake, "stake");
 
   const resolvedDecimalOdds = decimalOdds ?? americanToDecimal(americanOdds);
-  assertPositiveNumber(resolvedDecimalOdds, "decimalOdds");
+  assertDecimalOdds(resolvedDecimalOdds, "decimalOdds");
 
   const netWinMultiple = resolvedDecimalOdds - 1;
   const expectedProfit = stake * (winProbability * netWinMultiple - (1 - winProbability));
@@ -268,7 +283,7 @@ function calculateKellyFraction({ winProbability, americanOdds, decimalOdds }) {
   assertProbability(winProbability, "winProbability");
 
   const resolvedDecimalOdds = decimalOdds ?? americanToDecimal(americanOdds);
-  assertPositiveNumber(resolvedDecimalOdds, "decimalOdds");
+  assertDecimalOdds(resolvedDecimalOdds, "decimalOdds");
 
   const netWinMultiple = resolvedDecimalOdds - 1;
   const lossProbability = 1 - winProbability;
@@ -370,7 +385,7 @@ function evaluateBetDecision(input) {
   };
 
   assertProbability(resolvedThresholds.minEdge, "thresholds.minEdge");
-  assertFiniteNumber(resolvedThresholds.minEvRoi, "thresholds.minEvRoi");
+  assertNonNegativeNumber(resolvedThresholds.minEvRoi, "thresholds.minEvRoi");
   assertProbability(resolvedThresholds.minKellyFraction, "thresholds.minKellyFraction");
   assertNonNegativeNumber(resolvedStakePolicy.minStake, "stakePolicy.minStake");
 
@@ -461,7 +476,7 @@ function evaluateBetDecision(input) {
     verdict = "PASS";
   } else if (hasStaleInjuryGate) {
     verdict = "WAIT";
-  } else if (edge < resolvedThresholds.minEdge) {
+  } else if (edge <= resolvedThresholds.minEdge) {
     verdict = "PASS";
     addRiskFlag(
       riskFlags,
@@ -470,7 +485,7 @@ function evaluateBetDecision(input) {
       "Adjusted fair edge versus the no-vig market does not clear the minimum edge threshold."
     );
     reasons.push("Adjusted fair edge versus the no-vig market is below threshold.");
-  } else if (unitEv.roi < resolvedThresholds.minEvRoi) {
+  } else if (unitEv.roi <= resolvedThresholds.minEvRoi) {
     verdict = "PASS";
     addRiskFlag(
       riskFlags,
@@ -479,7 +494,7 @@ function evaluateBetDecision(input) {
       "Expected value versus the offered odds does not clear the minimum ROI threshold."
     );
     reasons.push("Expected value versus the offered odds is below threshold.");
-  } else if (kelly.fraction < resolvedThresholds.minKellyFraction) {
+  } else if (kelly.fraction <= resolvedThresholds.minKellyFraction) {
     verdict = "PASS";
     addRiskFlag(
       riskFlags,
@@ -488,7 +503,7 @@ function evaluateBetDecision(input) {
       "Kelly fraction does not clear the minimum staking threshold."
     );
     reasons.push("Kelly fraction is below threshold.");
-  } else if (stakeRecommendation.recommendedStake < resolvedStakePolicy.minStake) {
+  } else if (stakeRecommendation.recommendedStake <= resolvedStakePolicy.minStake) {
     verdict = "PASS";
     addRiskFlag(
       riskFlags,
@@ -572,6 +587,7 @@ function evaluateBetDecision(input) {
 }
 
 module.exports = {
+  AUDIT_RECORD_SCHEMA_VERSION,
   appendDecisionLog,
   appendSettlement,
   BET_DECISION_SCHEMA,
@@ -596,7 +612,10 @@ module.exports = {
   calculateKellyFraction,
   applyStakeCaps,
   createDecisionLogTemplate,
+  createAmendmentRecord,
+  createEvaluationRecord,
   createId,
+  createSettlementAuditRecord,
   createSettlementRecord,
   evaluateBetDecision,
   generateResearchCandidates,
@@ -614,5 +633,6 @@ module.exports = {
   simulateBetCard,
   summarizeDecisionLogRecords,
   validateLiveTicket,
+  validateAuditRecord,
   validateBetInput
 };

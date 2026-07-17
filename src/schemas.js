@@ -1,5 +1,6 @@
 const { BET_INPUT_SCHEMA } = require("./validate-bet-input.js");
 const { LIVE_TICKET_SCHEMA } = require("./validate-live-ticket.js");
+const { AUDIT_RECORD_SCHEMA } = require("./audit/record-contract.js");
 
 const RESEARCH_PACKET_SCHEMA = Object.freeze({
   type: "object",
@@ -97,6 +98,7 @@ const BET_DECISION_SCHEMA = Object.freeze({
 });
 
 module.exports = {
+  AUDIT_RECORD_SCHEMA,
   BET_DECISION_SCHEMA,
   BET_INPUT_SCHEMA,
   LIVE_DECISION_SCHEMA,
