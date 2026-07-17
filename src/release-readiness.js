@@ -4,7 +4,9 @@ const { execFile } = require("node:child_process");
 
 const { getDecisionLogDashboard } = require("./analytics.js");
 const { getProviderSetupStatus } = require("./config/provider-requirements.js");
+const { getSupabaseSyncStatus } = require("./config/supabase-settings.js");
 const { getDataEdgeAudit } = require("./data-edge.js");
+const { readOutboxState } = require("./sync/outbox.js");
 const { getSystemAudit } = require("./system-audit.js");
 
 function execFileSafe(command, args = [], options = {}) {
@@ -183,9 +185,56 @@ function readinessStatus(summary) {
   return "ready";
 }
 
+async function resolveSyncHealth(options = {}) {
+  if (options.syncHealth && typeof options.syncHealth === "object") {
+    return {
+      configured: Boolean(options.syncHealth.configured),
+      enabled: Boolean(options.syncHealth.enabled),
+      pending: Number(options.syncHealth.pending) || 0,
+      retryableFailures: Number(options.syncHealth.retryableFailures) || 0,
+      terminalFailures: Number(options.syncHealth.terminalFailures) || 0,
+      synchronized: Number(options.syncHealth.synchronized) || 0,
+      integrityIssues: Number(options.syncHealth.integrityIssues) || 0,
+      secretReturned: false
+    };
+  }
+
+  const configuration = getSupabaseSyncStatus();
+
+  try {
+    const outbox = await readOutboxState({
+      outboxPath: options.outboxPath,
+      ledgerPath: options.logPath
+    });
+
+    return {
+      configured: configuration.configured,
+      enabled: false,
+      pending: outbox.pending.length,
+      retryableFailures: outbox.summary.retryableFailures,
+      terminalFailures: outbox.summary.terminalFailures,
+      synchronized: outbox.summary.synchronized,
+      integrityIssues: outbox.malformedLines.length + outbox.invalidEvents.length,
+      secretReturned: false
+    };
+  } catch (_error) {
+    return {
+      configured: configuration.configured,
+      enabled: false,
+      pending: 0,
+      retryableFailures: 0,
+      terminalFailures: 0,
+      synchronized: 0,
+      integrityIssues: 1,
+      secretReturned: false
+    };
+  }
+}
+
 async function getReleaseReadiness(options = {}) {
   const rootDir = path.resolve(options.rootDir ?? process.cwd());
   const packageJson = await readJsonFile(path.join(rootDir, "package.json"), {});
+  const syncHealth = await resolveSyncHealth(options);
   const [
     ciExists,
     docsExists,
@@ -264,7 +313,9 @@ async function getReleaseReadiness(options = {}) {
     "/api/candidates",
     "/api/best-mlb-targets",
     "/api/amend",
-    "/api/auto-update"
+    "/api/auto-update",
+    "/api/sync-health",
+    "/api/sync/run"
   ].every((endpoint) => serverText.includes(endpoint));
   const oddsCheckMessage = oddsReady
     ? "Verified odds provider live pricing is usable"
@@ -282,7 +333,51 @@ async function getReleaseReadiness(options = {}) {
       : oddsSaved
         ? "Restart the Bear Edge server or test the saved key from the dashboard so live pricing can be verified."
         : "Add and verify THE_ODDS_API_KEY in the dashboard or .env.local.";
+  const projectionState = syncHealth.integrityIssues > 0
+    ? {
+        status: "fail",
+        message: "Remote audit projection state is invalid",
+        gateStatus: "blocked",
+        action: "Repair the append-only synchronization outbox before relying on remote audit records."
+      }
+    : syncHealth.terminalFailures > 0
+      ? {
+          status: "fail",
+          message: "Remote audit projection has terminal failures",
+          gateStatus: "blocked",
+          action: "Resolve every terminal digest, schema, authentication, or reference failure before release."
+        }
+      : !syncHealth.configured
+        ? {
+            status: "warn",
+            message: "Supabase audit projection is not configured",
+            gateStatus: "not_configured",
+            action: "Configure the optional Supabase projection for centralized audit retention; local records remain authoritative."
+          }
+        : syncHealth.pending > 0 || syncHealth.retryableFailures > 0
+          ? {
+              status: "warn",
+              message: "Remote audit projection has pending retries",
+              gateStatus: "degraded",
+              action: "Allow the retry worker to drain pending records and investigate persistent provider availability failures."
+            }
+          : {
+              status: "pass",
+              message: "Remote audit projection is current",
+              gateStatus: "current",
+              action: null
+            };
   const evidenceGates = [
+    {
+      id: "remote-audit-projection",
+      label: "Remote audit projection",
+      status: projectionState.gateStatus,
+      complete: projectionState.status === "pass",
+      pending: syncHealth.pending,
+      retryableFailures: syncHealth.retryableFailures,
+      terminalFailures: syncHealth.terminalFailures,
+      action: projectionState.action ?? "Continue monitoring append-only synchronization health."
+    },
     {
       id: "decision-log-quality",
       label: "Decision-log quality",
@@ -328,6 +423,13 @@ async function getReleaseReadiness(options = {}) {
     check(systemAudit.readiness?.nodeAvailable || systemAudit.paths?.some((entry) => entry.label === "bundled node" && entry.exists) ? "pass" : "warn", "runtime", "Node runtime is available"),
     check(serveCliExists && launchCliExists ? "pass" : "fail", "runtime", "Serve and launch CLIs exist"),
     check(apiSurfaceReady ? "pass" : "fail", "runtime", "Operational API surface exists"),
+    check(
+      projectionState.status,
+      "analytics",
+      projectionState.message,
+      syncHealth,
+      projectionState.action
+    ),
     check(releaseScriptExists ? "pass" : "warn", "runtime", "Release-readiness audit script exists"),
     check(publicMlbProviderExists && publicNhlProviderExists ? "pass" : "warn", "providers", "Official public MLB/NHL stat adapters exist", null, "Restore src/live/providers/mlb.js and src/live/providers/nhl.js before generating sport stat candidates."),
     check(oddsReady ? "pass" : "warn", "providers", oddsCheckMessage, dataEdge.odds, oddsNextAction),
@@ -355,6 +457,7 @@ async function getReleaseReadiness(options = {}) {
     },
     git,
     providerSummary: providerSetup.summary,
+    syncHealth,
     dataEdge,
     lanes,
     evidenceGates,

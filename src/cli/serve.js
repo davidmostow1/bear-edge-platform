@@ -3,8 +3,15 @@
 const path = require("node:path");
 
 const { loadEnvFiles } = require("../config/env.js");
+const {
+  getSupabaseSyncStatus,
+  resolveSupabaseSettings
+} = require("../config/supabase-settings.js");
+const { safeErrorMessage } = require("../config/secrets.js");
 const { createServer } = require("../server.js");
 const { createAutoUpdateService } = require("../live/auto-update.js");
+const { createSupabaseClient } = require("../sync/supabase-client.js");
+const { createSyncWorker } = require("../sync/sync-worker.js");
 
 const PROJECT_ROOT = path.resolve(__dirname, "../..");
 loadEnvFiles({ rootDir: PROJECT_ROOT });
@@ -28,6 +35,11 @@ function parseArgs(argv) {
     if (value === "--host") {
       host = String(args[index + 1] ?? "").trim();
       index += 1;
+      continue;
+    }
+
+    if (value === "--lan") {
+      host = "0.0.0.0";
       continue;
     }
 
@@ -60,6 +72,37 @@ function parseArgs(argv) {
   return { autoUpdate, autoUpdateIntervalMs, host, port };
 }
 
+function createRuntimeSyncWorker() {
+  const configuration = getSupabaseSyncStatus();
+
+  if (!configuration.configured) {
+    return {
+      worker: createSyncWorker({ configured: false, enabled: false }),
+      configurationError: null
+    };
+  }
+
+  try {
+    const settings = resolveSupabaseSettings();
+    const client = createSupabaseClient(settings);
+
+    return {
+      worker: createSyncWorker({
+        client,
+        ownerUserId: settings.ownerUserId,
+        configured: true,
+        enabled: true
+      }),
+      configurationError: null
+    };
+  } catch (error) {
+    return {
+      worker: createSyncWorker({ configured: false, enabled: false }),
+      configurationError: safeErrorMessage(error)
+    };
+  }
+}
+
 async function main(argv = process.argv.slice(2)) {
   const { autoUpdate, autoUpdateIntervalMs, host, port } = parseArgs(argv);
   const autoUpdateService = autoUpdate
@@ -68,8 +111,10 @@ async function main(argv = process.argv.slice(2)) {
         oddsApiKey: process.env.THE_ODDS_API_KEY ?? process.env.ODDS_API_KEY
       })
     : null;
+  const { worker: syncWorker, configurationError } = createRuntimeSyncWorker();
   const server = createServer({
-    autoUpdateService
+    autoUpdateService,
+    syncWorker
   });
 
   await new Promise((resolve) => server.listen(port, host, () => resolve(undefined)));
@@ -80,11 +125,19 @@ async function main(argv = process.argv.slice(2)) {
   } else {
     process.stdout.write("Auto-update disabled.\n");
   }
+  if (syncWorker.start()) {
+    process.stdout.write("Supabase audit synchronization enabled.\n");
+  } else if (configurationError) {
+    process.stderr.write(`Supabase audit synchronization disabled: ${configurationError}\n`);
+  } else {
+    process.stdout.write("Supabase audit synchronization not configured; the local ledger remains authoritative.\n");
+  }
 
   const shutdown = async () => {
     if (autoUpdateService) {
       autoUpdateService.stop();
     }
+    await syncWorker.stop();
     await new Promise((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
     process.exit(0);
   };
@@ -103,6 +156,7 @@ if (require.main === module) {
 }
 
 module.exports = {
+  createRuntimeSyncWorker,
   main,
   parseArgs
 };

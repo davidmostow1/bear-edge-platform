@@ -51,6 +51,90 @@ test("HTTP API exposes schemas", async () => {
   });
 });
 
+test("HTTP API exposes safe synchronization health and runs the worker on demand", async () => {
+  const secret = "supabase-service-role-secret";
+  const previous = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  let runs = 0;
+  const status = {
+    provider: "supabase",
+    configured: true,
+    enabled: true,
+    started: true,
+    running: false,
+    pending: 1,
+    retryableFailures: 0,
+    terminalFailures: 0,
+    synchronized: 2,
+    oldestPendingAgeMs: 5000,
+    lastRunAt: null,
+    lastSuccessAt: null,
+    lastSafeError: null,
+    integrityIssues: 0,
+    secretReturned: false
+  };
+  const syncWorker = {
+    getStatus: async () => ({ ...status, pending: runs === 0 ? 1 : 0 }),
+    runNow: async () => {
+      runs += 1;
+      return {
+        status: "completed",
+        processed: 1,
+        synchronized: 1,
+        retryableFailures: 0,
+        terminalFailures: 0,
+        runAt: "2026-07-17T15:00:00.000Z"
+      };
+    }
+  };
+  process.env.SUPABASE_SERVICE_ROLE_KEY = secret;
+
+  try {
+    await withServer(async (baseUrl) => {
+      const healthResponse = await fetch(`${baseUrl}/api/sync-health`);
+      const health = await healthResponse.json();
+      const runResponse = await fetch(`${baseUrl}/api/sync/run`, { method: "POST" });
+      const run = await runResponse.json();
+
+      assert.equal(healthResponse.status, 200);
+      assert.equal(health.configured, true);
+      assert.equal(health.pending, 1);
+      assert.equal(runResponse.status, 200);
+      assert.equal(run.run.processed, 1);
+      assert.equal(run.health.pending, 0);
+      assert.equal(runs, 1);
+      assert.equal(JSON.stringify([health, run]).includes(secret), false);
+      assert.equal("url" in health, false);
+      assert.equal("authorization" in health, false);
+    }, { syncWorker });
+  } finally {
+    if (previous === undefined) {
+      delete process.env.SUPABASE_SERVICE_ROLE_KEY;
+    } else {
+      process.env.SUPABASE_SERVICE_ROLE_KEY = previous;
+    }
+  }
+});
+
+test("HTTP API keeps missing synchronization configuration nonfatal", async (t) => {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "bear-edge-sync-api-"));
+  t.after(() => fs.rmSync(tempDir, { recursive: true, force: true }));
+
+  await withServer(async (baseUrl) => {
+    const healthResponse = await fetch(`${baseUrl}/api/sync-health`);
+    const health = await healthResponse.json();
+    const runResponse = await fetch(`${baseUrl}/api/sync/run`, { method: "POST" });
+    const run = await runResponse.json();
+
+    assert.equal(healthResponse.status, 200);
+    assert.equal(health.enabled, false);
+    assert.equal(runResponse.status, 503);
+    assert.equal(run.error, "Supabase synchronization is disabled.");
+    assert.equal(typeof run.health.configured, "boolean");
+  }, {
+    outboxPath: path.join(tempDir, "sync_outbox.jsonl")
+  });
+});
+
 test("HTTP API parses DK Predictions visible board snapshots", async () => {
   await withServer(async (baseUrl) => {
     const response = await fetch(`${baseUrl}/api/dk-predictions-board-snapshot`, {
@@ -552,6 +636,46 @@ test("HTTP API exposes release readiness checks", async () => {
     assert.deepEqual(payload.trackedFiles.blockedMatches, []);
     assert.equal(JSON.stringify(payload).includes(process.env.THE_ODDS_API_KEY ?? "unlikely-secret-marker"), false);
   });
+});
+
+test("release readiness blocks on terminal synchronization failures", async () => {
+  const syncWorker = {
+    getStatus: async () => ({
+      provider: "supabase",
+      configured: true,
+      enabled: true,
+      started: true,
+      running: false,
+      pending: 0,
+      retryableFailures: 0,
+      terminalFailures: 1,
+      synchronized: 4,
+      oldestPendingAgeMs: null,
+      lastRunAt: "2026-07-17T15:00:00.000Z",
+      lastSuccessAt: "2026-07-17T14:59:00.000Z",
+      lastSafeError: "A remote record has a different digest",
+      integrityIssues: 0,
+      secretReturned: false
+    })
+  };
+
+  await withServer(async (baseUrl) => {
+    const response = await fetch(`${baseUrl}/api/release-readiness`);
+    const payload = await response.json();
+    const projectionGate = payload.evidenceGates.find(
+      (entry) => entry.id === "remote-audit-projection"
+    );
+    const projectionCheck = payload.checks.find(
+      (entry) => entry.message === "Remote audit projection has terminal failures"
+    );
+
+    assert.equal(response.status, 200);
+    assert.equal(payload.status, "blocked");
+    assert.equal(projectionGate.status, "blocked");
+    assert.equal(projectionGate.complete, false);
+    assert.equal(projectionCheck.status, "fail");
+    assert.equal(projectionCheck.detail.terminalFailures, 1);
+  }, { syncWorker });
 });
 
 test("release readiness warns when a configured odds key fails live pricing", async () => {

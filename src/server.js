@@ -40,6 +40,8 @@ const { getOddsKeyStatus, saveOddsApiKey, validateOddsApiKey } = require("./conf
 const { getProviderSetupStatus } = require("./config/provider-requirements.js");
 const { saveProviderApiKey } = require("./config/provider-key-settings.js");
 const { safeErrorMessage } = require("./config/secrets.js");
+const { getSupabaseSyncStatus } = require("./config/supabase-settings.js");
+const { readOutboxState } = require("./sync/outbox.js");
 const {
   AMENDMENT_INPUT_SCHEMA,
   AUDIT_RECORD_SCHEMA,
@@ -98,6 +100,44 @@ async function readJsonBody(request) {
   return JSON.parse(Buffer.concat(chunks).toString("utf8"));
 }
 
+function isLoopbackAddress(address) {
+  return address === "127.0.0.1"
+    || address === "::1"
+    || address === "::ffff:127.0.0.1";
+}
+
+async function getSyncHealth(options = {}) {
+  if (typeof options.syncWorker?.getStatus === "function") {
+    return options.syncWorker.getStatus();
+  }
+
+  const configuration = getSupabaseSyncStatus();
+  const outbox = await readOutboxState({
+    outboxPath: options.outboxPath,
+    ledgerPath: options.logPath
+  });
+
+  return {
+    provider: "supabase",
+    configured: configuration.configured,
+    enabled: false,
+    started: false,
+    running: false,
+    pending: outbox.pending.length,
+    retryableFailures: outbox.summary.retryableFailures,
+    terminalFailures: outbox.summary.terminalFailures,
+    synchronized: outbox.summary.synchronized,
+    oldestPendingAgeMs: outbox.summary.oldestPendingAt
+      ? Math.max(0, Date.now() - Date.parse(outbox.summary.oldestPendingAt))
+      : null,
+    lastRunAt: null,
+    lastSuccessAt: null,
+    lastSafeError: null,
+    integrityIssues: outbox.malformedLines.length + outbox.invalidEvents.length,
+    secretReturned: false
+  };
+}
+
 function createServer(options = {}) {
   return http.createServer(async (request, response) => {
     try {
@@ -135,6 +175,34 @@ function createServer(options = {}) {
         return jsonResponse(response, 200, { ok: true });
       }
 
+      if (request.method === "GET" && url.pathname === "/api/sync-health") {
+        return jsonResponse(response, 200, await getSyncHealth(options));
+      }
+
+      if (request.method === "POST" && url.pathname === "/api/sync/run") {
+        const health = await getSyncHealth(options);
+
+        if (!health.enabled || typeof options.syncWorker?.runNow !== "function") {
+          return jsonResponse(response, 503, {
+            error: "Supabase synchronization is disabled.",
+            health
+          });
+        }
+        if (!isLoopbackAddress(request.socket.remoteAddress)) {
+          return jsonResponse(response, 403, {
+            error: "Manual synchronization is restricted to the local machine."
+          });
+        }
+
+        const run = await options.syncWorker.runNow();
+        const updatedHealth = await getSyncHealth(options);
+
+        return jsonResponse(response, run.status === "failed" ? 502 : 200, {
+          run,
+          health: updatedHealth
+        });
+      }
+
       if (request.method === "GET" && url.pathname === "/api/system-audit") {
         const result = await getSystemAudit();
 
@@ -142,6 +210,7 @@ function createServer(options = {}) {
       }
 
       if (request.method === "GET" && url.pathname === "/api/release-readiness") {
+        const syncHealth = await getSyncHealth(options);
         const result = await getReleaseReadiness({
           rootDir: options.settingsRootDir ?? PROJECT_ROOT,
           fetchJsonImpl: process.env.BEAR_EDGE_TEST_MODE ? fetchJson : options.fetchJsonImpl,
@@ -151,7 +220,9 @@ function createServer(options = {}) {
             ? options.autoUpdateService.getStatus()
             : null,
           autoUpdateSnapshotPath: options.autoUpdateSnapshotPath,
-          logPath: options.logPath
+          logPath: options.logPath,
+          outboxPath: options.outboxPath,
+          syncHealth
         });
 
         return jsonResponse(response, 200, result);
