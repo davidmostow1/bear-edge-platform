@@ -34,6 +34,16 @@
 | 4 | `2026-07-17-bear-edge-operations-ui.md` | Honest interface terminology, provenance display, Statsig control fallback, LAN write protection, and operator docs | Plans 1 through 3 complete | Desktop, phone-sized, local, restart, and LAN safety checks pass |
 | 5 | `2026-07-17-bear-edge-full-audit.md` | Source, data, database, integration, mathematics, failure, traceability, and end-to-end evidence | Plans 1 through 4 complete | No unclassified requirement, file, relevant row, failure mode, or critical/high defect remains |
 
+## Program Progress
+
+- [x] Plan 1: Authoritative local ledger, persisted user-facing evaluations, displayed-target persistence, settlements, and amendments.
+- [ ] Plan 2: Supabase outbox and optional remote projection.
+- [ ] Plan 3: Calibration, chronological backtests, model registry, and promotion policy.
+- [ ] Plan 4: Operations interface, provenance display, and LAN write protection.
+- [ ] Plan 5: Full retained evidence audit and final traceability gate.
+
+Plan 1 completed through commit `79e3eee85bd6a3b5cfa5612116acd425a68d3851`. Full verification passed 166 of 166 tests, while release readiness remained truthfully limited to `PRICE_CHECK_ONLY` by provider, pricing, and calibration evidence gates.
+
 ## Working-Tree Strategy
 
 The current checkout contains pre-existing uncommitted work that is part of the product state. Do not create a clean worktree from `HEAD`, because that would omit those changes. Execute in the current checkout and use these controls:

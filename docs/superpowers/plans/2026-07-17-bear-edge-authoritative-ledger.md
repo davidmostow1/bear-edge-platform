@@ -61,7 +61,7 @@
 - Produces: `validateAuditRecord(record) -> { valid: boolean, issues: Array<{ path, message }> }`
 - Produces: `AUDIT_RECORD_SCHEMA_VERSION = "2.0.0"`
 
-- [ ] **Step 1: Write deterministic serialization tests**
+- [x] **Step 1: Write deterministic serialization tests**
 
 ```js
 const test = require("node:test");
@@ -82,7 +82,7 @@ test("canonicalStringify rejects non-finite numbers", () => {
 });
 ```
 
-- [ ] **Step 2: Run the focused test and confirm failure**
+- [x] **Step 2: Run the focused test and confirm failure**
 
 Run:
 
@@ -92,7 +92,7 @@ PATH="/Applications/ChatGPT.app/Contents/Resources/cua_node/bin:$PATH" node --te
 
 Expected: FAIL because `src/audit/canonical-json.js` does not exist.
 
-- [ ] **Step 3: Implement canonical serialization**
+- [x] **Step 3: Implement canonical serialization**
 
 ```js
 const crypto = require("node:crypto");
@@ -123,7 +123,7 @@ function contentDigest(value) {
 module.exports = { canonicalStringify, contentDigest };
 ```
 
-- [ ] **Step 4: Add complete record-builder tests**
+- [x] **Step 4: Add complete record-builder tests**
 
 Use this exact valid evaluation fixture in `test/record-contract.test.js`:
 
@@ -212,17 +212,17 @@ test("createEvaluationRecord emits stable identifiers and excludes digest from i
 });
 ```
 
-- [ ] **Step 5: Implement builders and validation**
+- [x] **Step 5: Implement builders and validation**
 
 Implement the exact canonical enum sets and field groups from Sections 6.3 and 7 of the approved specification. Generate `clientEventId` with `crypto.randomUUID()` when context does not provide one, generate `id` with the record prefix plus UUID, set `authority` to `local`, and compute `contentDigest` after omitting only the `contentDigest` property.
 
 The validator must reject missing required groups, invalid ISO timestamps, invalid UUIDs, non-finite probabilities, probabilities outside zero through one, unsupported verdicts, unsupported settlement outcomes, and a `BET` record whose model status is not `validated`.
 
-- [ ] **Step 6: Export the audit schema and public functions**
+- [x] **Step 6: Export the audit schema and public functions**
 
 Add `AUDIT_RECORD_SCHEMA` to `/schemas` through `src/schemas.js` and export the builders and validator from `src/index.js`.
 
-- [ ] **Step 7: Run focused tests and type checking**
+- [x] **Step 7: Run focused tests and type checking**
 
 ```bash
 PATH="/Applications/ChatGPT.app/Contents/Resources/cua_node/bin:$PATH" node --test test/record-contract.test.js
@@ -231,7 +231,7 @@ PATH="/Applications/ChatGPT.app/Contents/Resources/cua_node/bin:$PATH" npm run t
 
 Expected: all focused tests pass and type checking exits zero.
 
-- [ ] **Step 8: Commit Task 1**
+- [x] **Step 8: Commit Task 1**
 
 ```bash
 git add src/audit/canonical-json.js src/audit/record-contract.js src/schemas.js src/index.js test/record-contract.test.js
@@ -253,7 +253,7 @@ git commit -m "Add canonical audit record contract"
 - Produces: `readAuthoritativeLedger(options) -> { records, malformedLines, duplicateIds, digestConflicts }`
 - Produces: `AuthoritativeLedgerError` with stable `code`
 
-- [ ] **Step 1: Write ledger durability and integrity tests**
+- [x] **Step 1: Write ledger durability and integrity tests**
 
 ```js
 test("appendAuthoritativeRecord appends once and treats the same id and digest as idempotent", async () => {
@@ -292,7 +292,7 @@ test("appendAuthoritativeRecord exposes a flush failure and leaves no success re
 });
 ```
 
-- [ ] **Step 2: Confirm the tests fail before implementation**
+- [x] **Step 2: Confirm the tests fail before implementation**
 
 ```bash
 PATH="/Applications/ChatGPT.app/Contents/Resources/cua_node/bin:$PATH" node --test test/authoritative-ledger.test.js
@@ -300,15 +300,15 @@ PATH="/Applications/ChatGPT.app/Contents/Resources/cua_node/bin:$PATH" node --te
 
 Expected: FAIL because the module does not exist.
 
-- [ ] **Step 3: Implement serialized append and flush**
+- [x] **Step 3: Implement serialized append and flush**
 
 Use a module-level promise queue keyed by resolved ledger path. For each append, inspect existing identifiers, reject conflicts, open with `"a"`, write one canonical line, call `sync()`, and always call `close()` in `finally`. Wrap failures with codes `LEDGER_OPEN_FAILED`, `LEDGER_WRITE_FAILED`, `LEDGER_FLUSH_FAILED`, and `LEDGER_CLOSE_FAILED` while retaining the safe original message.
 
-- [ ] **Step 4: Keep legacy compatibility**
+- [x] **Step 4: Keep legacy compatibility**
 
 Change `appendDecisionLog` to detect schema version 2 records and call `appendAuthoritativeRecord`. Existing legacy records continue through the current append path until Tasks 3 through 5 convert every user-facing producer. Extend analytics reading to report duplicate identifiers and digest conflicts without mutating the file.
 
-- [ ] **Step 5: Run focused and analytics tests**
+- [x] **Step 5: Run focused and analytics tests**
 
 ```bash
 PATH="/Applications/ChatGPT.app/Contents/Resources/cua_node/bin:$PATH" node --test test/authoritative-ledger.test.js test/analytics.test.js
@@ -316,7 +316,7 @@ PATH="/Applications/ChatGPT.app/Contents/Resources/cua_node/bin:$PATH" node --te
 
 Expected: all tests pass.
 
-- [ ] **Step 6: Commit Task 2**
+- [x] **Step 6: Commit Task 2**
 
 ```bash
 git add src/audit/authoritative-ledger.js src/decision-log.js src/analytics.js test/authoritative-ledger.test.js test/analytics.test.js
@@ -340,7 +340,7 @@ git commit -m "Add durable authoritative decision ledger"
 - Consumes: `createEvaluationRecord`, `appendAuthoritativeRecord`
 - Produces: user-facing evaluation responses with `recordId`, `clientEventId`, `contentDigest`, `ledgerPath`, and `persistedAt`
 
-- [ ] **Step 1: Add failing command-line tests**
+- [x] **Step 1: Add failing command-line tests**
 
 ```js
 test("parseArgs rejects the removed --no-log option", () => {
@@ -350,7 +350,7 @@ test("parseArgs rejects the removed --no-log option", () => {
 
 Update the existing command execution test to assert `output.recordId`, `output.contentDigest`, and one persisted schema-version-2 line.
 
-- [ ] **Step 2: Add failing API tests**
+- [x] **Step 2: Add failing API tests**
 
 ```js
 test("POST /evaluate rejects writeLog false", async () => {
@@ -366,7 +366,7 @@ test("POST /evaluate rejects writeLog false", async () => {
 
 Add equivalent coverage for `/evaluate/live`.
 
-- [ ] **Step 3: Confirm tests fail for current behavior**
+- [x] **Step 3: Confirm tests fail for current behavior**
 
 ```bash
 PATH="/Applications/ChatGPT.app/Contents/Resources/cua_node/bin:$PATH" node --test test/tooling.test.js test/api.test.js test/live-ticket.test.js
@@ -374,19 +374,19 @@ PATH="/Applications/ChatGPT.app/Contents/Resources/cua_node/bin:$PATH" node --te
 
 Expected: the new tests fail because no-log behavior is still accepted and records use the legacy shape.
 
-- [ ] **Step 4: Remove user-facing no-log behavior**
+- [x] **Step 4: Remove user-facing no-log behavior**
 
 Remove `--no-log` from CLI usage and argument handling. In HTTP routes, return status 400 when `writeLog === false`. Keep `evaluateBetDecision` and `evaluateLiveTicket` pure for tests and backtests, but make `evaluateLiveTicketAndLog` always append.
 
-- [ ] **Step 5: Build canonical records before append**
+- [x] **Step 5: Build canonical records before append**
 
 Map the current decision result, ticket, research packet, source timestamps, market context, model status, edge values, stake values, and risk flags into `createEvaluationRecord`. Do not infer verified source status from screenshots or manual text.
 
-- [ ] **Step 6: Persist before output**
+- [x] **Step 6: Persist before output**
 
 Await `appendAuthoritativeRecord` before writing command-line output or calling `jsonResponse`. If append fails, return an explicit 500 response with the safe ledger error and no decision payload.
 
-- [ ] **Step 7: Run focused tests and commit**
+- [x] **Step 7: Run focused tests and commit**
 
 ```bash
 PATH="/Applications/ChatGPT.app/Contents/Resources/cua_node/bin:$PATH" node --test test/tooling.test.js test/api.test.js test/live-ticket.test.js
@@ -409,7 +409,7 @@ git commit -m "Require persistence for user-facing evaluations"
 - Consumes: `getBestMlbTargets(options)`, `createEvaluationRecord`, `appendAuthoritativeRecord`
 - Produces: `persistDisplayedTargets(result, context) -> { ...result, best: Array<target with auditRecord>, persistence }`
 
-- [ ] **Step 1: Write failing recommendation persistence tests**
+- [x] **Step 1: Write failing recommendation persistence tests**
 
 ```js
 test("persistDisplayedTargets logs every returned row before returning", async () => {
@@ -428,7 +428,7 @@ test("persistDisplayedTargets never labels research-only output BET", async () =
 });
 ```
 
-- [ ] **Step 2: Confirm tests fail**
+- [x] **Step 2: Confirm tests fail**
 
 ```bash
 PATH="/Applications/ChatGPT.app/Contents/Resources/cua_node/bin:$PATH" node --test test/recommendation-service.test.js
@@ -436,19 +436,19 @@ PATH="/Applications/ChatGPT.app/Contents/Resources/cua_node/bin:$PATH" node --te
 
 Expected: FAIL because the service does not exist.
 
-- [ ] **Step 3: Implement stable displayed-record identity**
+- [x] **Step 3: Implement stable displayed-record identity**
 
 Derive a UUIDv5-compatible deterministic 128-bit identifier from the SHA-256 digest of `sourceMode`, `fetchedAt`, event identifier, market family, participant identifier, side, line, sportsbook, price timestamp, model identifier, and model version. Set UUID version and variant bits before formatting. Repeated rendering of the exact same captured target must resolve to the same `clientEventId`; a new source or price timestamp must produce a new identifier.
 
-- [ ] **Step 4: Map classification safely**
+- [x] **Step 4: Map classification safely**
 
 Use the priced evaluation verdict only when present. Unpriced targets and provider failures become `WAIT` with `PRICE_CHECK_ONLY`. Any model status other than `validated` becomes `WAIT` even when a nested legacy evaluation says `BET`.
 
-- [ ] **Step 5: Integrate the best-target route**
+- [x] **Step 5: Integrate the best-target route**
 
 The route must await `persistDisplayedTargets` and return no target list if any required append fails. Include persistence count and record identifiers in the response.
 
-- [ ] **Step 6: Run focused and API tests, then commit**
+- [x] **Step 6: Run focused and API tests, then commit**
 
 ```bash
 PATH="/Applications/ChatGPT.app/Contents/Resources/cua_node/bin:$PATH" node --test test/recommendation-service.test.js test/api.test.js
@@ -472,7 +472,7 @@ git commit -m "Persist displayed best-target classifications"
 - Produces: `appendAmendment(input, options)` that preserves the original record
 - Produces: analytics that resolve the latest valid amendment chain
 
-- [ ] **Step 1: Write failing orphan and conflict tests**
+- [x] **Step 1: Write failing orphan and conflict tests**
 
 ```js
 test("appendSettlement rejects an unknown evaluation id", async () => {
@@ -494,21 +494,21 @@ test("a settlement correction is an amendment and preserves both records", async
 });
 ```
 
-- [ ] **Step 2: Confirm focused tests fail**
+- [x] **Step 2: Confirm focused tests fail**
 
 ```bash
 PATH="/Applications/ChatGPT.app/Contents/Resources/cua_node/bin:$PATH" node --test test/analytics.test.js test/api.test.js
 ```
 
-- [ ] **Step 3: Implement reference validation and amendments**
+- [x] **Step 3: Implement reference validation and amendments**
 
 Read the authoritative ledger before accepting settlement or amendment writes. Reject unknown evaluations, unknown settlements, and amendment loops. Preserve the existing legacy-orphan reporting for old files, but reject new orphan writes.
 
-- [ ] **Step 4: Remove the three-win gate from release qualification**
+- [x] **Step 4: Remove the three-win gate from release qualification**
 
 Keep `validationGate` in analytics as descriptive history. Rename its release-readiness label to `Recent win streak (descriptive)` and ensure `complete` does not affect model status, bet-call permission, or release score.
 
-- [ ] **Step 5: Run the full Plan 1 verification**
+- [x] **Step 5: Run the full Plan 1 verification**
 
 ```bash
 PATH="/Applications/ChatGPT.app/Contents/Resources/cua_node/bin:$PATH" npm run verify
@@ -517,10 +517,21 @@ PATH="/Applications/ChatGPT.app/Contents/Resources/cua_node/bin:$PATH" npm run a
 
 Expected: all tests pass; release output remains blocked from predictive claims unless real calibration evidence exists.
 
-- [ ] **Step 6: Commit Task 5**
+- [x] **Step 6: Commit Task 5**
 
 ```bash
 git add src/analytics.js src/server.js src/schemas.js src/index.js src/release-readiness.js test/analytics.test.js test/api.test.js
 git diff --cached --check
 git commit -m "Enforce settlement and amendment integrity"
 ```
+
+## Phase 1 Completion Result
+
+- Completed on branch `codex/product-hardening-ci` through commit `79e3eee85bd6a3b5cfa5612116acd425a68d3851`.
+- Task commits: `c3ae915`, `0fb132e`, `09752d2`, `0bc6164`, and `79e3eee`.
+- `npm run verify` passed TypeScript checking and 166 of 166 tests with zero failures.
+- `npm run audit:release` completed with `shippable-with-warnings`, score 85 of 100, and `PRICE_CHECK_ONLY` betting permission.
+- The release audit no longer scores the three-win streak. `Recent win streak (descriptive)` remains visible as historical context only.
+- Current odds evidence remains blocked by `ODDS_PROVIDER_UNVERIFIED`, `NO_PRICED_CANDIDATES`, and `BOOKMAKER_MISMATCH`; this correctly prevents production bet authorization.
+- Retained release evidence: `data/reports/release_readiness.json`, SHA-256 `0842c6ae8dd65baf2f4984a028ac50211893537689d6079696835fd58d796ad0`.
+- Retained release summary: `data/reports/release_readiness.md`, SHA-256 `35cf51a12ac3e608345cf9d41722341a5074ea50292ca5a751f37828c66411be`.
