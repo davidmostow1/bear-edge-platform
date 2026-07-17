@@ -21,6 +21,11 @@ const {
   evaluatePromotion,
   loadModelRegistry
 } = require("./model-registry.js");
+const { calculateClosingLineValue } = require("../analytics.js");
+const {
+  americanToImpliedProbability,
+  normalizeTwoWayNoVig
+} = require("../index.js");
 
 const REPORT_SCHEMA_VERSION = "1.0.0";
 const PACKAGE_ROOT = path.resolve(__dirname, "../..");
@@ -240,7 +245,7 @@ function collectSources(rows, manifestSourceDigests) {
   });
 
   const sources = [...byIdentifier.values()].sort((left, right) => (
-    left.sourceIdentifier.localeCompare(right.sourceIdentifier)
+    compareStrings(left.sourceIdentifier, right.sourceIdentifier)
   ));
   const sourceDigests = [...new Set(sources.map((source) => source.contentDigest))]
     .sort(compareStrings);
@@ -333,14 +338,11 @@ function buildSplitSummary(rows, buckets) {
   };
 }
 
-function americanImpliedProbability(price) {
-  return price > 0 ? 100 / (price + 100) : Math.abs(price) / (Math.abs(price) + 100);
-}
-
 function noVigProbability(price, oppositePrice) {
-  const selected = americanImpliedProbability(price);
-  const opposite = americanImpliedProbability(oppositePrice);
-  return selected / (selected + opposite);
+  return normalizeTwoWayNoVig(
+    americanToImpliedProbability(price),
+    americanToImpliedProbability(oppositePrice)
+  ).sideA;
 }
 
 function unitProfit(row) {
@@ -350,22 +352,28 @@ function unitProfit(row) {
   return row.price > 0 ? row.price / 100 : 100 / Math.abs(row.price);
 }
 
-function intervalContaining(interval, observed) {
-  return {
-    lower: Math.min(interval.lower, observed),
-    upper: Math.max(interval.upper, observed)
-  };
+function requireObservedInInterval(interval, observed, metricName) {
+  if (observed < interval.lower - 1e-12 || observed > interval.upper + 1e-12) {
+    throw new TypeError(
+      `${metricName} percentile bootstrap interval does not contain its observed value.`
+    );
+  }
+  return interval;
 }
 
-function bootstrapMean(values, settings) {
+function bootstrapMean(values, settings, metricName) {
   const result = bootstrapMeanInterval(values, {
     samples: settings.resamples,
     confidence: settings.confidenceLevel,
     seed: settings.seed
   });
+  const interval = requireObservedInInterval({
+    lower: result.lower,
+    upper: result.upper
+  }, result.mean, metricName);
   return {
     mean: result.mean,
-    interval: intervalContaining({ lower: result.lower, upper: result.upper }, result.mean)
+    interval
   };
 }
 
@@ -392,16 +400,16 @@ function percentile(sortedValues, probability) {
     + fraction * (sortedValues[upperIndex] - sortedValues[lowerIndex]);
 }
 
-function percentileInterval(values, confidenceLevel, observed) {
+function percentileInterval(values, confidenceLevel, observed, metricName) {
   if (values.length < 2) {
     throw new TypeError("Bootstrap metric requires at least two finite resample values.");
   }
   values.sort((left, right) => left - right);
   const tail = (1 - confidenceLevel) / 2;
-  return intervalContaining({
+  return requireObservedInInterval({
     lower: percentile(values, tail),
     upper: percentile(values, 1 - tail)
-  }, observed);
+  }, observed, metricName);
 }
 
 function bootstrapCalibration(metrics, buckets, observed, settings) {
@@ -409,18 +417,41 @@ function bootstrapCalibration(metrics, buckets, observed, settings) {
   const eceValues = [];
   const slopeValues = [];
   const interceptValues = [];
+  const maximumAttempts = settings.resamples * 10;
+  let attemptedResamples = 0;
 
-  for (let sampleIndex = 0; sampleIndex < settings.resamples; sampleIndex += 1) {
+  while (
+    (eceValues.length < settings.resamples || slopeValues.length < settings.resamples)
+    && attemptedResamples < maximumAttempts
+  ) {
     const sample = Array.from(
       { length: metrics.length },
       () => metrics[Math.floor(random() * metrics.length)]
     );
-    eceValues.push(expectedCalibrationError(sample, buckets).value);
+    if (eceValues.length < settings.resamples) {
+      eceValues.push(expectedCalibrationError(sample, buckets).value);
+    }
     const fit = fitCalibrationLine(sample);
-    if (fit.converged && Number.isFinite(fit.slope) && Number.isFinite(fit.intercept)) {
+    if (
+      slopeValues.length < settings.resamples
+      && fit.converged
+      && Number.isFinite(fit.slope)
+      && Number.isFinite(fit.intercept)
+    ) {
       slopeValues.push(fit.slope);
       interceptValues.push(fit.intercept);
     }
+    attemptedResamples += 1;
+  }
+
+  if (
+    eceValues.length < settings.resamples
+    || slopeValues.length < settings.resamples
+    || interceptValues.length < settings.resamples
+  ) {
+    throw new TypeError(
+      `Calibration percentile bootstrap produced ${slopeValues.length} successful fits from ${attemptedResamples} attempts; ${settings.resamples} are required.`
+    );
   }
 
   return {
@@ -428,19 +459,23 @@ function bootstrapCalibration(metrics, buckets, observed, settings) {
       expectedCalibrationError: percentileInterval(
         eceValues,
         settings.confidenceLevel,
-        observed.expectedCalibrationError
+        observed.expectedCalibrationError,
+        "expectedCalibrationError"
       ),
       calibrationSlope: percentileInterval(
         slopeValues,
         settings.confidenceLevel,
-        observed.calibrationSlope
+        observed.calibrationSlope,
+        "calibrationSlope"
       ),
       calibrationIntercept: percentileInterval(
         interceptValues,
         settings.confidenceLevel,
-        observed.calibrationIntercept
+        observed.calibrationIntercept,
+        "calibrationIntercept"
       )
     },
+    attemptedResamples,
     successfulResamples: {
       expectedCalibrationError: eceValues.length,
       calibrationSlope: slopeValues.length,
@@ -534,23 +569,34 @@ function buildEvaluation(rows, buckets, policy, settings) {
   const logLossDegradation = modelLogLosses.map(
     (value, index) => value - baselineLogLosses[index]
   );
-  const closingLineValues = settled.map((row, index) => (
-    noVigProbability(row.closingPrice.price, row.closingPrice.oppositePrice)
-    - baselineProbabilities[index]
+  const closingLineValues = settled.map((row) => (
+    calculateClosingLineValue(row.price, row.closingPrice.price)
   ));
   const roiValues = settled.map(unitProfit);
   const observationDigest = settledObservationSetDigest(settled);
-  const brierInterval = bootstrapMean(modelBrierLosses, settings);
-  const logLossInterval = bootstrapMean(modelLogLosses, settings);
+  const brierInterval = bootstrapMean(modelBrierLosses, settings, "brierScore");
+  const logLossInterval = bootstrapMean(modelLogLosses, settings, "logLoss");
   const calibrationBootstrap = bootstrapCalibration(metrics, buckets, {
     expectedCalibrationError: summary.expectedCalibrationError,
     calibrationSlope: summary.calibration.slope,
     calibrationIntercept: summary.calibration.intercept
   }, settings);
-  const closingLineValue = bootstrapMean(closingLineValues, settings);
-  const roi = bootstrapMean(roiValues, settings);
-  const brierComparison = bootstrapMean(brierDegradation, settings);
-  const logLossComparison = bootstrapMean(logLossDegradation, settings);
+  const closingLineValue = bootstrapMean(
+    closingLineValues,
+    settings,
+    "closingLineValue"
+  );
+  const roi = bootstrapMean(roiValues, settings, "roi");
+  const brierComparison = bootstrapMean(
+    brierDegradation,
+    settings,
+    "brierScoreDegradation"
+  );
+  const logLossComparison = bootstrapMean(
+    logLossDegradation,
+    settings,
+    "logLossDegradation"
+  );
 
   return {
     predictionCount: summary.predictionCount,
@@ -588,6 +634,7 @@ function buildEvaluation(rows, buckets, policy, settings) {
         logLoss: logLossInterval.interval,
         ...calibrationBootstrap.intervals
       },
+      attemptedResamples: calibrationBootstrap.attemptedResamples,
       successfulResamples: calibrationBootstrap.successfulResamples
     },
     byLineRange: performanceBreakdown(settled, lineRangeKey),

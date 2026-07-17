@@ -11,11 +11,17 @@ const {
   chronologicalSplit
 } = require("../src/calibration/dataset.js");
 const {
+  bootstrapMeanInterval,
   brierScore,
   expectedCalibrationError,
   fitCalibrationLine,
   logLoss
 } = require("../src/calibration/metrics.js");
+const { calculateClosingLineValue } = require("../src/analytics.js");
+const {
+  americanToImpliedProbability,
+  normalizeTwoWayNoVig
+} = require("../src/index.js");
 const { loadModelRegistry } = require("../src/calibration/model-registry.js");
 const { buildCalibrationReport } = require("../src/calibration/report.js");
 
@@ -158,6 +164,35 @@ test("evaluation evidence uses exact metrics, buckets, baseline observations, an
   const report = buildCalibrationReport(rows, OPTIONS);
   const expectedEce = expectedCalibrationError(metricRows, BUCKETS);
   const expectedFit = fitCalibrationLine(metricRows);
+  const baselineMetrics = split.evaluation.map((row) => {
+    const normalized = normalizeTwoWayNoVig(
+      americanToImpliedProbability(row.price),
+      americanToImpliedProbability(row.oppositePrice)
+    );
+    return { probability: normalized.sideA, outcome: row.outcome };
+  });
+  const brierDegradation = metricRows.map((row, index) => (
+    brierScore([row]) - brierScore([baselineMetrics[index]])
+  ));
+  const logLossDegradation = metricRows.map((row, index) => (
+    logLoss([row]) - logLoss([baselineMetrics[index]])
+  ));
+  const expectedBrierComparison = bootstrapMeanInterval(brierDegradation, {
+    samples: 2000,
+    confidence: 0.95,
+    seed: 271828
+  });
+  const expectedLogLossComparison = bootstrapMeanInterval(logLossDegradation, {
+    samples: 2000,
+    confidence: 0.95,
+    seed: 271828
+  });
+  const expectedClosingLineValue = bootstrapMeanInterval(
+    split.evaluation.map((row) => (
+      calculateClosingLineValue(row.price, row.closingPrice.price)
+    )),
+    { samples: 2000, confidence: 0.95, seed: 271828 }
+  );
 
   approximatelyEqual(report.evaluation.brierScore, brierScore(metricRows));
   approximatelyEqual(report.evaluation.brierScore, 0.16);
@@ -184,6 +219,12 @@ test("evaluation evidence uses exact metrics, buckets, baseline observations, an
   assert.equal(report.evaluation.uncertainty.resamples, 2000);
   assert.equal(report.evaluation.uncertainty.confidenceLevel, 0.95);
   assert.equal(report.evaluation.uncertainty.seed, 271828);
+  assert.deepEqual(report.evaluation.uncertainty.successfulResamples, {
+    expectedCalibrationError: 2000,
+    calibrationSlope: 2000,
+    calibrationIntercept: 2000
+  });
+  assert.ok(report.evaluation.uncertainty.attemptedResamples >= 2000);
   assert.deepEqual(
     Object.keys(report.evaluation.uncertainty.intervals).sort(),
     [
@@ -194,27 +235,27 @@ test("evaluation evidence uses exact metrics, buckets, baseline observations, an
       "logLoss"
     ]
   );
-  assert.ok(report.evaluation.closingLineValue.interval.lower > 0);
+  assert.deepEqual(report.evaluation.closingLineValue, {
+    mean: expectedClosingLineValue.mean,
+    interval: {
+      lower: expectedClosingLineValue.lower,
+      upper: expectedClosingLineValue.upper
+    }
+  });
   assert.ok(report.evaluation.roi.interval.lower <= report.evaluation.roi.mean);
   assert.ok(report.evaluation.roi.interval.upper >= report.evaluation.roi.mean);
   approximatelyEqual(
     report.evaluation.brierScore - report.evaluation.baseline.brierScore,
     -0.09
   );
-  assert.ok(
-    report.evaluation.baseline.brierScoreDegradationInterval.lower <= -0.09
-  );
-  assert.ok(
-    report.evaluation.baseline.brierScoreDegradationInterval.upper >= -0.09
-  );
-  assert.ok(
-    report.evaluation.baseline.logLossDegradationInterval.lower
-      <= report.evaluation.logLoss - report.evaluation.baseline.logLoss
-  );
-  assert.ok(
-    report.evaluation.baseline.logLossDegradationInterval.upper
-      >= report.evaluation.logLoss - report.evaluation.baseline.logLoss
-  );
+  assert.deepEqual(report.evaluation.baseline.brierScoreDegradationInterval, {
+    lower: expectedBrierComparison.lower,
+    upper: expectedBrierComparison.upper
+  });
+  assert.deepEqual(report.evaluation.baseline.logLossDegradationInterval, {
+    lower: expectedLogLossComparison.lower,
+    upper: expectedLogLossComparison.upper
+  });
   assert.deepEqual(report.policy.thresholds, report.reportEvidence.promotionPolicy);
   assert.equal(report.promotion.passed, false);
   assert.ok(report.promotion.checks.every((check) => (
@@ -266,9 +307,9 @@ test("generated evidence satisfies the strict Task 3 report contract", () => {
   );
 });
 
-test("training changes cannot alter evaluation metrics or promotion checks", () => {
+test("training and calibration changes cannot alter evaluation metrics or promotion checks", () => {
   const rows = validRows();
-  const changedTraining = rows.map((row, index) => index < 30
+  const changedTrainingAndCalibration = rows.map((row, index) => index < 40
     ? {
         ...row,
         outcome: row.outcome === 1 ? 0 : 1,
@@ -279,7 +320,7 @@ test("training changes cannot alter evaluation metrics or promotion checks", () 
       }
     : row);
   const before = buildCalibrationReport(rows, OPTIONS);
-  const after = buildCalibrationReport(changedTraining, OPTIONS);
+  const after = buildCalibrationReport(changedTrainingAndCalibration, OPTIONS);
 
   assert.notEqual(after.dataset.datasetDigest, before.dataset.datasetDigest);
   assert.notEqual(after.reportDigest, before.reportDigest);
@@ -323,6 +364,23 @@ test("every settled evaluation observation requires a final closing price", () =
   assert.throws(
     () => buildCalibrationReport(preliminaryClose, OPTIONS),
     /final closing price.*prediction-050/i
+  );
+});
+
+test("calibration bootstrap fails closed when it cannot obtain the registered fit count", () => {
+  const evaluationOutcomes = [
+    { predictedProbability: 0.2, outcome: 0 },
+    { predictedProbability: 0.2, outcome: 1 },
+    { predictedProbability: 0.8, outcome: 0 },
+    { predictedProbability: 0.8, outcome: 1 }
+  ];
+  const rows = Array.from({ length: 20 }, (_unused, index) => (
+    calibrationRow(index, index < 16 ? {} : evaluationOutcomes[index - 16])
+  ));
+
+  assert.throws(
+    () => buildCalibrationReport(rows, OPTIONS),
+    /produced \d+ successful fits from 20000 attempts; 2000 are required/
   );
 });
 
@@ -418,4 +476,15 @@ test("CLI writes formatted deterministic JSON and rejects bad flags or rows", ()
   assert.notEqual(invalidRows.status, 0);
   assert.match(invalidRows.stderr, /invalid calibration row/i);
   assert.equal(fs.existsSync(invalidOutputPath), false);
+
+  const packed = spawnSync("npm", ["pack", "--dry-run", "--json"], {
+    cwd: ROOT,
+    encoding: "utf8"
+  });
+  assert.equal(packed.status, 0, packed.stderr);
+  const packageFiles = JSON.parse(packed.stdout)[0].files.map((file) => file.path);
+  assert.ok(
+    packageFiles.includes("script/build_calibration_report.js"),
+    "portable package must include the calibrate command target"
+  );
 });
