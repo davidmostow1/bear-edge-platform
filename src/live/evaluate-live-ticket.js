@@ -23,13 +23,61 @@ function finiteOrNull(value) {
   return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
 
+function modelEvidenceForResult(result) {
+  if (result.kind === "parlay") {
+    return result.legs.map((leg) => leg.modelEvidence);
+  }
+
+  return [result.modelEvidence];
+}
+
+function auditModelFromEvidence(evidenceList) {
+  const evidence = evidenceList.filter(Boolean);
+  const primary = evidence[0] ?? {};
+  const allValidated = evidence.length > 0 && evidence.every((entry) => entry.validated === true);
+  const modelIds = new Set(evidence.map((entry) => entry.modelId).filter(Boolean));
+  const modelVersions = new Set(evidence.map((entry) => entry.modelVersion).filter(Boolean));
+  const hasCallerOverride = evidence.some((entry) => (
+    entry.probabilitySource === "caller_probability_override"
+  ));
+  const hasInternalProbability = evidence.some((entry) => (
+    entry.probabilitySource !== "caller_probability_override"
+  ));
+  const registryStatuses = new Set(evidence.map((entry) => entry.registryStatus).filter((status) => (
+    ["research_only", "shadow", "validated", "retired"].includes(status)
+  )));
+
+  return {
+    allValidated,
+    modelId: hasCallerOverride
+      ? hasInternalProbability ? "multiple_models" : "operator_probability_input"
+      : modelIds.size === 1 ? [...modelIds][0] : modelIds.size > 1 ? "multiple_models" : "unregistered_model",
+    modelVersion:
+      hasCallerOverride
+        ? hasInternalProbability ? "multiple_versions" : "1.0.0"
+        : modelVersions.size === 1
+        ? [...modelVersions][0]
+        : modelVersions.size > 1 ? "multiple_versions" : "unknown",
+    modelStatus:
+      allValidated
+        ? "validated"
+        : registryStatuses.size === 1 && !registryStatuses.has("validated")
+          ? [...registryStatuses][0]
+          : "research_only",
+    calibrationReportId: allValidated && evidence.length === 1
+      ? primary.calibrationReportId ?? null
+      : null
+  };
+}
+
 function createLiveEvaluationAuditRecord(ticket, result, context = {}) {
   const createdAt = context.createdAt ?? new Date().toISOString();
   const primaryLeg = result.legs?.[0] ?? result;
   const primaryTicketLeg = ticket.legs[0];
   const isParlay = result.kind === "parlay";
-  const allModelsValidated = ticket.legs.every((leg) => leg.calibrationStatus === "validated");
-  const modelStatus = context.modelStatus ?? (allModelsValidated ? "validated" : "research_only");
+  const modelEvidence = modelEvidenceForResult(result);
+  const auditModel = auditModelFromEvidence(modelEvidence);
+  const modelStatus = auditModel.modelStatus;
   const permission = context.permission ?? "PRICE_CHECK_ONLY";
   const reasons = [...result.reasons];
   const riskFlags = result.riskFlags.map((flag) => ({ ...flag }));
@@ -88,7 +136,8 @@ function createLiveEvaluationAuditRecord(ticket, result, context = {}) {
     minStake: ticket.livePolicy.minStake,
     recentWeight: ticket.livePolicy.recentWeight,
     requireCalibratedModel: ticket.livePolicy.requireCalibratedModel,
-    requireMarketTimestamp: ticket.livePolicy.requireMarketTimestamp
+    requireMarketTimestamp: ticket.livePolicy.requireMarketTimestamp,
+    modelEvidence
   });
 
   return createEvaluationRecord({
@@ -109,7 +158,9 @@ function createLiveEvaluationAuditRecord(ticket, result, context = {}) {
       awayTeam: null
     },
     market: {
-      marketFamily: isParlay ? "parlay" : primaryLeg.marketType,
+      marketFamily: isParlay
+        ? "parlay"
+        : primaryLeg.modelEvidence?.marketFamily ?? primaryLeg.marketType,
       marketType: isParlay ? "parlay" : primaryLeg.marketType,
       participantId: isParlay ? null : String(primaryLeg.source?.playerId ?? "") || null,
       participantName: isParlay ? null : primaryLeg.source?.playerName ?? null,
@@ -144,11 +195,15 @@ function createLiveEvaluationAuditRecord(ticket, result, context = {}) {
       verificationStatus: "official_context_only"
     })),
     model: {
-      modelId: "live_poisson_count_model",
-      modelVersion: "1.0.0",
-      probabilityMethod: isParlay ? "leg_probability_product" : "poisson_market_adjusted",
+      modelId: auditModel.modelId,
+      modelVersion: auditModel.modelVersion,
+      probabilityMethod: isParlay
+        ? "leg_probability_product"
+        : primaryLeg.modelEvidence?.probabilitySource === "caller_probability_override"
+          ? "operator_supplied_market_adjusted"
+          : "poisson_market_adjusted",
       modelStatus,
-      calibrationReportId: context.calibrationReportId ?? null,
+      calibrationReportId: auditModel.calibrationReportId,
       trainingCutoff: null,
       sampleSize: result.researchPacket.sources.reduce((total, source) => {
         return total + (finiteOrNull(source.recentPerGame) === null ? 0 : 1);
@@ -187,8 +242,9 @@ function createLiveEvaluationAuditRecord(ticket, result, context = {}) {
       gateResults: [
         {
           gate: "model_calibration",
-          passed: modelStatus === "validated",
-          reasonCode: modelStatus === "validated" ? null : "MODEL_CALIBRATION_REQUIRED"
+          passed: auditModel.allValidated,
+          reasonCode: auditModel.allValidated ? null : "MODEL_CALIBRATION_REQUIRED",
+          evidence: modelEvidence.length === 1 ? modelEvidence[0] : modelEvidence
         },
         {
           gate: "operational_permission",
@@ -238,7 +294,8 @@ async function evaluateLiveTicket(ticket, options = {}) {
     legResults.push(
       evaluateLiveLeg(leg, snapshot, {
         bankroll: ticket.bankroll,
-        livePolicy: ticket.livePolicy
+        livePolicy: ticket.livePolicy,
+        modelRegistryOptions: options.modelRegistryOptions
       })
     );
   }
@@ -253,14 +310,20 @@ async function evaluateLiveTicket(ticket, options = {}) {
           ...legResults[0]
         };
 
-  const decisionLog = createLiveEvaluationAuditRecord(ticket, {
-    ...result,
-    researchPacket
-  }, options.auditContext);
-
-  return {
+  const resultWithEvidence = {
     ...result,
     researchPacket,
+    modelEvidence: ticket.kind === "parlay"
+      ? {
+          validated: legResults.length > 0 && legResults.every((leg) => leg.modelEvidence.validated),
+          models: legResults.map((leg) => leg.modelEvidence)
+        }
+      : legResults[0].modelEvidence
+  };
+  const decisionLog = createLiveEvaluationAuditRecord(ticket, resultWithEvidence, options.auditContext);
+
+  return {
+    ...resultWithEvidence,
     decisionLog
   };
 }

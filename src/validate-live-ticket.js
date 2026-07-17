@@ -28,6 +28,9 @@ const LIVE_TICKET_SCHEMA = Object.freeze({
           marketOdds: { type: "number" },
           oppositeOdds: { type: "number" },
           modelProbabilityOverride: { type: "number", minimum: 0, maximum: 1 },
+          calibrationStatus: { type: "string", enum: ["validated", "research_only", "unknown"] },
+          modelId: { type: "string", minLength: 1 },
+          modelVersion: { type: "string", minLength: 1 },
           recentWeight: { type: "number", minimum: 0, maximum: 1 },
           marketWeight: { type: "number", minimum: 0, maximum: 1 },
           minEvRoi: { type: "number" },
@@ -124,6 +127,21 @@ function validateLiveLeg(leg, index, issues) {
     pushIssue(issues, `legs[${index}].source`, "Expected an object.");
   }
 
+  if (leg.calibrationStatus !== undefined &&
+      !["validated", "research_only", "unknown"].includes(leg.calibrationStatus)) {
+    pushIssue(
+      issues,
+      `legs[${index}].calibrationStatus`,
+      "Expected one of: validated, research_only, unknown."
+    );
+  }
+
+  for (const field of ["modelId", "modelVersion"]) {
+    if (leg[field] !== undefined && (typeof leg[field] !== "string" || !leg[field].trim())) {
+      pushIssue(issues, `legs[${index}].${field}`, "Expected a non-empty string when supplied.");
+    }
+  }
+
   return {
     id: leg.id,
     label: typeof leg.label === "string" ? leg.label : leg.id,
@@ -152,6 +170,15 @@ function validateLiveLeg(leg, index, issues) {
       leg.marketWeight === undefined
         ? undefined
         : readNumber(leg.marketWeight, `legs[${index}].marketWeight`, issues, { min: 0, max: 1 }),
+    calibrationStatus:
+      leg.calibrationStatus === undefined
+        ? leg.modelProbabilityOverride === undefined ? "unknown" : "research_only"
+        : leg.calibrationStatus,
+    modelId: typeof leg.modelId === "string" && leg.modelId.trim() ? leg.modelId.trim() : undefined,
+    modelVersion:
+      typeof leg.modelVersion === "string" && leg.modelVersion.trim()
+        ? leg.modelVersion.trim()
+        : undefined,
     modelProbabilityOverride:
       leg.modelProbabilityOverride === undefined
         ? undefined
@@ -208,6 +235,14 @@ function validateLiveTicket(input) {
     ...DEFAULT_LIVE_POLICY,
     ...(isPlainObject(input.livePolicy) ? input.livePolicy : {})
   };
+
+  if (isPlainObject(input.livePolicy) && input.livePolicy.requireCalibratedModel === false) {
+    pushIssue(
+      issues,
+      "livePolicy.requireCalibratedModel",
+      "Model calibration enforcement cannot be disabled."
+    );
+  }
 
   if (issues.length > 0) {
     throw new LiveTicketValidationError(issues);

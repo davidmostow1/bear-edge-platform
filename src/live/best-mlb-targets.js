@@ -5,6 +5,10 @@ const {
   applyMarketAdjustments
 } = require("./market-intelligence.js");
 const { safeErrorMessage } = require("../config/secrets.js");
+const {
+  prepareModelRegistryOptions,
+  resolveCandidateModelEvidence
+} = require("../calibration/model-evidence.js");
 
 const MLB_PROP_MARKETS = Object.freeze({
   strikeOuts: "pitcher_strikeouts",
@@ -119,6 +123,7 @@ function evaluatePrice(candidate, price, options = {}) {
   const recommendedStake = Math.min(rawStake, policy.maxStake, bankroll * policy.maxBankrollFraction);
   const riskFlags = [];
   const reasons = [];
+  const modelEvidence = resolveCandidateModelEvidence(candidate, options.modelRegistryOptions);
 
   for (const flag of candidate.riskFlags ?? []) {
     if (flag.code !== "MISSING_MARKET_ODDS") {
@@ -126,11 +131,11 @@ function evaluatePrice(candidate, price, options = {}) {
     }
   }
   riskFlags.push(...marketIntelligence.riskFlags);
-  if (policy.requireCalibratedModel && candidate.prediction?.calibrationStatus !== "validated") {
+  if (!modelEvidence.validated) {
     riskFlags.push({
       code: "MODEL_CALIBRATION_REQUIRED",
       severity: "high",
-      message: "This candidate is a research-only model output and has not passed a calibration validation gate."
+      message: "This candidate lacks an exact validated model-registry entry and calibration report digest."
     });
   }
   let verdict = "BET";
@@ -153,9 +158,9 @@ function evaluatePrice(candidate, price, options = {}) {
   } else if (hasManualConfirmationRisk) {
     verdict = "WAIT";
     reasons.push("Lineup, roster, or injury evidence requires manual confirmation.");
-  } else if (policy.requireCalibratedModel && candidate.prediction?.calibrationStatus !== "validated") {
+  } else if (!modelEvidence.validated) {
     verdict = "WAIT";
-    reasons.push("The research model is not calibrated for production betting.");
+    reasons.push("Validated model-registry evidence is required before a BET verdict.");
   } else if (fairEdge <= policy.minFairEdge) {
     verdict = "PASS";
     reasons.push("Adjusted fair edge versus the no-vig market is below threshold.");
@@ -210,7 +215,8 @@ function evaluatePrice(candidate, price, options = {}) {
     kellyFraction: kelly,
     recommendedStake,
     stakePolicy: policy,
-    riskFlags
+    riskFlags,
+    modelEvidence
   };
 }
 
@@ -404,6 +410,23 @@ function cloneJson(value) {
 }
 
 function serializeCandidate(candidate, extra = {}) {
+  const modelEvidence = extra.modelEvidence ?? resolveCandidateModelEvidence(
+    candidate,
+    extra.modelRegistryOptions
+  );
+  const ticketDraft = cloneJson(extra.ticketDraft ?? candidate.ticketDraft ?? null);
+  const draftLeg = ticketDraft?.legs?.[0];
+
+  if (draftLeg) {
+    if (modelEvidence.modelId) {
+      draftLeg.modelId = modelEvidence.modelId;
+    }
+    if (modelEvidence.modelVersion) {
+      draftLeg.modelVersion = modelEvidence.modelVersion;
+    }
+    draftLeg.calibrationStatus = modelEvidence.callerCalibrationStatus;
+  }
+
   return {
     id: candidate.id,
     status: extra.status ?? "price_check",
@@ -427,28 +450,33 @@ function serializeCandidate(candidate, extra = {}) {
     rankValue: extra.rankValue ?? unpricedRankValue(candidate),
     stats: candidate.stats,
     model: {
-      modelId: candidate.prediction?.model ?? "unknown",
-      modelVersion: candidate.prediction?.modelVersion ?? "1.0.0",
-      modelStatus: candidate.prediction?.calibrationStatus === "validated"
-        ? "validated"
-        : "research_only",
+      modelId: modelEvidence.modelId ?? "unknown",
+      modelVersion: modelEvidence.modelVersion ?? "unknown",
+      marketFamily: modelEvidence.marketFamily,
+      modelStatus: modelEvidence.registryStatus === "unknown"
+        ? "research_only"
+        : modelEvidence.registryStatus,
       probabilityMethod: candidate.prediction?.model ?? "unknown",
-      calibrationReportId: candidate.prediction?.calibrationReportId ?? null,
+      calibrationReportId: modelEvidence.calibrationReportId,
+      calibrationReportDigest: modelEvidence.calibrationReportDigest,
+      policyVersion: modelEvidence.policyVersion,
+      policyDigest: modelEvidence.policyDigest,
       trainingCutoff: candidate.prediction?.trainingCutoff ?? null,
       sampleSize: candidate.prediction?.sampleSize ?? null
     },
+    modelEvidence,
     odds: extra.odds ?? null,
     evaluation: extra.evaluation ?? null,
-    ticketDraft: extra.ticketDraft ?? candidate.ticketDraft ?? null,
+    ticketDraft,
     riskFlags: extra.riskFlags ?? candidate.riskFlags ?? [],
     notes: extra.notes ?? candidate.prediction?.notes ?? []
   };
 }
 
-function rankUnpricedCandidates(candidates, limit) {
+function rankUnpricedCandidates(candidates, limit, modelRegistryOptions) {
   return candidates
     .filter((candidate) => candidate.sport === "mlb" && mappedMarketKey(candidate))
-    .map((candidate) => serializeCandidate(candidate))
+    .map((candidate) => serializeCandidate(candidate, { modelRegistryOptions }))
     .sort((a, b) => {
       const riskDelta = riskScore({ riskFlags: a.riskFlags }) - riskScore({ riskFlags: b.riskFlags });
 
@@ -554,12 +582,14 @@ function evaluatePricedCandidate(candidate, price, options = {}) {
     rankValue,
     odds: price,
     ticketDraft,
+    modelEvidence: evaluation.modelEvidence,
     riskFlags: evaluation.riskFlags,
     evaluation: {
       verdict: evaluation.verdict,
       reasons: evaluation.reasons,
       marketIntelligence: evaluation.marketIntelligence,
-      calibrationStatus: candidate.prediction?.calibrationStatus ?? "unknown",
+      calibrationStatus: evaluation.modelEvidence.registryStatus,
+      modelEvidence: evaluation.modelEvidence,
       adjustedModelProbability: evaluation.adjustedModelProbability,
       adjustedProbability: evaluation.adjustedProbability,
       marketProbability: evaluation.marketProbability,
@@ -581,6 +611,11 @@ async function getBestMlbTargets(options = {}) {
   const maxCandidates = Number.isInteger(options.maxCandidates) && options.maxCandidates > 0
     ? Math.min(options.maxCandidates, 150)
     : 80;
+  const modelRegistryOptions = prepareModelRegistryOptions({
+    rootDir: options.rootDir,
+    ...(options.modelRegistryOptions ?? {})
+  });
+  const evaluationOptions = { ...options, modelRegistryOptions };
   const candidatesResult = await generateResearchCandidates({
     date: options.date ?? "today",
     days: options.days ?? 2,
@@ -603,7 +638,7 @@ async function getBestMlbTargets(options = {}) {
         bestReturned: Math.min(limit, eligibleCandidates.length),
         oddsApiConfigured: false
       },
-      best: rankUnpricedCandidates(eligibleCandidates, limit),
+      best: rankUnpricedCandidates(eligibleCandidates, limit, modelRegistryOptions),
       candidates: candidatesResult,
       warnings: [
         "No THE_ODDS_API_KEY or ODDS_API_KEY is configured, so these are price-check targets, not BET calls."
@@ -633,7 +668,7 @@ async function getBestMlbTargets(options = {}) {
         eventsMatched: 0,
         eventsPriced: 0
       },
-      best: rankUnpricedCandidates(eligibleCandidates, limit),
+      best: rankUnpricedCandidates(eligibleCandidates, limit, modelRegistryOptions),
       candidates: candidatesResult,
       warnings: [
         `Verified odds provider failed: ${safeErrorMessage(error)}`,
@@ -658,13 +693,15 @@ async function getBestMlbTargets(options = {}) {
       continue;
     }
 
-    priced.push(evaluatePricedCandidate(candidate, price, options));
+    priced.push(evaluatePricedCandidate(candidate, price, evaluationOptions));
   }
 
   const best = priced
     .sort((a, b) => b.rankValue - a.rankValue)
     .slice(0, limit);
-  const fallbackBest = best.length > 0 ? best : rankUnpricedCandidates(eligibleCandidates, limit);
+  const fallbackBest = best.length > 0
+    ? best
+    : rankUnpricedCandidates(eligibleCandidates, limit, modelRegistryOptions);
 
   return {
     status: priced.length > 0 ? "priced" : "odds_unmatched",

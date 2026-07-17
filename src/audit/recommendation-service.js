@@ -49,19 +49,25 @@ function participantId(target) {
 }
 
 function resolveModel(target) {
-  const reportedStatus = target.model?.modelStatus ??
-    target.evaluation?.calibrationStatus ??
-    "research_only";
+  const evidence = target.modelEvidence;
+  const reportedStatus = evidence
+    ? evidence.validated
+      ? "validated"
+      : evidence.registryStatus === "validated"
+        ? "research_only"
+        : evidence.registryStatus
+    : target.model?.modelStatus ?? "research_only";
   const modelStatus = ["research_only", "shadow", "validated", "retired"].includes(reportedStatus)
     ? reportedStatus
     : "research_only";
 
   return {
-    modelId: target.model?.modelId ?? "poisson_count_v1",
-    modelVersion: target.model?.modelVersion ?? "1.0.0",
+    modelId: target.modelEvidence?.modelId ?? target.model?.modelId ?? "poisson_count_v1",
+    modelVersion: target.modelEvidence?.modelVersion ?? target.model?.modelVersion ?? "1.0.0",
     probabilityMethod: target.model?.probabilityMethod ?? "poisson_count",
     modelStatus,
-    calibrationReportId: target.model?.calibrationReportId ?? null,
+    calibrationReportId:
+      target.modelEvidence?.calibrationReportId ?? target.model?.calibrationReportId ?? null,
     trainingCutoff: target.model?.trainingCutoff ?? null,
     sampleSize: finiteOrNull(target.model?.sampleSize)
   };
@@ -91,7 +97,7 @@ function buildIdentity(result, target, model) {
     sourceMode: result.sourceMode ?? null,
     fetchedAt: result.fetchedAt ?? null,
     eventId: target.gameId ?? null,
-    marketFamily: target.marketType ?? "player_prop",
+    marketFamily: target.modelEvidence?.marketFamily ?? target.marketType ?? "player_prop",
     participantId: participantId(target),
     side: target.lean ?? null,
     line: finiteOrNull(target.line),
@@ -210,7 +216,7 @@ function createDisplayedTargetRecord(result, target, context = {}) {
       awayTeam: matchup.length === 2 ? matchup[0] : null
     },
     market: {
-      marketFamily: "player_prop",
+      marketFamily: target.modelEvidence?.marketFamily ?? "player_prop",
       marketType: target.marketType ?? "prop",
       participantId: participantId(target),
       participantName: target.player?.name ?? null,
@@ -258,7 +264,8 @@ function createDisplayedTargetRecord(result, target, context = {}) {
         {
           gate: "model_calibration",
           passed: model.modelStatus === "validated",
-          reasonCode: model.modelStatus === "validated" ? null : "MODEL_CALIBRATION_REQUIRED"
+          reasonCode: model.modelStatus === "validated" ? null : "MODEL_CALIBRATION_REQUIRED",
+          evidence: target.modelEvidence ?? null
         },
         {
           gate: "operational_permission",
@@ -272,6 +279,7 @@ function createDisplayedTargetRecord(result, target, context = {}) {
       configurationDigest: contentDigest({
         modelId: model.modelId,
         modelVersion: model.modelVersion,
+        modelEvidence: target.modelEvidence ?? null,
         sourceMode: result.sourceMode ?? null,
         stakePolicy: target.evaluation?.stakePolicy ?? null
       }),

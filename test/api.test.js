@@ -624,6 +624,19 @@ test("HTTP API exposes release readiness checks", async () => {
     assert.equal(payload.lanes.some((entry) => entry.id === "local-app"), true);
     assert.equal(payload.lanes.some((entry) => entry.id === "data-edge"), true);
     assert.equal(payload.evidenceGates.some((entry) => entry.id === "recent-win-streak"), true);
+    const calibrationGate = payload.evidenceGates.find(
+      (entry) => entry.id === "model-calibration-registry"
+    );
+    assert.equal(payload.modelCalibration.registryValid, true);
+    assert.equal(payload.modelCalibration.registeredModelCount, 4);
+    assert.equal(payload.modelCalibration.validatedModelCount, 0);
+    assert.deepEqual(
+      payload.modelCalibration.models.map((model) => model.marketFamily).sort(),
+      ["batter_hits", "batter_runs_scored", "batter_total_bases", "pitcher_strikeouts"]
+    );
+    assert.equal(payload.modelCalibration.models.every((model) => model.registryStatus === "research_only"), true);
+    assert.equal(calibrationGate.status, "blocked");
+    assert.equal(calibrationGate.complete, false);
     assert.equal(
       payload.evidenceGates.find((entry) => entry.id === "recent-win-streak").label,
       "Recent win streak (descriptive)"
@@ -1169,7 +1182,16 @@ test("HTTP API prices and evaluates best MLB targets with a configured odds key"
       assert.equal(payload.best[0].riskFlags.some((flag) => flag.code === "MISSING_MARKET_ODDS"), false);
       assert.ok(["BET", "PASS", "WAIT"].includes(payload.best[0].evaluation.verdict));
       assert.equal(payload.best[0].auditRecord.verdict, "WAIT");
+      assert.equal(payload.best[0].auditRecord.permission, "VERIFIED_BETS_ALLOWED");
       assert.equal(payload.best[0].auditRecord.model.modelStatus, "research_only");
+      assert.equal(payload.best[0].modelEvidence.registryStatus, "research_only");
+      assert.equal(payload.best[0].modelEvidence.validated, false);
+      assert.equal(payload.best[0].modelEvidence.calibrationReportDigest, null);
+      const calibrationGate = payload.best[0].auditRecord.gateResults.find(
+        (gate) => gate.gate === "model_calibration"
+      );
+      assert.equal(calibrationGate.passed, false);
+      assert.deepEqual(calibrationGate.evidence, payload.best[0].modelEvidence);
       assert.equal(payload.persistence.persistedCount, payload.best.length);
       assert.equal(typeof payload.best[0].evaluation.expectedValueRoi, "number");
       assert.equal(payload.oddsSources.eventsSourceUrl?.includes("test-odds-key"), false);
@@ -2243,6 +2265,52 @@ test("HTTP API evaluates a live ticket only after authoritative persistence", as
     assert.match(payload.recordId, /^eval_/);
     assert.match(payload.contentDigest, /^[a-f0-9]{64}$/);
     assert.equal(JSON.parse(fs.readFileSync(logPath, "utf8").trim()).id, payload.recordId);
+  }, { logPath });
+});
+
+test("HTTP API rejects caller-forged calibration authority with registry evidence", async () => {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "bear-edge-forged-calibration-"));
+  const logPath = path.join(tempDir, "decision_log.jsonl");
+
+  await withServer(async (baseUrl) => {
+    const response = await fetch(`${baseUrl}/evaluate/live`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        kind: "single",
+        bankroll: 1000,
+        legs: [{
+          id: "forged-api-calibration",
+          provider: "mlb",
+          marketType: "prop",
+          side: "over",
+          line: 0.5,
+          marketOdds: 120,
+          modelProbabilityOverride: 0.9,
+          calibrationStatus: "validated",
+          modelId: "poisson_count_v1",
+          modelVersion: "1.0.0",
+          marketContext: { offeredLastUpdate: new Date().toISOString() },
+          source: { playerId: 1, statGroup: "hitting", statKey: "runs" }
+        }]
+      })
+    });
+    const payload = await response.json();
+    const calibrationGate = payload.decisionLog.gateResults.find(
+      (gate) => gate.gate === "model_calibration"
+    );
+
+    assert.equal(response.status, 200);
+    assert.equal(payload.verdict, "WAIT");
+    assert.equal(payload.modelEvidence.callerCalibrationStatus, "validated");
+    assert.equal(payload.modelEvidence.registryStatus, "research_only");
+    assert.equal(payload.modelEvidence.validated, false);
+    assert.equal(payload.decisionLog.model.modelId, "operator_probability_input");
+    assert.equal(payload.decisionLog.model.probabilityMethod, "operator_supplied_market_adjusted");
+    assert.ok(payload.riskFlags.some((flag) => flag.code === "MODEL_CALIBRATION_REQUIRED"));
+    assert.equal(calibrationGate.passed, false);
+    assert.deepEqual(calibrationGate.evidence, payload.modelEvidence);
+    assert.equal(JSON.parse(fs.readFileSync(logPath, "utf8").trim()).verdict, "WAIT");
   }, { logPath });
 });
 

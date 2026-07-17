@@ -8,6 +8,7 @@ const { getSupabaseSyncStatus } = require("./config/supabase-settings.js");
 const { getDataEdgeAudit } = require("./data-edge.js");
 const { readOutboxState } = require("./sync/outbox.js");
 const { getSystemAudit } = require("./system-audit.js");
+const { loadRegisteredModels } = require("./calibration/model-evidence.js");
 
 function execFileSafe(command, args = [], options = {}) {
   return new Promise((resolve) => {
@@ -132,6 +133,44 @@ function check(status, area, message, detail = null, nextAction = null) {
     detail,
     nextAction: status === "pass" ? null : nextAction
   };
+}
+
+function getModelCalibrationReadiness(rootDir, options = {}) {
+  try {
+    const registry = loadRegisteredModels({
+      rootDir,
+      ...(options.modelRegistryOptions ?? {})
+    });
+    const validatedModels = registry.models.filter((model) => model.validated);
+
+    return {
+      status: validatedModels.length > 0 ? "validated" : "blocked",
+      registryValid: true,
+      registryPath: registry.registryPath,
+      schemaVersion: registry.schemaVersion,
+      policyVersion: registry.policyVersion,
+      policyDigest: registry.policyDigest,
+      policyRegisteredAt: registry.policyRegisteredAt,
+      registeredModelCount: registry.models.length,
+      validatedModelCount: validatedModels.length,
+      models: registry.models,
+      error: null
+    };
+  } catch (error) {
+    return {
+      status: "invalid",
+      registryValid: false,
+      registryPath: path.join(rootDir, "models", "registry.json"),
+      schemaVersion: null,
+      policyVersion: null,
+      policyDigest: null,
+      policyRegisteredAt: null,
+      registeredModelCount: 0,
+      validatedModelCount: 0,
+      models: [],
+      error: error instanceof Error ? error.message : String(error)
+    };
+  }
 }
 
 function laneStatus(summary) {
@@ -289,6 +328,7 @@ async function getReleaseReadiness(options = {}) {
     autoUpdateSnapshotPath: options.autoUpdateSnapshotPath,
     logPath: options.logPath
   });
+  const modelCalibration = getModelCalibrationReadiness(rootDir, options);
   const oddsProvider = providerSetup.providers.find((provider) => provider.id === "the-odds-api") ?? null;
   const statsProvider = providerSetup.providers.find((provider) => provider.id === "sportsdataio") ?? null;
   const tennisProvider = providerSetup.providers.find((provider) => provider.id === "tennis-stats") ?? null;
@@ -369,6 +409,18 @@ async function getReleaseReadiness(options = {}) {
             };
   const evidenceGates = [
     {
+      id: "model-calibration-registry",
+      label: "Validated model calibration",
+      status: modelCalibration.status,
+      complete: modelCalibration.validatedModelCount > 0,
+      registeredModelCount: modelCalibration.registeredModelCount,
+      validatedModelCount: modelCalibration.validatedModelCount,
+      models: modelCalibration.models,
+      action: modelCalibration.registryValid
+        ? "Promote a model only after its immutable calibration report passes every registered policy threshold."
+        : "Repair the model registry or its referenced calibration reports before evaluating production probabilities."
+    },
+    {
       id: "remote-audit-projection",
       label: "Remote audit projection",
       status: projectionState.gateStatus,
@@ -436,6 +488,21 @@ async function getReleaseReadiness(options = {}) {
     check(statsReady ? "pass" : "info", "providers", statsReady ? "Licensed stats/injury provider is configured" : "Licensed stats/injury provider is an evidence gate, not a local app blocker", statsProvider ? { id: statsProvider.id, status: statsProvider.status, secretReturned: false } : null, "Add SportsDataIO, Sportradar, or another licensed stats/injury feed before relying on automated injury gates commercially."),
     check(tennisReady ? "pass" : "info", "providers", tennisReady ? "Verified tennis stats provider is configured" : "Tennis automation is locked until a verified provider is configured", tennisProvider ? { id: tennisProvider.id, status: tennisProvider.status, secretReturned: false } : null, "Add a verified tennis data provider before allowing automated tennis picks."),
     check(dataQualityStatus === "ok" ? "pass" : "info", "analytics", `Decision-log data quality is ${dataQualityStatus}`, null, "Settle logged BET calls with result, closing line, and false-positive notes until analytics quality is ok."),
+    check(
+      !modelCalibration.registryValid
+        ? "fail"
+        : modelCalibration.validatedModelCount > 0 ? "pass" : "info",
+      "analytics",
+      !modelCalibration.registryValid
+        ? "Model calibration registry or report evidence is invalid"
+        : modelCalibration.validatedModelCount > 0
+          ? `${modelCalibration.validatedModelCount} registered model calibration entries are validated`
+          : "No registered model calibration entry is validated for BET decisions",
+      modelCalibration,
+      modelCalibration.registryValid
+        ? "Build out-of-sample calibration evidence and promote only entries that pass the registered policy."
+        : "Repair the model registry and every referenced report digest before release."
+    ),
     check(docsExists ? "pass" : "warn", "documentation", "Production-readiness documentation exists"),
     check(providerDocsExists ? "pass" : "warn", "documentation", "API provider requirements documentation exists")
   ];
@@ -459,6 +526,7 @@ async function getReleaseReadiness(options = {}) {
     providerSummary: providerSetup.summary,
     syncHealth,
     dataEdge,
+    modelCalibration,
     lanes,
     evidenceGates,
     nextActions: checks
@@ -506,6 +574,7 @@ function renderReleaseReadinessMarkdown(report) {
     `- Odds status: ${report.dataEdge?.odds?.status ?? "-"}`,
     `- Odds evidence: ${report.dataEdge?.odds?.evidence?.status ?? "-"}`,
     `- Odds evidence reasons: ${(report.dataEdge?.odds?.evidence?.reasonCodes ?? []).join(", ") || "none"}`,
+    `- Validated calibration entries: ${report.modelCalibration?.validatedModelCount ?? 0}/${report.modelCalibration?.registeredModelCount ?? 0}`,
     "",
     "## Readiness Lanes",
     "",
@@ -537,6 +606,19 @@ function renderReleaseReadinessMarkdown(report) {
     `| Priced candidates | ${report.dataEdge?.odds?.pricedCandidates ?? 0} |`,
     `| Live data | ${report.dataEdge?.liveData?.status ?? "-"} |`,
     `| Data quality | ${report.dataEdge?.analytics?.dataQualityStatus ?? "-"} |`,
+    "",
+    "## Model Calibration Registry",
+    "",
+    `- Registry status: ${report.modelCalibration?.status ?? "invalid"}`,
+    `- Policy version: ${report.modelCalibration?.policyVersion ?? "-"}`,
+    `- Policy digest: ${report.modelCalibration?.policyDigest ?? "-"}`,
+    `- Validated entries: ${report.modelCalibration?.validatedModelCount ?? 0}/${report.modelCalibration?.registeredModelCount ?? 0}`,
+    "",
+    "| Market Family | Model | Version | Registry Status | Report ID | Report Digest |",
+    "| --- | --- | --- | --- | --- | --- |",
+    ...(report.modelCalibration?.models?.length > 0
+      ? report.modelCalibration.models.map((model) => `| ${model.marketFamily} | ${model.modelId} | ${model.modelVersion} | ${model.registryStatus} | ${model.calibrationReportId ?? "-"} | ${model.calibrationReportDigest ?? "-"} |`)
+      : [`| - | - | - | invalid | - | ${report.modelCalibration?.error ?? "Registry unavailable"} |`]),
     "",
     "## Checks",
     "",

@@ -2,6 +2,7 @@ const {
   analyzeMarketIntelligence,
   applyMarketAdjustments
 } = require("./market-intelligence.js");
+const { resolveLiveLegModelEvidence } = require("../calibration/model-evidence.js");
 
 const DEFAULT_LIVE_POLICY = Object.freeze({
   marketWeight: 0.35,
@@ -240,6 +241,7 @@ function evaluateLiveLeg(leg, snapshot, context = {}) {
     ...(context.livePolicy ?? {})
   };
   const bankroll = context.bankroll;
+  const modelEvidence = resolveLiveLegModelEvidence(leg, context.modelRegistryOptions);
   const selection = leg.label || leg.selection || leg.id;
   const marketOdds = leg.marketOdds;
   const oppositeOdds = leg.oppositeOdds ?? null;
@@ -299,6 +301,27 @@ function evaluateLiveLeg(leg, snapshot, context = {}) {
       }))
     : [];
   riskFlags.push(...marketIntelligence.riskFlags);
+  const usesUncalibratedBaseline = leg.modelProbabilityOverride === undefined && !liveEstimate?.resolved;
+  const usesUnvalidatedOverride = leg.modelProbabilityOverride !== undefined && !modelEvidence.validated;
+  const requiresRegisteredModel = !liveEstimate?.resolved && !modelEvidence.validated;
+
+  if (requiresRegisteredModel) {
+    riskFlags.push({
+      code: "MODEL_CALIBRATION_REQUIRED",
+      severity: "high",
+      message: usesUnvalidatedOverride
+        ? "The supplied probability is not backed by an exact validated model-registry entry and report digest."
+        : "The prop probability uses a Poisson baseline without an exact validated model-registry entry and report digest."
+    });
+  }
+
+  if (usesUncalibratedBaseline) {
+    riskFlags.push({
+      code: "POISSON_BASELINE_MODEL",
+      severity: "info",
+      message: "The research baseline does not model player-specific overdispersion, role, lineup, opponent, or venue uncertainty."
+    });
+  }
   const reasons = [];
   let verdict = "BET";
 
@@ -310,6 +333,9 @@ function evaluateLiveLeg(leg, snapshot, context = {}) {
       message: "Live stat source is older than the configured freshness threshold."
     });
     reasons.push("Live stat source is stale.");
+  } else if (requiresRegisteredModel) {
+    verdict = "WAIT";
+    reasons.push("Validated model-registry evidence is required before a BET verdict.");
   } else if (expectedValue.roi < (leg.minEvRoi ?? 0)) {
     verdict = "PASS";
     riskFlags.push({
@@ -369,6 +395,7 @@ function evaluateLiveLeg(leg, snapshot, context = {}) {
     side: leg.side,
     line: leg.line,
     source: snapshot,
+    modelEvidence,
     derived: {
       recentWeight,
       blendedMean,

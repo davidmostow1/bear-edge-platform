@@ -123,6 +123,84 @@ test("evaluateLiveTicket waits for an unvalidated probability override", async (
   assert.ok(result.riskFlags.some((flag) => flag.code === "MODEL_CALIBRATION_REQUIRED"));
 });
 
+test("caller-supplied validated status cannot override a research-only registry entry", async () => {
+  const ticket = validateLiveTicket({
+    kind: "single",
+    bankroll: 1000,
+    legs: [
+      {
+        id: "forged-calibration-status",
+        provider: "mlb",
+        marketType: "prop",
+        side: "over",
+        line: 0.5,
+        marketOdds: 120,
+        modelProbabilityOverride: 0.9,
+        calibrationStatus: "validated",
+        modelId: "poisson_count_v1",
+        modelVersion: "1.0.0",
+        marketContext: freshMarketContext(),
+        source: { playerId: 1, statGroup: "hitting", statKey: "runs" }
+      }
+    ]
+  });
+
+  const result = await evaluateLiveTicket(ticket, { fetchJsonImpl: fetchJson });
+  const calibrationGate = result.decisionLog.gateResults.find((gate) => (
+    gate.gate === "model_calibration"
+  ));
+
+  assert.equal(result.verdict, "WAIT");
+  assert.ok(result.riskFlags.some((flag) => flag.code === "MODEL_CALIBRATION_REQUIRED"));
+  assert.deepEqual(result.modelEvidence, {
+    modelId: "poisson_count_v1",
+    modelVersion: "1.0.0",
+    marketFamily: "batter_runs_scored",
+    callerCalibrationStatus: "validated",
+    probabilitySource: "caller_probability_override",
+    registryStatus: "research_only",
+    policyVersion: "1.0.0",
+    policyDigest: "bb8f5bd702648894e8e21be04d6d08024645821d83c4bbacb40c872657830df7",
+    calibrationReportId: null,
+    calibrationReportDigest: null,
+    validated: false
+  });
+  assert.equal(calibrationGate.passed, false);
+  assert.equal(calibrationGate.reasonCode, "MODEL_CALIBRATION_REQUIRED");
+  assert.deepEqual(calibrationGate.evidence, result.modelEvidence);
+  assert.equal(result.decisionLog.model.modelId, "operator_probability_input");
+  assert.equal(result.decisionLog.model.probabilityMethod, "operator_supplied_market_adjusted");
+});
+
+test("internal probability calculations ignore caller-supplied model identity", async () => {
+  const ticket = validateLiveTicket({
+    kind: "single",
+    bankroll: 1000,
+    legs: [{
+      id: "forged-internal-model-identity",
+      provider: "mlb",
+      marketType: "prop",
+      side: "over",
+      line: 0.5,
+      marketOdds: 120,
+      calibrationStatus: "validated",
+      modelId: "caller_selected_model",
+      modelVersion: "999.0.0",
+      marketContext: freshMarketContext(),
+      source: { playerId: 1, statGroup: "hitting", statKey: "runs" }
+    }]
+  });
+
+  const result = /** @type {any} */ (await evaluateLiveTicket(ticket, { fetchJsonImpl: fetchJson }));
+
+  assert.equal(result.verdict, "WAIT");
+  assert.equal(result.modelEvidence.modelId, "poisson_count_v1");
+  assert.equal(result.modelEvidence.modelVersion, "1.0.0");
+  assert.equal(result.modelEvidence.probabilitySource, "registered_internal_implementation");
+  assert.equal(result.modelEvidence.registryStatus, "research_only");
+  assert.equal(result.modelEvidence.validated, false);
+});
+
 test("evaluateLiveLeg waits for a future statistics timestamp", () => {
   const ticket = validateLiveTicket({
     kind: "single",
@@ -156,6 +234,28 @@ test("evaluateLiveLeg waits for a future statistics timestamp", () => {
 
   assert.equal(result.verdict, "WAIT");
   assert.ok(result.riskFlags.some((flag) => flag.code === "FUTURE_SOURCE_TIMESTAMP"));
+});
+
+test("validateLiveTicket rejects attempts to disable model calibration", () => {
+  assert.throws(
+    () => validateLiveTicket({
+      kind: "single",
+      bankroll: 1000,
+      livePolicy: { requireCalibratedModel: false },
+      legs: [{
+        id: "calibration-bypass",
+        provider: "mlb",
+        marketType: "prop",
+        side: "over",
+        line: 0.5,
+        marketOdds: 120,
+        source: { playerId: 1, statGroup: "hitting", statKey: "runs" }
+      }]
+    }),
+    (error) => /** @type {any} */ (error).issues.some((issue) => (
+      issue.path === "livePolicy.requireCalibratedModel"
+    ))
+  );
 });
 
 test("validateLiveTicket rejects unsafe policy overrides and invalid leg counts", () => {
@@ -224,7 +324,7 @@ test("validateLiveTicket rejects unsafe policy overrides and invalid leg counts"
   );
 });
 
-test("evaluateLiveTicket prices a cross-sport live parlay from official-source snapshots", async () => {
+test("evaluateLiveTicket prices a cross-sport parlay but waits for registered calibration", async () => {
   const ticket = validateLiveTicket({
     kind: "parlay",
     selection: "Cross-sport live parlay",
@@ -266,7 +366,11 @@ test("evaluateLiveTicket prices a cross-sport live parlay from official-source s
 
   assert.equal(parlayResult.kind, "parlay");
   assert.equal(parlayResult.legs.length, 2);
-  assert.equal(parlayResult.verdict, "BET");
+  assert.equal(parlayResult.verdict, "WAIT");
+  assert.equal(parlayResult.modelEvidence.validated, false);
+  assert.equal(parlayResult.modelEvidence.models[0].registryStatus, "unknown");
+  assert.equal(parlayResult.modelEvidence.models[1].registryStatus, "unknown");
+  assert.ok(parlayResult.riskFlags.some((flag) => flag.code === "LEG_MODEL_CALIBRATION_REQUIRED"));
   assert.ok(parlayResult.combined.probability > 0);
   assert.equal(parlayResult.researchPacket.ticketKind, "parlay");
   assert.equal(parlayResult.researchPacket.sources.length, 2);
