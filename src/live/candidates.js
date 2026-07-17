@@ -214,6 +214,7 @@ async function buildMlbBatterPropCandidate(game, batterEntry, propConfig, option
     },
     prediction: {
       model: "poisson_count_v1",
+      calibrationStatus: "research_only",
       side: lean,
       line,
       modelProbability,
@@ -326,6 +327,7 @@ async function buildPitcherStrikeoutCandidate(game, pitcherEntry, options = {}) 
     },
     prediction: {
       model: "poisson_count_v1",
+      calibrationStatus: "research_only",
       side: lean,
       line,
       modelProbability,
@@ -448,6 +450,7 @@ async function buildNhlShotsCandidate(game, skaterEntry, options = {}) {
     },
     prediction: {
       model: "poisson_count_v1",
+      calibrationStatus: "research_only",
       side: lean,
       line,
       modelProbability,

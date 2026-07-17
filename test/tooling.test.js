@@ -236,6 +236,7 @@ test("odds API key settings update local env without exposing secrets", async ()
     assert.match(contents, /TENNIS_API_KEY=tennis-existing/);
     assert.match(contents, /THE_ODDS_API_KEY=test-odds-key/);
     assert.equal((contents.match(/THE_ODDS_API_KEY=/g) ?? []).length, 1);
+    assert.equal(fs.statSync(envPath).mode & 0o777, 0o600);
     assert.equal(redactSecrets("Failed https://example.test/?apiKey=test-odds-key"), "Failed https://example.test/?apiKey=[REDACTED]");
   } finally {
     if (originalOddsApiKey === undefined) {

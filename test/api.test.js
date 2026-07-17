@@ -2188,6 +2188,7 @@ test("HTTP API generates odds-needed research candidates from official game stat
     assert.equal(mlbCandidate.audit.oddsSource, "manual_required");
     assert.equal(mlbCandidate.audit.evaluationReadiness, "blocked_until_market_odds");
     assert.equal(mlbCandidate.prediction.model, "poisson_count_v1");
+    assert.equal(mlbCandidate.prediction.calibrationStatus, "research_only");
     assert.equal(typeof mlbCandidate.prediction.modelProbability, "number");
     assert.equal(typeof mlbCandidate.prediction.fairAmericanOdds, "number");
     assert.ok(mlbCandidate.prediction.notes.some((note) => note.includes("sportsbook odds")));
@@ -2205,6 +2206,7 @@ test("HTTP API generates odds-needed research candidates from official game stat
     assert.equal(runsCandidate.statLabel, "runs");
     assert.equal(runsCandidate.ticketDraft.legs[0].source.statKey, "runs");
     assert.equal(nhlCandidate.provider, "nhl");
+    assert.equal(nhlCandidate.prediction.calibrationStatus, "research_only");
     assert.equal(nhlCandidate.audit.generatedFrom, "official_nhl_api");
     assert.equal(nhlCandidate.statKey, "shots");
     assert.equal(nhlCandidate.statLabel, "shots on goal");
