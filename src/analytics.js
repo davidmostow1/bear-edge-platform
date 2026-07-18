@@ -663,11 +663,14 @@ function buildValidationGate(evaluations, requiredWinStreak = 3) {
 
       return aTime - bTime || a.sequence - b.sequence;
     });
+  const eligibleSettledBetCalls = settledBetCalls.filter((evaluation) =>
+    isFiniteNumber(evaluation.settlement?.closingOdds)
+  );
   let currentWinStreak = 0;
   let bestWinStreak = 0;
 
   for (const evaluation of settledBetCalls) {
-    if (evaluation.settlement?.outcome === "win") {
+    if (evaluation.settlement?.outcome === "win" && isFiniteNumber(evaluation.settlement?.closingOdds)) {
       currentWinStreak += 1;
       bestWinStreak = Math.max(bestWinStreak, currentWinStreak);
     } else {
@@ -682,12 +685,15 @@ function buildValidationGate(evaluations, requiredWinStreak = 3) {
     complete: currentWinStreak >= requiredWinStreak,
     remainingWins: Math.max(0, requiredWinStreak - currentWinStreak),
     settledBetCalls: settledBetCalls.length,
+    eligibleSettledBetCalls: eligibleSettledBetCalls.length,
+    ineligibleSettledBetCalls: settledBetCalls.length - eligibleSettledBetCalls.length,
     lastSettledBet:
       settledBetCalls.length > 0
         ? {
             evaluationId: settledBetCalls[settledBetCalls.length - 1].id,
             selection: settledBetCalls[settledBetCalls.length - 1].selection,
             outcome: settledBetCalls[settledBetCalls.length - 1].settlement?.outcome,
+            closingOdds: settledBetCalls[settledBetCalls.length - 1].settlement?.closingOdds,
             settledAt: settledBetCalls[settledBetCalls.length - 1].settlement?.settledAt
           }
         : null
@@ -708,6 +714,9 @@ function buildDataQualityReport(evaluations, settlements, malformedLines, valida
   const betCalls = evaluations.filter((evaluation) => evaluation.verdict === "BET");
   const settledBetCalls = betCalls.filter((evaluation) => ["win", "loss", "push"].includes(evaluation.settlement?.outcome));
   const gradedBetCalls = betCalls.filter((evaluation) => ["win", "loss"].includes(evaluation.settlement?.outcome));
+  const missingClosingOddsBetCalls = settledBetCalls.filter(
+    (evaluation) => !isFiniteNumber(evaluation.settlement?.closingOdds)
+  );
   const parlayBetCalls = betCalls.filter((evaluation) => evaluation.kind === "parlay");
   const settledParlayBetCalls = parlayBetCalls.filter((evaluation) =>
     ["win", "loss", "push"].includes(evaluation.settlement?.outcome)
@@ -755,6 +764,14 @@ function buildDataQualityReport(evaluations, settlements, malformedLines, valida
     checks.push(
       qualityCheck("NO_GRADED_BET_CALLS", "high", "No win/loss BET calls are graded yet; hit rate and false positives cannot be trusted.", {
         betCalls: betCalls.length
+      })
+    );
+  }
+
+  if (missingClosingOddsBetCalls.length > 0) {
+    checks.push(
+      qualityCheck("MISSING_CLOSING_ODDS", "high", "Some settled BET calls are missing closing odds; CLV and validation evidence are incomplete.", {
+        count: missingClosingOddsBetCalls.length
       })
     );
   }
@@ -840,6 +857,7 @@ function buildDataQualityReport(evaluations, settlements, malformedLines, valida
       malformedLineCount: malformedLines.length,
       orphanSettlementCount: orphanSettlements.length,
       missingOriginalEvaluationIds: evaluations.filter((evaluation) => !evaluation.hasOriginalId).length,
+      missingClosingOddsBetCalls: missingClosingOddsBetCalls.length,
       missingMarketOddsBetCalls: missingMarketOddsBetCalls.length,
       missingExpectedValueBetCalls: missingExpectedValueBetCalls.length,
       missingStakeBetCalls: zeroStakeBetCalls.length,
