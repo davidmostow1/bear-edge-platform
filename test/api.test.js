@@ -875,7 +875,7 @@ test("release readiness is zero-credit and reports configured odds as price-chec
         assert.ok(payload.checks.some((entry) =>
           entry.area === "providers" &&
           entry.status === "warn" &&
-          entry.message === "Verified odds provider key is saved locally but live pricing is not verified"
+          entry.message === "Verified odds provider is configured but live pricing is not verified"
         ));
         assert.equal(oddsUrls.length, 0);
         assert.equal(JSON.stringify(payload).includes("test-odds-key"), false);

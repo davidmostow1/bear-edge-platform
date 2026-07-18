@@ -337,6 +337,7 @@ async function getReleaseReadiness(options = {}) {
   const statsProvider = providerSetup.providers.find((provider) => provider.id === "sportsdataio") ?? null;
   const tennisProvider = providerSetup.providers.find((provider) => provider.id === "tennis-stats") ?? null;
   const oddsReady = dataEdge.odds?.status === "verified";
+  const oddsRuntimeConfigured = Boolean(oddsProvider?.configured);
   const oddsSaved = Boolean(oddsProvider?.savedLocally);
   const statsReady = Boolean(statsProvider?.configured);
   const tennisReady = Boolean(tennisProvider?.configured);
@@ -374,14 +375,18 @@ async function getReleaseReadiness(options = {}) {
       ? "Verified odds provider live pricing is failing"
       : dataEdge.odds?.status === "unmatched"
         ? "Verified odds provider is connected but candidate props are unmatched"
-        : oddsSaved
+        : oddsRuntimeConfigured
+          ? "Verified odds provider is configured but live pricing is not verified"
+          : oddsSaved
           ? "Verified odds provider key is saved locally but live pricing is not verified"
           : "Verified odds provider is not configured";
   const oddsNextAction = dataEdge.odds?.status === "provider_error"
     ? "Fix or replace the verified odds API key before expecting automatic priced DraftKings bets."
     : dataEdge.odds?.status === "unmatched"
       ? "Use manual price checks or improve prop-name/line matching until provider props match generated candidates."
-      : oddsSaved
+      : oddsRuntimeConfigured
+        ? "Test the configured key and explicitly refresh market prices before expecting automatic priced DraftKings bets."
+        : oddsSaved
         ? "Restart the Bear Edge server or test the saved key from the dashboard so live pricing can be verified."
         : "Add and verify THE_ODDS_API_KEY in the dashboard or .env.local.";
   const projectionState = syncHealth.integrityIssues > 0
