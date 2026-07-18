@@ -8,8 +8,10 @@ const {
   resolveSupabaseSettings
 } = require("../config/supabase-settings.js");
 const { safeErrorMessage } = require("../config/secrets.js");
+const { createOperatorAuth } = require("../config/operator-auth.js");
 const { createServer } = require("../server.js");
 const { createAutoUpdateService } = require("../live/auto-update.js");
+const { createStatsigControl } = require("../integrations/statsig-control.js");
 const { createSupabaseClient } = require("../sync/supabase-client.js");
 const { createSyncWorker } = require("../sync/sync-worker.js");
 
@@ -105,6 +107,15 @@ function createRuntimeSyncWorker() {
 
 async function main(argv = process.argv.slice(2)) {
   const { autoUpdate, autoUpdateIntervalMs, host, port } = parseArgs(argv);
+  const lanMode = !["127.0.0.1", "localhost", "::1"].includes(host);
+  const configuredOperatorToken = process.env.BEAR_EDGE_OPERATOR_TOKEN;
+  const operatorAuth = createOperatorAuth({
+    lanMode,
+    token: configuredOperatorToken
+  });
+  const generatedOperatorToken = operatorAuth.createLaunchToken();
+
+  delete process.env.BEAR_EDGE_OPERATOR_TOKEN;
   const autoUpdateService = autoUpdate
     ? createAutoUpdateService({
         intervalMs: autoUpdateIntervalMs,
@@ -112,13 +123,25 @@ async function main(argv = process.argv.slice(2)) {
       })
     : null;
   const { worker: syncWorker, configurationError } = createRuntimeSyncWorker();
+  const statsigControl = createStatsigControl();
+  const statsigStatus = await statsigControl.initialize();
   const server = createServer({
     autoUpdateService,
+    operatorAuth,
+    statsigControl,
     syncWorker
   });
 
   await new Promise((resolve) => server.listen(port, host, () => resolve(undefined)));
   process.stdout.write(`Bear Edge server listening on http://${host}:${port}\n`);
+  if (operatorAuth.getStatus().required) {
+    process.stdout.write("Operator authentication required for write operations.\n");
+  }
+  if (generatedOperatorToken) {
+    process.stdout.write(
+      `Operator bootstrap (shown once): http://${host}:${port}/dashboard#operatorToken=${encodeURIComponent(generatedOperatorToken)}\n`
+    );
+  }
   if (autoUpdateService) {
     autoUpdateService.start();
     process.stdout.write(`Auto-update enabled every ${Math.round(autoUpdateIntervalMs / 1000)} seconds.\n`);
@@ -132,12 +155,20 @@ async function main(argv = process.argv.slice(2)) {
   } else {
     process.stdout.write("Supabase audit synchronization not configured; the local ledger remains authoritative.\n");
   }
+  if (statsigStatus.initialized) {
+    process.stdout.write("Statsig presentation controls enabled.\n");
+  } else if (statsigStatus.configured) {
+    process.stderr.write(`Statsig presentation controls using safe fallback: ${statsigStatus.lastSafeError ?? "initialization unavailable"}\n`);
+  } else {
+    process.stdout.write("Statsig not configured; presentation controls remain off.\n");
+  }
 
   const shutdown = async () => {
     if (autoUpdateService) {
       autoUpdateService.stop();
     }
     await syncWorker.stop();
+    await statsigControl.shutdown();
     await new Promise((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
     process.exit(0);
   };

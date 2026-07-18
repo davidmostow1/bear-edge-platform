@@ -71,7 +71,8 @@ function dataEdgeStatus({ permission, oddsStatus, liveData }) {
 function dataEdgeActions({ oddsStatus, liveData, bestTargets, decisionLog }) {
   const actions = [...(Array.isArray(liveData?.actions) ? liveData.actions : [])];
   const providerWarning = (bestTargets?.warnings ?? []).join(" ");
-  const quotaExhausted = /OUT_OF_USAGE_CREDITS|usage quota|credits? (?:has been )?reached/i.test(providerWarning);
+  const quotaExhausted = bestTargets?.quota?.circuitReason === "OUT_OF_USAGE_CREDITS" ||
+    /OUT_OF_USAGE_CREDITS|usage quota|credits? (?:has been )?reached/i.test(providerWarning);
 
   if (oddsStatus === "provider_error") {
     actions.unshift(quotaExhausted
@@ -195,7 +196,8 @@ async function getDataEdgeAudit(options = {}) {
       bookmakers: options.bookmakers ?? "draftkings",
       regions: options.regions ?? "us",
       fetchJsonImpl: options.fetchJsonImpl,
-      oddsApiKey: options.oddsApiKey
+      oddsApiKey: options.oddsApiKey,
+      allowPaidOdds: options.allowPaidOdds === true
     }),
     getDecisionLogDashboard({
       logPath: options.logPath

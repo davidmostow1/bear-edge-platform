@@ -1,5 +1,46 @@
 // @ts-nocheck
 
+const OPERATOR_TOKEN_STORAGE_KEY = "bear-edge-operator-token";
+
+function bootstrapOperatorToken() {
+  const fragment = window.location.hash.slice(1);
+  const params = new URLSearchParams(fragment);
+
+  if (!params.has("operatorToken")) {
+    return;
+  }
+
+  const operatorToken = params.get("operatorToken");
+
+  if (operatorToken) {
+    window.sessionStorage.setItem(OPERATOR_TOKEN_STORAGE_KEY, operatorToken);
+  }
+
+  const section = params.get("section");
+  const cleanedUrl = `${window.location.pathname}${window.location.search}${section ? `#${encodeURIComponent(section)}` : ""}`;
+  window.history.replaceState(null, "", cleanedUrl);
+}
+
+bootstrapOperatorToken();
+
+const nativeFetch = window.fetch.bind(window);
+
+window.fetch = (input, init = {}) => {
+  const requestMethod = String(init.method ?? (input instanceof Request ? input.method : "GET")).toUpperCase();
+  const safeMethod = ["GET", "HEAD", "OPTIONS"].includes(requestMethod);
+  const requestUrl = new URL(input instanceof Request ? input.url : String(input), window.location.href);
+  const operatorToken = window.sessionStorage.getItem(OPERATOR_TOKEN_STORAGE_KEY);
+
+  if (safeMethod || requestUrl.origin !== window.location.origin || !operatorToken) {
+    return nativeFetch(input, init);
+  }
+
+  const headers = new Headers(input instanceof Request ? input.headers : init.headers);
+  headers.set("Authorization", `Bearer ${operatorToken}`);
+
+  return nativeFetch(input, { ...init, headers });
+};
+
 const els = {
   globalDropOverlay: document.querySelector("#globalDropOverlay"),
   installAppButton: document.querySelector("#installAppButton"),
@@ -117,6 +158,14 @@ const els = {
 
 const AUTO_REFRESH_MS = 5 * 60 * 1000;
 const LIVE_DATA_HEARTBEAT_MS = 60 * 1000;
+const STATSIG_PRESENTATION_GATE = "bear_edge_provenance_ui";
+const STATSIG_SHADOW_GATE = "bear_edge_shadow_model";
+
+window.__bearEdgeStatsigControl = {
+  presentationProvenance: false,
+  shadowAssignment: "control",
+  status: { mode: "control_fallback" }
+};
 
 const percentFormatter = new Intl.NumberFormat(undefined, {
   style: "percent",
@@ -1970,9 +2019,43 @@ async function loadReleaseReadiness() {
   }
 }
 
+function oddsVerificationIsReady(verification) {
+  return verification?.status === "ready" && verification?.marketAccess === true;
+}
+
+function oddsVerificationStatusMessage(verification, prefix = "") {
+  const lead = prefix ? `${prefix} ` : "";
+  const sports = verification?.catalog?.sports ?? verification?.sports ?? 0;
+
+  if (oddsVerificationIsReady(verification)) {
+    return `${lead}Provider authentication and MLB market access verified. ${sports} sports returned.`;
+  }
+
+  if (verification?.status === "quota_exhausted") {
+    return `${lead}The key is authenticated, but usage credits are exhausted. Refill or upgrade the provider account before requesting odds.`;
+  }
+
+  if (verification?.status === "invalid_key") {
+    return `${lead}The provider rejected this key. Replace it with an active subscription key.`;
+  }
+
+  if (verification?.status === "rate_limited") {
+    return `${lead}The provider temporarily rate-limited the MLB market check. Retry after a short backoff.`;
+  }
+
+  return `${lead}${verification?.message ?? "Provider market access has not been verified."}`;
+}
+
 function renderOddsKeyStatus(payload) {
   const verification = payload?.verification ?? null;
-  const sample = Array.isArray(verification?.sample) ? verification.sample : [];
+  const quota = verification?.quota ?? payload?.quota ?? null;
+  const sample = Array.isArray(verification?.catalog?.sample)
+    ? verification.catalog.sample
+    : Array.isArray(verification?.sample)
+      ? verification.sample
+      : [];
+  const sports = verification?.catalog?.sports ?? verification?.sports;
+  const marketProbe = verification?.marketProbe ?? null;
   const configuredText = payload?.configured ? `Configured via ${payload.envKey ?? payload.writableEnvKey ?? "environment"}` : "Missing";
 
   els.oddsKeyStatusBoard.innerHTML = `
@@ -1990,7 +2073,23 @@ function renderOddsKeyStatus(payload) {
       <article>
         <h3>Verification</h3>
         <p>${escapeHtml(verification?.status ?? "not checked")}</p>
-        <p class="sources">${verification?.sports !== undefined ? `${verification.sports} sports returned by provider` : "Save or test a key to verify."}</p>
+        <p class="sources">${sports !== undefined ? `${sports} sports returned by provider` : "Save or test a key to verify."}</p>
+      </article>
+      <article>
+        <h3>Market Access</h3>
+        <p>${verification?.marketAccess === true ? "Verified" : verification ? "Blocked" : "Not checked"}</p>
+        <p class="sources">${escapeHtml(
+          verification
+            ? oddsVerificationStatusMessage(verification)
+            : "The readiness check uses one MLB moneyline market request."
+        )}</p>
+        ${marketProbe ? `<p class="sources">Probe: ${escapeHtml(marketProbe.sportKey)} / ${escapeHtml(marketProbe.bookmaker)} / ${escapeHtml((marketProbe.markets ?? []).join(", "))}</p>` : ""}
+      </article>
+      <article>
+        <h3>Usage Credits</h3>
+        <p>${quota?.remainingCredits !== null && quota?.remainingCredits !== undefined ? `${escapeHtml(quota.remainingCredits)} remaining` : "Not observed"}</p>
+        <p class="sources">${quota?.usedCredits !== null && quota?.usedCredits !== undefined ? `${escapeHtml(quota.usedCredits)} used; last call ${escapeHtml(quota.lastRequestCost ?? "unknown")}` : "The free catalog check reports quota headers."}</p>
+        <p class="sources">Circuit: ${quota?.circuitOpen ? `open (${escapeHtml(quota.circuitReason ?? "provider block")})` : "closed"}</p>
       </article>
     </div>
     ${
@@ -2051,7 +2150,8 @@ async function saveOddsApiKey(event) {
 
     els.oddsApiKeyInput.value = "";
     renderOddsKeyStatus(payload);
-    els.oddsKeyStatus.textContent = `Verified and saved. ${payload.verification?.sports ?? 0} sports returned.`;
+    els.oddsKeyStatus.textContent = oddsVerificationStatusMessage(payload.verification, "Saved locally.");
+    els.oddsKeyStatus.classList.toggle("error", !oddsVerificationIsReady(payload.verification));
     await Promise.all([loadSystemAudit(), loadProviderSetup(), loadSourceStatus("today"), loadAutoUpdateStatus()]);
   } catch (error) {
     els.oddsKeyStatus.textContent = error.message;
@@ -2076,7 +2176,8 @@ async function testSavedOddsApiKey() {
     }
 
     renderOddsKeyStatus(payload);
-    els.oddsKeyStatus.textContent = `Saved key verified. ${payload.verification?.sports ?? 0} sports returned.`;
+    els.oddsKeyStatus.textContent = oddsVerificationStatusMessage(payload.verification);
+    els.oddsKeyStatus.classList.toggle("error", !oddsVerificationIsReady(payload.verification));
     await Promise.all([loadSystemAudit(), loadProviderSetup(), loadSourceStatus("today")]);
   } catch (error) {
     els.oddsKeyStatus.textContent = error.message;
@@ -2180,7 +2281,7 @@ function renderProviderSetup(payload) {
               </header>
               ${provider.id === "the-odds-api" && provider.configured
                 ? `<p class="provider-live-status ${liveVerified ? "ok" : "error"}">
-                    Live verification: ${liveVerified ? "verified" : quotaExhausted ? "valid key, quota exhausted (500/500 credits)" : providerRejected ? "provider rejected the key" : "not verified"}<br>
+                    Live verification: ${liveVerified ? "verified" : quotaExhausted ? "valid key, usage quota exhausted" : providerRejected ? "provider rejected the key" : "not verified"}<br>
                     Automatic bet permission: ${escapeHtml(payload.liveAudit?.betCallPermission ?? "PRICE_CHECK_ONLY")}
                   </p>`
                 : ""}
@@ -2276,9 +2377,12 @@ async function saveProviderKey(event) {
     }
 
     apiKeyInput.value = "";
-    status.textContent = payload.verification?.status === "ok"
-      ? `Saved and verified. ${payload.verification?.sports ?? 0} sports returned.`
-      : `Saved locally as ${payload.envKey}. ${payload.verification?.message ?? "Restart is not required when saved through this page."}`;
+    if (form.dataset.providerId === "the-odds-api") {
+      status.textContent = oddsVerificationStatusMessage(payload.verification, `Saved locally as ${payload.envKey}.`);
+      status.classList.toggle("error", !oddsVerificationIsReady(payload.verification));
+    } else {
+      status.textContent = `Saved locally as ${payload.envKey}. ${payload.verification?.message ?? "Restart is not required when saved through this page."}`;
+    }
     await Promise.all([loadProviderSetup(), loadSystemAudit(), loadSourceStatus("today"), loadOddsKeyStatus(), loadAutoUpdateStatus()]);
   } catch (error) {
     status.textContent = error.message;
@@ -4054,9 +4158,234 @@ function summaryLabelForOdds(summary = {}) {
   return summary?.oddsApiConfigured ? "odds key connected" : "odds key missing";
 }
 
+function classifyBestTarget(target = {}) {
+  const auditRecord = target.auditRecord ?? null;
+  const verdict = auditRecord?.verdict ?? target.evaluation?.verdict ?? null;
+  const permission = target.permission ?? auditRecord?.permission ?? "PRICE_CHECK_ONLY";
+  const modelStatus = target.modelStatus ?? auditRecord?.model?.modelStatus ?? "research_only";
+  const persisted = Boolean(
+    auditRecord &&
+    target.recordId === auditRecord.id &&
+    target.persistedAt
+  );
+
+  if (!auditRecord) {
+    return "research";
+  }
+
+  if (!target.odds || target.status !== "priced") {
+    return "price-check";
+  }
+
+  if (verdict === "PASS") {
+    return "passed";
+  }
+
+  if (
+    verdict === "BET" &&
+    permission === "VERIFIED_BETS_ALLOWED" &&
+    modelStatus === "validated" &&
+    persisted
+  ) {
+    return "qualified";
+  }
+
+  return "waiting";
+}
+
+function bestTargetClassificationLabel(classification) {
+  return {
+    research: "Research Candidate",
+    "price-check": "Price Check",
+    waiting: "Waiting for Evidence",
+    passed: "Passed Market",
+    qualified: "Qualified BET"
+  }[classification] ?? "Research Candidate";
+}
+
+function bestTargetEvidenceAge(target = {}) {
+  const timestamp = target.sourceTime ?? target.sourceCapturedAt ?? target.fetchedAt ?? null;
+  const parsed = timestamp ? Date.parse(timestamp) : Number.NaN;
+
+  if (!Number.isFinite(parsed)) {
+    return "Evidence age unavailable";
+  }
+
+  const ageMinutes = Math.max(0, Math.floor((Date.now() - parsed) / 60_000));
+  if (ageMinutes < 1) {
+    return "Evidence captured less than one minute ago";
+  }
+  if (ageMinutes < 60) {
+    return `Evidence captured ${ageMinutes} minute${ageMinutes === 1 ? "" : "s"} ago`;
+  }
+
+  const ageHours = Math.floor(ageMinutes / 60);
+  return `Evidence captured ${ageHours} hour${ageHours === 1 ? "" : "s"} ago`;
+}
+
+function bestTargetCalibrationLabel(target = {}) {
+  const auditRecord = target.auditRecord ?? null;
+  const modelStatus = target.modelStatus ?? auditRecord?.model?.modelStatus ?? "research_only";
+  const calibrationReportId = target.calibrationReportId ?? auditRecord?.model?.calibrationReportId ?? null;
+
+  if (modelStatus === "validated" && calibrationReportId) {
+    return `Validated by ${calibrationReportId}`;
+  }
+
+  return `${modelStatus.replaceAll("_", " ")} / no production calibration authority`;
+}
+
+function bestTargetBlockingReason(target = {}) {
+  const auditRecord = target.auditRecord ?? null;
+  const failedGate = (target.gateResults ?? auditRecord?.gateResults ?? [])
+    .find((gate) => gate.passed !== true && gate.reasonCode);
+
+  return failedGate?.reasonCode ??
+    auditRecord?.reasons?.[0] ??
+    target.evaluation?.reasons?.[0] ??
+    target.riskFlags?.[0]?.code ??
+    "RESEARCH_ONLY";
+}
+
+function bestTargetSyncLabel(target = {}) {
+  const syncState = target.syncState ?? "not_persisted";
+  return {
+    pending: "Queued for remote synchronization",
+    synchronized: "Remote projection synchronized",
+    retryable_failure: "Remote sync will retry",
+    terminal_failure: "Remote sync blocked; local record retained",
+    local_only: "Persisted locally only",
+    not_persisted: "Research display only; not persisted"
+  }[syncState] ?? syncState.replaceAll("_", " ");
+}
+
+function renderBestTargetProvenance(target = {}) {
+  const auditRecord = target.auditRecord ?? null;
+  const contentDigest = auditRecord ? auditRecord.contentDigest : target.contentDigest ?? null;
+  const source = auditRecord?.sources?.find((entry) => entry.sourceType === "sportsbook_price") ??
+    auditRecord?.sources?.[0] ??
+    null;
+  const modelId = auditRecord?.model?.modelId ?? target.modelEvidence?.modelId ?? target.model?.modelId ?? "unknown";
+  const modelVersion = auditRecord?.model?.modelVersion ?? target.modelEvidence?.modelVersion ?? target.model?.modelVersion ?? "unknown";
+  const modelStatus = target.modelStatus ?? auditRecord?.model?.modelStatus ?? "research_only";
+  const calibrationReportId = target.calibrationReportId ?? auditRecord?.model?.calibrationReportId ?? null;
+  const permission = target.permission ?? auditRecord?.permission ?? "PRICE_CHECK_ONLY";
+
+  return `
+    <details class="target-provenance" ${window.__bearEdgeStatsigControl.presentationProvenance ? "open" : ""}>
+      <summary>Evidence and provenance</summary>
+      <dl>
+        <div><dt>Sportsbook</dt><dd>${escapeHtml(target.odds?.bookmaker?.title ?? target.odds?.bookmaker?.key ?? auditRecord?.price?.sportsbook ?? "Not priced")}</dd></div>
+        <div><dt>Line</dt><dd>${escapeHtml(target.line ?? auditRecord?.market?.line ?? "Not available")}</dd></div>
+        <div><dt>Odds</dt><dd>${escapeHtml(formatOdds(target.odds?.marketOdds ?? auditRecord?.price?.marketOdds))}</dd></div>
+        <div><dt>Source time</dt><dd>${escapeHtml(target.sourceTime ?? source?.sourceTime ?? "Unavailable")}</dd></div>
+        <div><dt>Capture time</dt><dd>${escapeHtml(target.sourceCapturedAt ?? source?.capturedAt ?? "Unavailable")}</dd></div>
+        <div><dt>Evidence age</dt><dd>${escapeHtml(bestTargetEvidenceAge(target))}</dd></div>
+        <div><dt>Model</dt><dd>${escapeHtml(`${modelId} ${modelVersion}`)}</dd></div>
+        <div><dt>Model status</dt><dd>${escapeHtml(modelStatus)}</dd></div>
+        <div><dt>Calibration</dt><dd>${escapeHtml(bestTargetCalibrationLabel(target))}</dd></div>
+        <div><dt>Report identifier</dt><dd>${escapeHtml(calibrationReportId ?? "None")}</dd></div>
+        <div><dt>Permission</dt><dd>${escapeHtml(permission)}</dd></div>
+        <div><dt>Primary blocker</dt><dd>${escapeHtml(bestTargetBlockingReason(target))}</dd></div>
+        <div><dt>Record identifier</dt><dd>${escapeHtml(target.recordId ?? auditRecord?.id ?? "Not persisted")}</dd></div>
+        <div><dt>Content digest</dt><dd>${escapeHtml(contentDigest ?? "Not persisted")}</dd></div>
+        <div><dt>Sync state</dt><dd>${escapeHtml(bestTargetSyncLabel(target))}</dd></div>
+      </dl>
+    </details>
+  `;
+}
+
+function renderBestTargetCard(target, index) {
+  const evaluation = target.evaluation;
+  const odds = target.odds;
+  const classification = classifyBestTarget(target);
+  const verdict = target.auditRecord?.verdict ?? evaluation?.verdict ?? target.status ?? "RESEARCH";
+
+  return `
+    <article class="best-target-card" data-target-id="${escapeHtml(target.id)}" data-manual-priced="false" data-classification="${escapeHtml(classification)}">
+      <header>
+        <span class="rank-pill">#${index + 1}</span>
+        <div>
+          <h3>${escapeHtml(target.player?.name ?? "Unknown player")}</h3>
+          <p>${escapeHtml(target.matchup)} / ${escapeHtml(formatDate(target.gameDate))}</p>
+        </div>
+        <span class="tag ${classification === "qualified" ? "low" : classification === "passed" ? "high" : "medium"}">${escapeHtml(bestTargetClassificationLabel(classification))}</span>
+      </header>
+      <p><strong>${escapeHtml(target.lean.toUpperCase())} ${escapeHtml(target.line)} ${escapeHtml(target.statLabel)}</strong></p>
+      <div class="candidate-stats">
+        <div><span>Record verdict</span><strong>${escapeHtml(verdict)}</strong></div>
+        <div><span>Model</span><strong>${formatPercent(target.modelProbability)}</strong></div>
+        <div><span>Fair</span><strong>${formatOdds(target.fairAmericanOdds)}</strong></div>
+        <div><span>Market</span><strong>${formatOdds(odds?.marketOdds)}</strong></div>
+        <div><span>EV</span><strong>${formatPercent(evaluation?.expectedValueRoi)}</strong></div>
+        <div><span>Kelly</span><strong>${formatPercent(evaluation?.kellyFraction)}</strong></div>
+        <div><span>Stake</span><strong>${formatMoney(evaluation?.recommendedStake)}</strong></div>
+      </div>
+      <p class="sources">${escapeHtml(odds?.bookmaker?.title ?? "No verified odds yet")} ${odds?.bookmaker?.lastUpdate ? `/ ${escapeHtml(shortTimestamp(odds.bookmaker.lastUpdate))}` : ""}${odds?.match ? ` / ${escapeHtml(odds.match.method)} ${escapeHtml(Math.round((odds.match.confidence ?? 0) * 100))}%` : ""}</p>
+      ${renderRiskFlags(evaluation?.riskFlags ?? target.riskFlags)}
+      ${renderBestTargetProvenance(target)}
+      <div class="candidate-edge-preview best-target-edge-preview">
+        <div class="edge-preview-head">
+          <strong>Manual price check</strong>
+          <span class="tag medium">odds needed</span>
+        </div>
+        <p>Type the sportsbook price from your screen. Then load, evaluate, or add this target to a 2-3 leg parlay.</p>
+      </div>
+      <div class="best-target-manual-odds">
+        <label>
+          <span>Market odds</span>
+          <input class="best-target-market-odds" inputmode="numeric" placeholder="-115 or +140" aria-label="Market odds for ${escapeHtml(target.player?.name ?? "target")}">
+        </label>
+        <label>
+          <span>Opposite odds</span>
+          <input class="best-target-opposite-odds" inputmode="numeric" placeholder="optional" aria-label="Opposite odds for no-vig normalization">
+        </label>
+        <label>
+          <span>Leg type</span>
+          <select class="best-target-market-type" aria-label="Leg type for ${escapeHtml(target.player?.name ?? "target")}">
+            <option value="prop" ${target.ticketDraft?.legs?.[0]?.marketType === "alt-prop" ? "" : "selected"}>Standard</option>
+            <option value="alt-prop" ${target.ticketDraft?.legs?.[0]?.marketType === "alt-prop" ? "selected" : ""}>Alt prop</option>
+          </select>
+        </label>
+        <button type="button" class="load-best-target-with-odds-button" data-target-id="${escapeHtml(target.id)}" disabled>Load Manual</button>
+        <button type="button" class="evaluate-best-target-with-odds-button" data-target-id="${escapeHtml(target.id)}" disabled>Evaluate Manual</button>
+        <button type="button" class="secondary add-best-target-with-odds-to-parlay-button" data-target-id="${escapeHtml(target.id)}" disabled>Add Manual To Parlay</button>
+      </div>
+      <footer>
+        <button type="button" class="secondary load-best-target-button" data-target-id="${escapeHtml(target.id)}" ${target.ticketDraft ? "" : "disabled"}>${target.odds ? "Load Single" : "Load Draft"}</button>
+        <button type="button" class="evaluate-best-target-button" data-target-id="${escapeHtml(target.id)}" ${target.ticketDraft && evaluation?.verdict === "BET" ? "" : "disabled"}>Evaluate</button>
+        <button type="button" class="secondary add-best-target-to-parlay-button" data-target-id="${escapeHtml(target.id)}" ${target.ticketDraft && target.odds ? "" : "disabled"}>Add To Parlay</button>
+      </footer>
+    </article>
+  `;
+}
+
+function renderTargetClassification(classification, heading, targets) {
+  const qualifiedHeading = classification === "qualified" && targets.length > 0
+    ? '<p class="qualified-bets-heading">Best Bets</p>'
+    : "";
+
+  return `
+    <section class="recommendation-classification" data-classification="${escapeHtml(classification)}">
+      <header>
+        <div>
+          <h3>${escapeHtml(heading)}</h3>
+          ${qualifiedHeading}
+        </div>
+        <span class="classification-count">${targets.length}</span>
+      </header>
+      ${targets.length > 0
+        ? `<div class="best-targets-grid">${targets.map(({ target, index }) => renderBestTargetCard(target, index)).join("")}</div>`
+        : '<p class="muted classification-empty">No rows currently meet this evidence state.</p>'}
+    </section>
+  `;
+}
+
 function renderBestTargets(payload) {
   const targets = Array.isArray(payload?.best) ? payload.best : [];
   const summary = payload?.summary ?? {};
+  const quota = payload?.quota ?? null;
+  const usageBudget = payload?.oddsUsageBudget ?? null;
   const modeLabel = payload?.status === "priced"
     ? "priced"
     : payload?.status === "odds_error"
@@ -4076,85 +4405,78 @@ function renderBestTargets(payload) {
     return;
   }
 
+  const classified = {
+    research: [],
+    "price-check": [],
+    waiting: [],
+    passed: [],
+    qualified: []
+  };
+  targets.forEach((target, index) => {
+    classified[classifyBestTarget(target)].push({ target, index });
+  });
+
   els.bestTargetsBoard.innerHTML = `
     <div class="best-targets-summary">
       <span class="tag ${payload.status === "priced" ? "low" : "medium"}">${escapeHtml(modeLabel)}</span>
       <span>${escapeHtml(summary.pricedCandidates ?? 0)} priced / ${escapeHtml(summary.candidates ?? 0)} candidates</span>
       <span>${escapeHtml(providerLabel)}</span>
+      ${quota?.remainingCredits !== null && quota?.remainingCredits !== undefined ? `<span>${escapeHtml(quota.remainingCredits)} credits remaining</span>` : ""}
+      ${usageBudget ? `<span>Estimated request cost: ${escapeHtml(usageBudget.maximumEstimatedCost)} / ${escapeHtml(usageBudget.maxCreditsPerRefresh)} credit cap</span>` : ""}
+      <span>Presentation control: ${escapeHtml(window.__bearEdgeStatsigControl.status?.mode ?? "control_fallback")}</span>
+      <span>Shadow assignment: ${escapeHtml(window.__bearEdgeStatsigControl.shadowAssignment ?? "control")}</span>
     </div>
-    <div class="best-targets-grid">
-      ${targets.map((target, index) => {
-        const evaluation = target.evaluation;
-        const odds = target.odds;
-        return `
-          <article class="best-target-card" data-target-id="${escapeHtml(target.id)}" data-manual-priced="false">
-            <header>
-              <span class="rank-pill">#${index + 1}</span>
-              <div>
-                <h3>${escapeHtml(target.player?.name ?? "Unknown player")}</h3>
-                <p>${escapeHtml(target.matchup)} / ${escapeHtml(formatDate(target.gameDate))}</p>
-              </div>
-              <span class="tag ${evaluation?.verdict === "BET" ? "low" : evaluation?.verdict === "WAIT" ? "medium" : "high"}">${escapeHtml(evaluation?.verdict ?? target.status ?? "TARGET")}</span>
-            </header>
-            <p><strong>${escapeHtml(target.lean.toUpperCase())} ${escapeHtml(target.line)} ${escapeHtml(target.statLabel)}</strong></p>
-            <div class="candidate-stats">
-              <div><span>Model</span><strong>${formatPercent(target.modelProbability)}</strong></div>
-              <div><span>Fair</span><strong>${formatOdds(target.fairAmericanOdds)}</strong></div>
-              <div><span>Market</span><strong>${formatOdds(odds?.marketOdds)}</strong></div>
-              <div><span>EV</span><strong>${formatPercent(evaluation?.expectedValueRoi)}</strong></div>
-              <div><span>Kelly</span><strong>${formatPercent(evaluation?.kellyFraction)}</strong></div>
-              <div><span>Stake</span><strong>${formatMoney(evaluation?.recommendedStake)}</strong></div>
-            </div>
-            <p class="sources">${escapeHtml(odds?.bookmaker?.title ?? "No verified odds yet")} ${odds?.bookmaker?.lastUpdate ? `/ ${escapeHtml(shortTimestamp(odds.bookmaker.lastUpdate))}` : ""}${odds?.match ? ` / ${escapeHtml(odds.match.method)} ${escapeHtml(Math.round((odds.match.confidence ?? 0) * 100))}%` : ""}</p>
-            ${renderRiskFlags(evaluation?.riskFlags ?? target.riskFlags)}
-            <div class="candidate-edge-preview best-target-edge-preview">
-              <div class="edge-preview-head">
-                <strong>Manual price check</strong>
-                <span class="tag medium">odds needed</span>
-              </div>
-              <p>Type the sportsbook price from your screen. Then load, evaluate, or add this target to a 2-3 leg parlay.</p>
-            </div>
-            <div class="best-target-manual-odds">
-              <label>
-                <span>Market odds</span>
-                <input class="best-target-market-odds" inputmode="numeric" placeholder="-115 or +140" aria-label="Market odds for ${escapeHtml(target.player?.name ?? "target")}">
-              </label>
-              <label>
-                <span>Opposite odds</span>
-                <input class="best-target-opposite-odds" inputmode="numeric" placeholder="optional" aria-label="Opposite odds for no-vig normalization">
-              </label>
-              <label>
-                <span>Leg type</span>
-                <select class="best-target-market-type" aria-label="Leg type for ${escapeHtml(target.player?.name ?? "target")}">
-                  <option value="prop" ${target.ticketDraft?.legs?.[0]?.marketType === "alt-prop" ? "" : "selected"}>Standard</option>
-                  <option value="alt-prop" ${target.ticketDraft?.legs?.[0]?.marketType === "alt-prop" ? "selected" : ""}>Alt prop</option>
-                </select>
-              </label>
-              <button type="button" class="load-best-target-with-odds-button" data-target-id="${escapeHtml(target.id)}" disabled>Load Manual</button>
-              <button type="button" class="evaluate-best-target-with-odds-button" data-target-id="${escapeHtml(target.id)}" disabled>Evaluate Manual</button>
-              <button type="button" class="secondary add-best-target-with-odds-to-parlay-button" data-target-id="${escapeHtml(target.id)}" disabled>Add Manual To Parlay</button>
-            </div>
-            <footer>
-              <button type="button" class="secondary load-best-target-button" data-target-id="${escapeHtml(target.id)}" ${target.ticketDraft ? "" : "disabled"}>${target.odds ? "Load Single" : "Load Draft"}</button>
-              <button type="button" class="evaluate-best-target-button" data-target-id="${escapeHtml(target.id)}" ${target.ticketDraft && evaluation?.verdict === "BET" ? "" : "disabled"}>Evaluate</button>
-              <button type="button" class="secondary add-best-target-to-parlay-button" data-target-id="${escapeHtml(target.id)}" ${target.ticketDraft && target.odds ? "" : "disabled"}>Add To Parlay</button>
-            </footer>
-          </article>
-        `;
-      }).join("")}
-    </div>
+    ${renderTargetClassification("research", "Research Candidates", classified.research)}
+    ${renderTargetClassification("price-check", "Price-Check Targets", classified["price-check"])}
+    ${renderTargetClassification("waiting", "Waiting for Evidence", classified.waiting)}
+    ${renderTargetClassification("passed", "Passed Markets", classified.passed)}
+    ${renderTargetClassification("qualified", "Qualified BET Calls", classified.qualified)}
     ${Array.isArray(payload?.warnings) && payload.warnings.length > 0
       ? `<ul class="warning-list">${payload.warnings.slice(0, 4).map((warning) => `<li>${escapeHtml(warning)}</li>`).join("")}</ul>`
       : ""}
   `;
   updateAllBestTargetManualPreviews();
+  recordStatsigExposure(STATSIG_PRESENTATION_GATE);
+  recordStatsigExposure(STATSIG_SHADOW_GATE);
 }
 
-async function loadBestTargets(date = "today") {
-  els.bestTargetsBoard.innerHTML = '<p class="muted">Ranking current MLB targets...</p>';
+async function recordStatsigExposure(gateName) {
+  try {
+    await fetch("/api/statsig-control/exposure", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ gateName })
+    });
+  } catch {
+    // Presentation remains on the deterministic control fallback.
+  }
+}
+
+async function loadStatsigControl() {
+  try {
+    const response = await fetch("/api/statsig-control");
+    const payload = await response.json();
+
+    if (!response.ok) {
+      throw new Error(payload.error ?? "Unable to load presentation controls.");
+    }
+
+    window.__bearEdgeStatsigControl = payload;
+  } catch {
+    window.__bearEdgeStatsigControl = {
+      presentationProvenance: false,
+      shadowAssignment: "control",
+      status: { mode: "control_fallback" }
+    };
+  }
+}
+
+async function loadBestTargets(date = "today", options = {}) {
+  const paidRefresh = options.refresh === true;
+  els.bestTargetsBoard.innerHTML = `<p class="muted">${paidRefresh ? "Requesting current MLB prices..." : "Ranking MLB targets without spending odds credits..."}</p>`;
 
   try {
-    const response = await fetch(`/api/best-mlb-targets?date=${encodeURIComponent(date)}&days=2&limit=3&maxCandidates=80`);
+    const response = await fetch(`/api/best-mlb-targets?date=${encodeURIComponent(date)}&days=2&limit=3&maxCandidates=80${paidRefresh ? "&refresh=1" : ""}`);
     const payload = await response.json();
 
     if (!response.ok) {
@@ -4387,6 +4709,7 @@ function deferDashboardWork(callback) {
 
 async function loadInitialDashboardPanels() {
   await Promise.all([
+    loadStatsigControl(),
     loadDashboard(),
     loadAutoUpdateStatus(),
     loadLiveDataHealth(),
@@ -4592,7 +4915,7 @@ function simulationInputFromTicket(ticket) {
   const missingProbability = legs.find((leg) => simulationProbabilityForLeg(leg) === null);
 
   if (missingProbability) {
-    throw new Error("Simulation needs modelProbabilityOverride. Load from Best 3 or Research Candidates after entering real odds.");
+    throw new Error("Simulation needs modelProbabilityOverride. Load from the Decision Board or Research Candidates after entering real odds.");
   }
 
   if (legs.length === 1) {
@@ -5472,7 +5795,7 @@ els.candidatesRefreshButton.addEventListener("click", () => {
   loadCandidates("today");
 });
 els.bestTargetsRefreshButton.addEventListener("click", () => {
-  loadBestTargets("today");
+  loadBestTargets("today", { refresh: true });
 });
 els.candidateOddsImportButton.addEventListener("click", () => {
   importCandidateOddsText();

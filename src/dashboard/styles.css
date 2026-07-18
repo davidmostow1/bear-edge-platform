@@ -982,6 +982,7 @@ main {
 .system-audit-board {
   display: grid;
   gap: 12px;
+  min-width: 0;
   padding: 14px 16px 16px;
 }
 
@@ -993,7 +994,23 @@ main {
 .release-readiness-board {
   display: grid;
   gap: 12px;
+  min-width: 0;
   padding: 14px 16px 16px;
+}
+
+.release-hero,
+.release-summary-grid,
+.release-lane-grid,
+.release-lane,
+.release-actions,
+.release-actions article,
+.release-evidence,
+.release-evidence-grid,
+.release-evidence-grid article,
+.release-check-list,
+.release-check,
+.release-check > * {
+  min-width: 0;
 }
 
 .release-hero {
@@ -1203,16 +1220,24 @@ main {
   line-height: 1.35;
 }
 
+.release-actions p,
+.release-evidence p,
+.release-check p {
+  overflow-wrap: anywhere;
+}
+
 .system-audit-badges {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
+  min-width: 0;
 }
 
 .system-audit-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(260px, 1fr));
   gap: 10px;
+  min-width: 0;
 }
 
 .system-audit-grid article {
@@ -1221,6 +1246,7 @@ main {
   background: var(--panel);
   display: grid;
   gap: 6px;
+  min-width: 0;
   padding: 10px;
 }
 
@@ -1245,6 +1271,7 @@ main {
   background: var(--field);
   display: grid;
   gap: 8px;
+  min-width: 0;
   padding: 12px;
 }
 
@@ -1271,6 +1298,7 @@ main {
   display: grid;
   grid-template-columns: repeat(4, minmax(180px, 1fr));
   gap: 10px;
+  min-width: 0;
 }
 
 .auto-update-detail article {
@@ -1279,7 +1307,14 @@ main {
   background: var(--panel);
   display: grid;
   gap: 6px;
+  min-width: 0;
   padding: 10px;
+}
+
+.auto-update-detail p,
+.system-action-list p,
+.warning-list p {
+  overflow-wrap: anywhere;
 }
 
 .auto-update-detail h3 {
@@ -1376,6 +1411,57 @@ main {
   grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
+.recommendation-classification {
+  background: #f7faf7;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+}
+
+.recommendation-classification > header {
+  align-items: center;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+}
+
+.recommendation-classification h3,
+.recommendation-classification p {
+  margin: 0;
+}
+
+.recommendation-classification[data-classification="qualified"] {
+  border-color: var(--green);
+  box-shadow: inset 4px 0 0 var(--green);
+}
+
+.classification-count {
+  align-items: center;
+  background: var(--ink);
+  border-radius: 999px;
+  color: #fff;
+  display: inline-flex;
+  font-weight: 800;
+  height: 30px;
+  justify-content: center;
+  min-width: 30px;
+}
+
+.classification-empty {
+  padding: 4px 0;
+}
+
+.qualified-bets-heading {
+  color: var(--green);
+  font-size: 12px;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  margin-top: 4px !important;
+  text-transform: uppercase;
+}
+
 .best-target-card {
   background: #fff;
   border: 1px solid var(--line);
@@ -1401,6 +1487,53 @@ main {
   color: var(--muted);
   font-size: 13px;
   margin-top: 2px;
+}
+
+.target-provenance {
+  background: #f7faf7;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.target-provenance summary {
+  align-items: center;
+  cursor: pointer;
+  display: flex;
+  font-size: 13px;
+  font-weight: 800;
+  min-height: 44px;
+  padding: 0 12px;
+}
+
+.target-provenance dl {
+  border-top: 1px solid var(--line);
+  display: grid;
+  gap: 0;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin: 0;
+}
+
+.target-provenance dl > div {
+  border-bottom: 1px solid var(--line);
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+  padding: 9px 12px;
+}
+
+.target-provenance dt {
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.target-provenance dd {
+  font-size: 12px;
+  margin: 0;
+  overflow-wrap: anywhere;
 }
 
 .best-target-manual-odds {
@@ -1436,8 +1569,12 @@ main {
 }
 
 .best-target-manual-odds button {
-  min-height: 38px;
+  min-height: 44px;
   white-space: nowrap;
+}
+
+.best-target-card footer button {
+  min-height: 44px;
 }
 
 .rank-pill {
@@ -2535,6 +2672,7 @@ main {
 .provider-setup-board {
   display: grid;
   gap: 14px;
+  min-width: 0;
 }
 
 .provider-summary {
@@ -2545,8 +2683,9 @@ main {
 
 .provider-card-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(360px, 100%), 1fr));
   gap: 12px;
+  min-width: 0;
 }
 
 .provider-card {
@@ -2555,6 +2694,7 @@ main {
   background: rgba(255, 255, 255, 0.72);
   display: grid;
   gap: 10px;
+  min-width: 0;
   padding: 13px;
 }
 
@@ -2578,11 +2718,13 @@ main {
   grid-template-columns: minmax(150px, 0.8fr) minmax(190px, 1fr) auto;
   gap: 8px;
   align-items: end;
+  min-width: 0;
 }
 
 .provider-key-form label {
   display: grid;
   gap: 5px;
+  min-width: 0;
 }
 
 .provider-key-form label span {
@@ -2599,6 +2741,7 @@ main {
   border-radius: 8px;
   background: #fff;
   color: var(--ink);
+  min-width: 0;
   padding: 0 10px;
 }
 
@@ -2890,12 +3033,36 @@ th {
   .workspace {
     grid-template-columns: 1fr;
   }
+
+  .best-targets-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
 @media (max-width: 720px) {
   .app-header {
     align-items: start;
     flex-direction: column;
+  }
+
+  section[id] {
+    scroll-margin-top: 72px;
+  }
+
+  .quick-nav {
+    border-radius: 14px;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    overscroll-behavior-inline: contain;
+    scrollbar-width: none;
+  }
+
+  .quick-nav::-webkit-scrollbar {
+    display: none;
+  }
+
+  .quick-nav a {
+    flex: 0 0 auto;
   }
 
   .summary-grid,
@@ -2961,6 +3128,20 @@ th {
     grid-template-columns: 1fr;
   }
 
+  .best-targets-grid,
+  .target-provenance dl {
+    grid-template-columns: 1fr;
+  }
+
+  .best-target-card header {
+    grid-template-columns: auto 1fr;
+  }
+
+  .best-target-card header > .tag {
+    grid-column: 1 / -1;
+    justify-self: start;
+  }
+
   #candidateFilterStatus {
     justify-self: start;
     white-space: normal;
@@ -2985,6 +3166,11 @@ th {
   }
 
   .candidate-action-card footer {
+    grid-template-columns: 1fr;
+  }
+
+  .release-actions article,
+  .release-check {
     grid-template-columns: 1fr;
   }
 

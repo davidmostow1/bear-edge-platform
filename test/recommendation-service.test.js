@@ -91,6 +91,54 @@ test("persistDisplayedTargets logs every returned row before returning", async (
   assert.equal(inspection.records.length, 1);
 });
 
+test("persistDisplayedTargets logs the complete priced calibration pool without returning it", async (t) => {
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "bear-edge-recommendations-"));
+  const ledgerPath = path.join(tempDir, "decision_log.jsonl");
+  t.after(() => fs.rm(tempDir, { recursive: true, force: true }));
+  const first = researchTarget({
+    status: "priced",
+    odds: {
+      bookmaker: { key: "draftkings" },
+      marketOdds: -110,
+      oppositeOdds: -110,
+      marketContext: { offeredLastUpdate: FETCHED_AT }
+    }
+  });
+  const second = researchTarget({
+    id: "mlb-123-second-pitcher-strikeouts",
+    selection: "Aaron Nola over 5.5 strikeouts",
+    player: { id: 33709, name: "Aaron Nola" },
+    odds: {
+      bookmaker: { key: "fanduel" },
+      marketOdds: 105,
+      oppositeOdds: -135,
+      marketContext: { offeredLastUpdate: FETCHED_AT }
+    },
+    status: "priced"
+  });
+  const result = researchResult({
+    best: [first],
+    calibrationCandidates: [first, second]
+  });
+
+  const persisted = await persistDisplayedTargets(result, {
+    ledgerPath,
+    requestId: "request_calibration_pool"
+  });
+  const inspection = await readAuthoritativeLedger({ ledgerPath });
+
+  assert.equal(inspection.records.length, 2);
+  assert.equal(persisted.persistence.persistedCount, 2);
+  assert.equal(persisted.persistence.displayedCount, 1);
+  assert.equal(persisted.persistence.calibrationPoolCount, 2);
+  assert.equal(Object.hasOwn(persisted, "calibrationCandidates"), false);
+  assert.equal(persisted.best[0].auditRecord.market.participantId, "4414215");
+  assert.deepEqual(
+    inspection.records.map((record) => record.market.participantId).sort(),
+    ["33709", "4414215"]
+  );
+});
+
 test("persistDisplayedTargets never labels research-only output BET", async (t) => {
   const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "bear-edge-recommendations-"));
   const ledgerPath = path.join(tempDir, "decision_log.jsonl");
@@ -152,4 +200,39 @@ test("persistDisplayedTargets fails without returning a partial target result", 
     }),
     /forced ledger failure/
   );
+});
+
+test("predictive uncertainty gate fails closed when interval width is missing", async (t) => {
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "bear-edge-recommendations-"));
+  const ledgerPath = path.join(tempDir, "decision_log.jsonl");
+  t.after(() => fs.rm(tempDir, { recursive: true, force: true }));
+  const target = researchTarget({
+    status: "priced",
+    odds: {
+      bookmaker: { key: "draftkings" },
+      marketOdds: -110,
+      oppositeOdds: -110,
+      marketContext: { offeredLastUpdate: FETCHED_AT }
+    },
+    evaluation: {
+      verdict: "WAIT",
+      reasons: ["Incomplete uncertainty evidence."],
+      probabilityUncertainty: {
+        intervalBasis: "observed_count",
+        decisionProbability: 0.55
+      },
+      stakePolicy: { maxProbabilityIntervalWidth: 0.5 },
+      riskFlags: []
+    }
+  });
+  const persisted = await persistDisplayedTargets(researchResult({ best: [target] }), {
+    ledgerPath,
+    requestId: "request_uncertainty"
+  });
+  const gate = persisted.best[0].auditRecord.gateResults.find(
+    (entry) => entry.gate === "predictive_uncertainty"
+  );
+
+  assert.equal(gate.passed, false);
+  assert.equal(gate.reasonCode, "PREDICTIVE_UNCERTAINTY_UNAVAILABLE");
 });

@@ -15,6 +15,9 @@ const {
 } = require("./audit/authoritative-ledger.js");
 const { contentDigest } = require("./audit/canonical-json.js");
 const {
+  projectCalibrationLedger
+} = require("./calibration/ledger-projection.js");
+const {
   DEFAULT_DECISION_LOG_PATH,
   appendDecisionLog,
   resolveDecisionLogPath
@@ -785,6 +788,7 @@ module.exports = {
   LiveTicketValidationError,
   RESEARCH_PACKET_SCHEMA,
   readDecisionLogEntries,
+  projectCalibrationLedger,
   resolveDecisionLogPath,
   SETTLEMENT_INPUT_SCHEMA,
   describeCausalEvidence,

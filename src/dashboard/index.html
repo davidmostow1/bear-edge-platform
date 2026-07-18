@@ -71,7 +71,7 @@
 
       <nav class="quick-nav" aria-label="Dashboard sections">
         <a href="#operator">Operator</a>
-        <a href="#best-targets">Best 3</a>
+        <a href="#best-targets">Decision Board</a>
         <a href="#candidates">Props</a>
         <a href="#parlay-builder">Parlay Builder</a>
         <a href="#screenshotIntakePanel">Screenshots</a>
@@ -396,15 +396,31 @@
       <section class="panel best-targets-panel" id="best-targets">
         <div class="panel-title">
           <div>
-            <h2>Best Current MLB Targets</h2>
-            <p class="panel-subtitle">Top three from official stats. If a verified odds key is saved, this panel prices props and shows EV/Kelly verdicts.</p>
+            <h2>Evidence-Classified MLB Board</h2>
+            <p class="panel-subtitle">Every row is separated by evidence state. Only a persisted, provider-priced, calibrated BET with verified permission can enter Qualified BET Calls.</p>
           </div>
           <div class="button-row">
             <span id="bestTargetsTimestamp" class="muted">Not checked yet</span>
-            <button id="bestTargetsRefreshButton" type="button" class="secondary">Refresh Best 3</button>
+            <button id="bestTargetsRefreshButton" type="button" class="secondary">Refresh Market Prices (uses odds credits)</button>
           </div>
         </div>
-        <div id="bestTargetsBoard" class="best-targets-board"></div>
+        <div id="bestTargetsBoard" class="best-targets-board">
+          <section class="recommendation-classification" data-classification="research">
+            <h3>Research Candidates</h3>
+          </section>
+          <section class="recommendation-classification" data-classification="price-check">
+            <h3>Price-Check Targets</h3>
+          </section>
+          <section class="recommendation-classification" data-classification="waiting">
+            <h3>Waiting for Evidence</h3>
+          </section>
+          <section class="recommendation-classification" data-classification="passed">
+            <h3>Passed Markets</h3>
+          </section>
+          <section class="recommendation-classification" data-classification="qualified">
+            <h3>Qualified BET Calls</h3>
+          </section>
+        </div>
       </section>
 
       <section class="panel candidates-panel" id="candidates">

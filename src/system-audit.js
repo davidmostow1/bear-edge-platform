@@ -83,6 +83,44 @@ function envFlag(name) {
   };
 }
 
+function safeOperatorAuthStatus(status = {}) {
+  const lanMode = Boolean(status.lanMode);
+  const required = Boolean(status.required);
+
+  return {
+    provider: "bear_edge_operator_auth",
+    required,
+    lanMode,
+    mode: required ? "bearer_token" : "local_open",
+    tokenSource: ["configured", "generated", "not_required"].includes(status.tokenSource)
+      ? status.tokenSource
+      : required ? "configured" : "not_required",
+    digestAlgorithm: required ? "sha256" : null,
+    generatedEntropyBytes: status.tokenSource === "generated" ? 32 : null,
+    writeBoundaryReady: !lanMode || required,
+    secretReturned: false
+  };
+}
+
+function safeStatsigStatus(status = {}) {
+  const configured = Boolean(status.configured);
+  const initialized = Boolean(status.initialized);
+  const mode = initialized ? "remote_control" : "control_fallback";
+
+  return {
+    provider: "statsig",
+    configured,
+    initialized,
+    mode,
+    environment: typeof status.environment === "string" ? status.environment : null,
+    initializedAt: typeof status.initializedAt === "string" ? status.initializedAt : null,
+    lastSafeError: typeof status.lastSafeError === "string" ? status.lastSafeError : null,
+    authorityScope: "presentation_and_shadow_only",
+    failClosed: mode === "control_fallback" || initialized,
+    secretReturned: false
+  };
+}
+
 async function readPackage(rootDir) {
   try {
     const packageJson = JSON.parse(await fs.readFile(path.join(rootDir, "package.json"), "utf8"));
@@ -168,6 +206,10 @@ async function getSystemAudit(options = {}) {
   ];
   const warnings = [];
   const nextActions = [];
+  const runtimeControls = {
+    operatorAuth: safeOperatorAuthStatus(options.operatorAuthStatus),
+    statsig: safeStatsigStatus(options.statsigStatus)
+  };
 
   if (!commands.find((command) => command.command === "gh")?.available) {
     warnings.push("GitHub connector is available in Codex, but the local gh CLI is not installed on PATH.");
@@ -224,6 +266,7 @@ async function getSystemAudit(options = {}) {
       keys: configuredKeys
     },
     providerSetup,
+    runtimeControls,
     readiness: {
       localFilesOk: requiredPathsOk,
       bundledNodeAvailable,
@@ -232,6 +275,8 @@ async function getSystemAudit(options = {}) {
       npmAvailable: commands.find((command) => command.command === "npm")?.available ?? false,
       gitAvailable: commands.find((command) => command.command === "git")?.available ?? false,
       githubReady: git.hasRemote && (commands.find((command) => command.command === "gh")?.available ?? false),
+      operatorWriteBoundaryReady: runtimeControls.operatorAuth.writeBoundaryReady,
+      statsigFailClosed: runtimeControls.statsig.failClosed,
       sportsbookOddsReady: configuredKeys.some((key) => ["THE_ODDS_API_KEY", "ODDS_API_KEY"].includes(key.name) && key.configured),
       tennisReady: configuredKeys.some((key) => ["TENNIS_API_KEY", "SPORTDEVS_API_KEY"].includes(key.name) && key.configured)
     },
@@ -241,5 +286,7 @@ async function getSystemAudit(options = {}) {
 }
 
 module.exports = {
-  getSystemAudit
+  getSystemAudit,
+  safeOperatorAuthStatus,
+  safeStatsigStatus
 };

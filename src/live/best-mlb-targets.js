@@ -1,5 +1,11 @@
 const { generateResearchCandidates } = require("./candidates.js");
-const { fetchOddsApiEventMarkets, fetchOddsApiMarkets, resolveOddsApiKey } = require("./odds-api.js");
+const {
+  fetchOddsApiEventMarkets,
+  fetchOddsApiMarkets,
+  estimateOddsRequestCost,
+  quotaSnapshot,
+  resolveOddsApiKey
+} = require("./odds-api.js");
 const {
   analyzeMarketIntelligence,
   applyMarketAdjustments
@@ -9,6 +15,12 @@ const {
   prepareModelRegistryOptions,
   resolveCandidateModelEvidence
 } = require("../calibration/model-evidence.js");
+const { evaluatePortfolioRisk } = require("../risk/portfolio-risk.js");
+const { evaluateDrawdownRisk } = require("../risk/drawdown-risk.js");
+const { buildPriceDiscipline } = require("./price-discipline.js");
+const { evaluateRecommendationLifecycle } = require("./recommendation-lifecycle.js");
+
+const DEFAULT_MLB_BOOKMAKERS = "draftkings,fanduel,betmgm,caesars,fanatics";
 
 const MLB_PROP_MARKETS = Object.freeze({
   strikeOuts: "pitcher_strikeouts",
@@ -89,13 +101,22 @@ function evaluatePrice(candidate, price, options = {}) {
     oppositeOdds: price.oppositeOdds,
     marketContext: price.marketContext,
     baseMarketWeight: marketWeight,
+    now: options.now ?? new Date(),
     policy: maxMarketAgeMinutes === undefined
       ? {}
       : { maxMarketAgeMinutes }
   });
   const marketProbability = marketIntelligence.referenceProbability;
+  const rawModelProbability = candidate.prediction.modelProbability;
+  const probabilityUncertainty = candidate.prediction?.uncertainty ?? null;
+  const hasObservedProbabilityInterval =
+    probabilityUncertainty?.intervalBasis === "observed_count" &&
+    Number.isFinite(probabilityUncertainty?.decisionProbability);
+  const independentModelProbability = hasObservedProbabilityInterval
+    ? Math.min(rawModelProbability, probabilityUncertainty.decisionProbability)
+    : rawModelProbability;
   const adjustedModelProbability = applyMarketAdjustments(
-    candidate.prediction.modelProbability,
+    independentModelProbability,
     marketIntelligence
   );
   const adjustedProbability = shrinkProbability(
@@ -117,10 +138,43 @@ function evaluatePrice(candidate, price, options = {}) {
     kellyMultiplier: livePolicy.kellyMultiplier ?? 0.12,
     maxBankrollFraction: livePolicy.maxBankrollFraction ?? 0.015,
     maxStake: livePolicy.maxStake ?? Math.max(5, bankroll * 0.015),
-    minStake: livePolicy.minStake ?? 5
+    minStake: livePolicy.minStake ?? 5,
+    prohibitedWindowMinutes: livePolicy.prohibitedWindowMinutes ?? 5,
+    requireObservedProbabilityInterval: livePolicy.requireObservedProbabilityInterval ?? true,
+    maxProbabilityIntervalWidth: livePolicy.maxProbabilityIntervalWidth ?? 0.5
   };
   const rawStake = bankroll * kelly * policy.kellyMultiplier;
-  const recommendedStake = Math.min(rawStake, policy.maxStake, bankroll * policy.maxBankrollFraction);
+  const proposedStake = Math.min(rawStake, policy.maxStake, bankroll * policy.maxBankrollFraction);
+  const drawdownRisk = evaluateDrawdownRisk({
+    snapshot: options.drawdownSnapshot,
+    proposedStake,
+    bankroll
+  });
+  const recommendedStake = drawdownRisk.approvedStake;
+  const priceDiscipline = buildPriceDiscipline({
+    currentAmericanOdds: price.marketOdds,
+    winProbability: adjustedProbability,
+    priceCapturedAt: price.marketContext?.offeredLastUpdate ?? price.marketLastUpdate ?? null,
+    eventStartAt: candidate.gameDate ?? null,
+    now: options.now ?? new Date(),
+    policy: {
+      ...policy,
+      bankroll,
+      kellyMultiplier: policy.kellyMultiplier * drawdownRisk.stakeMultiplier,
+      maxMarketAgeMinutes: maxMarketAgeMinutes ?? 10
+    }
+  });
+  const portfolioRisk = evaluatePortfolioRisk({
+    candidate: {
+      ...candidate,
+      marketFamily: mappedMarketKey(candidate),
+      selection: candidate.ticketDraft?.selection ?? null
+    },
+    proposedStake: recommendedStake,
+    bankroll,
+    snapshot: options.portfolioSnapshot,
+    policy: options.portfolioPolicy
+  });
   const riskFlags = [];
   const reasons = [];
   const modelEvidence = resolveCandidateModelEvidence(candidate, options.modelRegistryOptions);
@@ -131,6 +185,47 @@ function evaluatePrice(candidate, price, options = {}) {
     }
   }
   riskFlags.push(...marketIntelligence.riskFlags);
+  riskFlags.push(...drawdownRisk.riskFlags);
+  riskFlags.push(...portfolioRisk.riskFlags);
+  if (policy.requireObservedProbabilityInterval && !hasObservedProbabilityInterval) {
+    riskFlags.push({
+      code: "PREDICTIVE_UNCERTAINTY_UNAVAILABLE",
+      severity: "high",
+      message: "An observed-count probability interval is required before this candidate can be actionable."
+    });
+  } else if (hasObservedProbabilityInterval &&
+      probabilityUncertainty.width > policy.maxProbabilityIntervalWidth) {
+    riskFlags.push({
+      code: "PREDICTIVE_UNCERTAINTY_EXCESSIVE",
+      severity: "high",
+      message: "The probability interval is wider than the configured decision threshold."
+    });
+  } else if (hasObservedProbabilityInterval && independentModelProbability < rawModelProbability) {
+    riskFlags.push({
+      code: "PREDICTIVE_UNCERTAINTY_DISCOUNT",
+      severity: "info",
+      message: "EV and staking use the lower observed-count probability bound instead of the point estimate."
+    });
+  }
+  if (!priceDiscipline.minimumPrice.feasible) {
+    riskFlags.push({
+      code: "PRICE_LIMIT_INFEASIBLE",
+      severity: "high",
+      message: "No offered price can satisfy the configured economic and minimum-stake constraints."
+    });
+  } else if (priceDiscipline.expired) {
+    riskFlags.push({
+      code: "PRICE_EXPIRED",
+      severity: "high",
+      message: "The recommendation passed its market-freshness or event-time validity boundary."
+    });
+  } else if (!priceDiscipline.clearsMinimumPrice) {
+    riskFlags.push({
+      code: "PRICE_BELOW_MINIMUM",
+      severity: "info",
+      message: "The available American odds are worse than the calculated minimum acceptable price."
+    });
+  }
   if (!modelEvidence.validated) {
     riskFlags.push({
       code: "MODEL_CALIBRATION_REQUIRED",
@@ -141,6 +236,7 @@ function evaluatePrice(candidate, price, options = {}) {
   let verdict = "BET";
 
   const marketDataRiskCodes = new Set([
+    "MISSING_MARKET_COUNTERPART",
     "MISSING_MARKET_TIMESTAMP",
     "INVALID_MARKET_TIMESTAMP",
     "FUTURE_MARKET_TIMESTAMP",
@@ -151,6 +247,13 @@ function evaluatePrice(candidate, price, options = {}) {
   const hasManualConfirmationRisk = riskFlags.some((flag) =>
     ["LINEUP_NOT_CONFIRMED", "STALE_INJURY", "INJURY_DATA_STALE", "ROSTER_NOT_CONFIRMED"].includes(flag.code)
   );
+  const hasPredictiveUncertaintyRisk = riskFlags.some((flag) =>
+    ["PREDICTIVE_UNCERTAINTY_UNAVAILABLE", "PREDICTIVE_UNCERTAINTY_EXCESSIVE"].includes(flag.code)
+  );
+  const hasDrawdownContextRisk = riskFlags.some((flag) =>
+    flag.code === "DRAWDOWN_CONTEXT_UNAVAILABLE"
+  );
+  const hasDrawdownHalt = riskFlags.some((flag) => flag.code === "MAX_DRAWDOWN_REACHED");
 
   if (policy.requireMarketTimestamp && hasMarketDataRisk) {
     verdict = "WAIT";
@@ -158,9 +261,24 @@ function evaluatePrice(candidate, price, options = {}) {
   } else if (hasManualConfirmationRisk) {
     verdict = "WAIT";
     reasons.push("Lineup, roster, or injury evidence requires manual confirmation.");
+  } else if (hasPredictiveUncertaintyRisk) {
+    verdict = "WAIT";
+    reasons.push("Observed predictive uncertainty is missing or exceeds the configured limit.");
+  } else if (hasDrawdownContextRisk) {
+    verdict = "WAIT";
+    reasons.push("Drawdown cannot be verified from the authoritative settlement history.");
+  } else if (hasDrawdownHalt) {
+    verdict = "PASS";
+    reasons.push("Registered drawdown or loss-streak limits halt new exposure.");
   } else if (!modelEvidence.validated) {
     verdict = "WAIT";
     reasons.push("Validated model-registry evidence is required before a BET verdict.");
+  } else if (!priceDiscipline.minimumPrice.feasible) {
+    verdict = "PASS";
+    reasons.push("Configured stake and economic constraints cannot be satisfied at any price.");
+  } else if (priceDiscipline.expired) {
+    verdict = "WAIT";
+    reasons.push("The recommendation expired before evaluation completed.");
   } else if (fairEdge <= policy.minFairEdge) {
     verdict = "PASS";
     reasons.push("Adjusted fair edge versus the no-vig market is below threshold.");
@@ -169,6 +287,9 @@ function evaluatePrice(candidate, price, options = {}) {
       severity: "info",
       message: "Adjusted fair edge versus the no-vig market does not clear the minimum edge threshold."
     });
+  } else if (!priceDiscipline.clearsMinimumPrice) {
+    verdict = "PASS";
+    reasons.push("Available odds are below the calculated minimum acceptable price.");
   } else if (roi <= policy.minEvRoi) {
     verdict = "PASS";
     reasons.push("Expected value versus offered odds is below threshold.");
@@ -193,6 +314,15 @@ function evaluatePrice(candidate, price, options = {}) {
       severity: "info",
       message: "Recommended stake is below the configured minimum stake."
     });
+  } else if (!portfolioRisk.passed) {
+    const contextUnavailable = portfolioRisk.riskFlags.some(
+      (flag) => flag.code === "PORTFOLIO_CONTEXT_UNAVAILABLE"
+    );
+
+    verdict = contextUnavailable ? "WAIT" : "PASS";
+    reasons.push(contextUnavailable
+      ? "Portfolio exposure cannot be verified from the authoritative ledger."
+      : "Portfolio exposure or duplicate-position limits reject this recommendation.");
   } else if (riskFlags.some((flag) => flag.severity === "high")) {
     verdict = "WAIT";
     reasons.push("High-severity risk flags require manual confirmation.");
@@ -204,6 +334,9 @@ function evaluatePrice(candidate, price, options = {}) {
     verdict,
     reasons,
     marketIntelligence,
+    rawModelProbability,
+    independentModelProbability,
+    probabilityUncertainty,
     adjustedModelProbability,
     adjustedProbability,
     marketProbability,
@@ -215,6 +348,9 @@ function evaluatePrice(candidate, price, options = {}) {
     kellyFraction: kelly,
     recommendedStake,
     stakePolicy: policy,
+    priceDiscipline,
+    drawdownRisk,
+    portfolioRisk,
     riskFlags,
     modelEvidence
   };
@@ -323,7 +459,27 @@ function findOutcomePair(candidate, bookmaker) {
   };
 }
 
-function findCandidatePrice(candidate, event) {
+function offerTimestampStatus(lastUpdate, nowMs, maxMarketAgeMinutes) {
+  if (!lastUpdate) {
+    return "missing";
+  }
+
+  const updateMs = Date.parse(lastUpdate);
+
+  if (!Number.isFinite(updateMs)) {
+    return "invalid";
+  }
+
+  const ageMinutes = (nowMs - updateMs) / 60000;
+
+  if (ageMinutes < 0) {
+    return "future";
+  }
+
+  return ageMinutes <= maxMarketAgeMinutes ? "fresh" : "stale";
+}
+
+function findCandidatePrice(candidate, event, options = {}) {
   const marketKey = mappedMarketKey(candidate);
   const candidateBookmakers = Array.isArray(event?.bookmakers) && event.bookmakers.length > 0
     ? event.bookmakers
@@ -334,24 +490,78 @@ function findCandidatePrice(candidate, event) {
       pair: findOutcomePair(candidate, bookmaker)
     }))
     .filter((entry) => entry.pair);
-  const preferredPair = bookmakerPairs.find((entry) => entry.bookmaker.key === event?.bookmaker?.key);
-  const primary = preferredPair ?? bookmakerPairs[0] ?? null;
+  const parsedNow = options.now instanceof Date ? options.now.getTime() : Date.parse(options.now ?? "");
+  const nowMs = Number.isFinite(parsedNow) ? parsedNow : Date.now();
+  const maxMarketAgeMinutes = Number.isFinite(Number(options.maxMarketAgeMinutes))
+    ? Number(options.maxMarketAgeMinutes)
+    : 10;
+  const availableOffers = bookmakerPairs
+    .map(({ bookmaker, pair }) => {
+      const lastUpdate = pair.market.lastUpdate ?? bookmaker.lastUpdate ?? null;
 
-  if (!primary) {
+      return {
+        bookmaker: bookmaker.key,
+        title: bookmaker.title,
+        marketOdds: pair.marketOutcome.price,
+        oppositeOdds: pair.oppositeOutcome?.price ?? null,
+        lastUpdate,
+        timestampStatus: offerTimestampStatus(lastUpdate, nowMs, maxMarketAgeMinutes),
+        isSharp: isSharpBookmaker(bookmaker.key),
+        bookmakerRecord: bookmaker,
+        pair
+      };
+    })
+    .sort((left, right) => {
+      const priceDelta = Number(right.marketOdds) - Number(left.marketOdds);
+
+      if (priceDelta !== 0) {
+        return priceDelta;
+      }
+
+      return (Date.parse(right.lastUpdate ?? "") || 0) - (Date.parse(left.lastUpdate ?? "") || 0);
+    });
+  const freshOffers = availableOffers.filter((offer) => offer.timestampStatus === "fresh");
+  const requiredBookmaker = typeof options.requiredBookmaker === "string"
+    ? options.requiredBookmaker.trim().toLowerCase()
+    : "";
+  const primaryOffer = requiredBookmaker
+    ? availableOffers.find((offer) => String(offer.bookmaker).toLowerCase() === requiredBookmaker) ?? null
+    : freshOffers[0] ?? availableOffers[0] ?? null;
+
+  if (!primaryOffer) {
     return null;
   }
 
-  const consensus = bookmakerPairs.map(({ bookmaker, pair }) => ({
-    bookmaker: bookmaker.key,
-    title: bookmaker.title,
-    marketOdds: pair.marketOutcome.price,
-    oppositeOdds: pair.oppositeOutcome?.price ?? null,
-    lastUpdate: pair.market.lastUpdate ?? bookmaker.lastUpdate ?? null,
-    isSharp: isSharpBookmaker(bookmaker.key)
+  const consensus = availableOffers.map((offer) => ({
+    bookmaker: offer.bookmaker,
+    title: offer.title,
+    marketOdds: offer.marketOdds,
+    oppositeOdds: offer.oppositeOdds,
+    lastUpdate: offer.lastUpdate,
+    isSharp: offer.isSharp
   }));
+  const primary = {
+    bookmaker: primaryOffer.bookmakerRecord,
+    pair: primaryOffer.pair
+  };
 
   return {
     marketKey,
+    selectionMethod: requiredBookmaker
+      ? "required_bookmaker_price"
+      : freshOffers.length > 0
+        ? "best_fresh_available_price"
+        : "best_available_price_unverified_freshness",
+    freshOfferCount: freshOffers.length,
+    availableOffers: availableOffers.map((offer) => ({
+      bookmaker: offer.bookmaker,
+      title: offer.title,
+      marketOdds: offer.marketOdds,
+      oppositeOdds: offer.oppositeOdds,
+      lastUpdate: offer.lastUpdate,
+      timestampStatus: offer.timestampStatus,
+      isSharp: offer.isSharp
+    })),
     bookmaker: primary.bookmaker
       ? {
           key: primary.bookmaker.key,
@@ -399,7 +609,9 @@ function riskScore(candidate) {
 }
 
 function unpricedRankValue(candidate) {
-  const probability = candidate.prediction?.modelProbability ?? 0;
+  const probability = candidate.prediction?.uncertainty?.decisionProbability ??
+    candidate.prediction?.modelProbability ??
+    0;
   const pitcherBoost = candidate.statKey === "strikeOuts" ? 0.04 : 0;
 
   return probability + pitcherBoost - riskScore(candidate) * 0.025;
@@ -443,7 +655,9 @@ function serializeCandidate(candidate, extra = {}) {
     lean: candidate.lean,
     line: candidate.line,
     modelProbability: candidate.prediction?.modelProbability ?? null,
+    probabilityUncertainty: candidate.prediction?.uncertainty ?? null,
     fairAmericanOdds: candidate.prediction?.fairAmericanOdds ?? null,
+    conservativeFairAmericanOdds: candidate.prediction?.conservativeFairAmericanOdds ?? null,
     impliedFairProbability: candidate.prediction?.fairAmericanOdds
       ? americanToImpliedProbability(candidate.prediction.fairAmericanOdds)
       : null,
@@ -517,8 +731,27 @@ async function fetchPricedEventsForCandidates(candidates, options) {
   const marketKeys = Array.from(new Set(candidates.map(mappedMarketKey).filter(Boolean))).join(",");
   const pricedEvents = new Map();
   const warnings = [...(eventsResult.warnings ?? [])];
+  const maxOddsCreditsPerRefresh = Number.isFinite(options.maxOddsCreditsPerRefresh) && options.maxOddsCreditsPerRefresh > 0
+    ? Math.min(Math.floor(options.maxOddsCreditsPerRefresh), 100)
+    : 12;
+  const reserveCredits = Number.isFinite(options.reserveOddsCredits) && options.reserveOddsCredits >= 0
+    ? Math.floor(options.reserveOddsCredits)
+    : 5;
+  const eventCostEstimate = estimateOddsRequestCost({
+    markets: marketKeys,
+    bookmakers: options.bookmakers,
+    regions: options.regions
+  });
+  const leagueCostEstimate = eventsResult.cache?.hit ? 0 : 1;
+  const requestBudgetAfterLeague = Math.max(0, maxOddsCreditsPerRefresh - leagueCostEstimate);
+  const providerCreditsAfterReserve = Number.isFinite(eventsResult.quota?.remainingCredits)
+    ? Math.max(0, eventsResult.quota.remainingCredits - reserveCredits)
+    : requestBudgetAfterLeague;
+  const eventCreditBudget = Math.min(requestBudgetAfterLeague, providerCreditsAfterReserve);
+  const maxEventsByBudget = Math.floor(eventCreditBudget / eventCostEstimate);
+  const eventsToPrice = Array.from(candidateEvents.values()).slice(0, maxEventsByBudget);
 
-  for (const event of candidateEvents.values()) {
+  for (const event of eventsToPrice) {
     try {
       const propsResult = await fetchOddsApiEventMarkets({
         sportKey,
@@ -541,17 +774,53 @@ async function fetchPricedEventsForCandidates(candidates, options) {
     }
   }
 
+  if (candidateEvents.size > eventsToPrice.length) {
+    warnings.push(
+      `Odds credit budget limited this refresh to ${eventsToPrice.length} of ${candidateEvents.size} matched events.`
+    );
+  }
+
   return {
     status: eventsResult.status,
     eventsResult,
     pricedEvents,
     candidateEvents,
-    warnings
+    warnings,
+    usageBudget: {
+      maxCreditsPerRefresh: maxOddsCreditsPerRefresh,
+      reserveCredits,
+      leagueCostEstimate,
+      eventCostEstimate,
+      matchedEvents: candidateEvents.size,
+      eventsRequested: eventsToPrice.length,
+      maximumEstimatedCost: leagueCostEstimate + eventsToPrice.length * eventCostEstimate
+    }
   };
 }
 
 function evaluatePricedCandidate(candidate, price, options = {}) {
   const evaluation = evaluatePrice(candidate, price, options);
+  const lifecycle = evaluateRecommendationLifecycle({
+    recommendation: {
+      id: candidate.id,
+      line: candidate.line,
+      odds: price,
+      evaluation: {
+        priceDiscipline: evaluation.priceDiscipline
+      }
+    },
+    currentOffer: {
+      sportsbook: price.bookmaker?.key ?? null,
+      line: price.point,
+      americanOdds: price.marketOdds,
+      capturedAt: price.marketContext?.offeredLastUpdate ?? null,
+      sourceVerified: true,
+      marketStatus: "open"
+    },
+    changeSignals: options.changeSignals,
+    now: options.now ?? new Date(),
+    previousStatus: options.previousLifecycleStatus ?? null
+  });
   const ticketDraft = cloneJson(candidate.ticketDraft);
   const leg = ticketDraft.legs[0];
   const legRiskFlags = (candidate.riskFlags ?? []).filter((flag) => flag.code !== "MISSING_MARKET_ODDS");
@@ -573,7 +842,7 @@ function evaluatePricedCandidate(candidate, price, options = {}) {
     (evaluation.verdict === "BET" ? 10 : evaluation.verdict === "WAIT" ? 4 : 0) +
     evaluation.expectedValueRoi +
     evaluation.priceEdge +
-    candidate.prediction.modelProbability -
+    evaluation.independentModelProbability -
     riskScore(candidate) * 0.25;
 
   return serializeCandidate(candidate, {
@@ -590,6 +859,9 @@ function evaluatePricedCandidate(candidate, price, options = {}) {
       marketIntelligence: evaluation.marketIntelligence,
       calibrationStatus: evaluation.modelEvidence.registryStatus,
       modelEvidence: evaluation.modelEvidence,
+      rawModelProbability: evaluation.rawModelProbability,
+      independentModelProbability: evaluation.independentModelProbability,
+      probabilityUncertainty: evaluation.probabilityUncertainty,
       adjustedModelProbability: evaluation.adjustedModelProbability,
       adjustedProbability: evaluation.adjustedProbability,
       marketProbability: evaluation.marketProbability,
@@ -601,6 +873,10 @@ function evaluatePricedCandidate(candidate, price, options = {}) {
       kellyFraction: evaluation.kellyFraction,
       recommendedStake: evaluation.recommendedStake,
       stakePolicy: evaluation.stakePolicy,
+      priceDiscipline: evaluation.priceDiscipline,
+      drawdownRisk: evaluation.drawdownRisk,
+      portfolioRisk: evaluation.portfolioRisk,
+      lifecycle,
       riskFlags: evaluation.riskFlags
     }
   });
@@ -646,13 +922,37 @@ async function getBestMlbTargets(options = {}) {
     };
   }
 
+  if (options.allowPaidOdds === false) {
+    return {
+      status: "odds_refresh_required",
+      fetchedAt: new Date().toISOString(),
+      sourceMode: "official_stats_awaiting_manual_odds_refresh",
+      summary: {
+        candidates: eligibleCandidates.length,
+        pricedCandidates: 0,
+        bestReturned: Math.min(limit, eligibleCandidates.length),
+        oddsApiConfigured: true,
+        paidOddsRequested: false,
+        eventsMatched: 0,
+        eventsPriced: 0
+      },
+      quota: quotaSnapshot(oddsApiKey),
+      best: rankUnpricedCandidates(eligibleCandidates, limit, modelRegistryOptions),
+      candidates: candidatesResult,
+      warnings: [
+        "Automatic candidate discovery does not spend odds credits. Use the manual Refresh Market Prices action for current market prices.",
+        "These are price-check targets, not BET calls, until exact sportsbook lines and prices are verified."
+      ]
+    };
+  }
+
   let pricing;
 
   try {
     pricing = await fetchPricedEventsForCandidates(eligibleCandidates, {
       ...options,
       oddsApiKey,
-      bookmakers: options.bookmakers ?? "draftkings",
+      bookmakers: options.bookmakers ?? DEFAULT_MLB_BOOKMAKERS,
       regions: options.regions ?? "us"
     });
   } catch (error) {
@@ -665,10 +965,12 @@ async function getBestMlbTargets(options = {}) {
         pricedCandidates: 0,
         bestReturned: Math.min(limit, eligibleCandidates.length),
         oddsApiConfigured: true,
+        paidOddsRequested: true,
         eventsMatched: 0,
         eventsPriced: 0
       },
       best: rankUnpricedCandidates(eligibleCandidates, limit, modelRegistryOptions),
+      quota: quotaSnapshot(oddsApiKey),
       candidates: candidatesResult,
       warnings: [
         `Verified odds provider failed: ${safeErrorMessage(error)}`,
@@ -682,7 +984,14 @@ async function getBestMlbTargets(options = {}) {
   for (const candidate of eligibleCandidates) {
     const oddsEvent = pricing.candidateEvents.get(candidate.gameId);
     const pricedEvent = oddsEvent ? pricing.pricedEvents.get(oddsEvent.id) : null;
-    const price = pricedEvent ? findCandidatePrice(candidate, pricedEvent) : null;
+    const price = pricedEvent
+      ? findCandidatePrice(candidate, pricedEvent, {
+          now: options.now,
+          maxMarketAgeMinutes:
+            options.maxMarketAgeMinutes ?? candidate.ticketDraft?.livePolicy?.maxMarketAgeMinutes,
+          requiredBookmaker: options.requiredBookmaker
+        })
+      : null;
 
     if (!price) {
       unmatched.push({
@@ -713,16 +1022,21 @@ async function getBestMlbTargets(options = {}) {
       unmatchedCandidates: unmatched.length,
       bestReturned: fallbackBest.length,
       oddsApiConfigured: true,
+      paidOddsRequested: true,
       eventsMatched: pricing.candidateEvents.size,
       eventsPriced: pricing.pricedEvents.size
     },
     best: fallbackBest,
+    calibrationCandidates: priced,
     unmatched: unmatched.slice(0, 25),
     oddsSources: {
       eventsSourceUrl: pricing.eventsResult.sourceUrl,
       eventCount: pricing.eventsResult.eventCount,
-      bookmaker: options.bookmakers ?? "draftkings"
+      bookmaker: options.bookmakers ?? DEFAULT_MLB_BOOKMAKERS,
+      bookmakers: options.bookmakers ?? DEFAULT_MLB_BOOKMAKERS
     },
+    oddsUsageBudget: pricing.usageBudget,
+    quota: quotaSnapshot(oddsApiKey),
     candidates: candidatesResult,
     warnings: Array.from(new Set([
       ...pricing.warnings,
@@ -733,6 +1047,8 @@ async function getBestMlbTargets(options = {}) {
 }
 
 module.exports = {
+  DEFAULT_MLB_BOOKMAKERS,
+  evaluatePrice,
   getBestMlbTargets,
   findCandidatePrice,
   mappedMarketKey,

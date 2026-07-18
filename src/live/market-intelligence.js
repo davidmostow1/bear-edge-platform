@@ -197,6 +197,7 @@ function analyzeMarketIntelligence({
     }
 
     const usable =
+      entry.oppositeImpliedProbability !== null &&
       entry.ageMinutes !== null &&
       entry.ageMinutes >= 0 &&
       entry.ageMinutes <= resolvedPolicy.maxMarketAgeMinutes;
@@ -214,6 +215,9 @@ function analyzeMarketIntelligence({
     entry.ageMinutes !== null && entry.ageMinutes < 0
   ).length;
   const unverifiedConsensusCount = rawConsensusEntries.filter((entry) => entry.ageMinutes === null).length;
+  const missingCounterpartCount = rawConsensusEntries.filter(
+    (entry) => entry.oppositeImpliedProbability === null
+  ).length;
   const consensusProbability = weightedAverage(
     consensusEntries.map((entry) => ({
       value: entry.noVigProbability,
@@ -263,6 +267,22 @@ function analyzeMarketIntelligence({
       code: "STALE_CONSENSUS_DATA",
       severity: "medium",
       message: "Stale or future-dated consensus entries were excluded from the fair-price reference."
+    });
+  }
+
+  if (missingCounterpartCount > 0) {
+    riskFlags.push({
+      code: "MISSING_CONSENSUS_COUNTERPART",
+      severity: "medium",
+      message: "One-sided consensus observations were excluded because their vig cannot be removed."
+    });
+  }
+
+  if (offered.oppositeImpliedProbability === null) {
+    riskFlags.push({
+      code: "MISSING_MARKET_COUNTERPART",
+      severity: "high",
+      message: "The offered market is missing its opposite price, so its vig and fair probability cannot be verified."
     });
   }
 
@@ -359,6 +379,7 @@ function analyzeMarketIntelligence({
       probability: consensusProbability,
       dispersion: consensusDispersion,
       averageHold: avgHold,
+      missingCounterpartCount,
       books: consensusEntries.map((entry) => ({
         bookmaker: entry.bookmaker,
         isSharp: entry.isSharp,

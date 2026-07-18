@@ -179,6 +179,14 @@ test("createSettlementAuditRecord emits canonical settlement fields and a verifi
     settledAt: "2026-07-17T02:30:00.000Z",
     closingOdds: -125,
     closingOppositeOdds: 105,
+    closingLineEvidence: {
+      sportsbook: "draftkings",
+      capturedAt: "2026-07-16T23:00:05.000Z",
+      marketClosedAt: "2026-07-16T23:00:00.000Z",
+      isFinal: true,
+      sourceLocator: "file:///verified-closing-line.png",
+      sourceDigest: "c".repeat(64)
+    },
     stake: 10,
     profit: 8,
     notes: ["Official result confirmed."]
@@ -191,6 +199,8 @@ test("createSettlementAuditRecord emits canonical settlement fields and a verifi
   assert.equal(record.recordType, "settlement");
   assert.equal(record.outcome, "win");
   assert.equal(record.profit, 8);
+  assert.equal(record.closingLineEvidence.sportsbook, "draftkings");
+  assert.equal(record.closingLineEvidence.isFinal, true);
   assert.deepEqual(validateAuditRecord(record), { valid: true, issues: [] });
 });
 
@@ -225,4 +235,5 @@ test("the public API and schema registry expose the canonical audit contract", (
   assert.equal(publicApi.validateAuditRecord, validateAuditRecord);
   assert.equal(schemas.AUDIT_RECORD_SCHEMA.title, "Bear Edge Authoritative Audit Record");
   assert.deepEqual(schemas.AUDIT_RECORD_SCHEMA.properties.verdict.enum, ["PASS", "WAIT", "BET"]);
+  assert.equal(schemas.SETTLEMENT_INPUT_SCHEMA.properties.closingLineEvidence.type, "object");
 });

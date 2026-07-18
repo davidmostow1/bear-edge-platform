@@ -3,18 +3,37 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
 
+const migrationDir = path.resolve(__dirname, "../supabase/migrations");
 const migrationPath = path.resolve(
   __dirname,
-  "../supabase/migrations/202607170001_align_audit_records.sql"
+  "../supabase/migrations/20260717075523_align_audit_records_20260717.sql"
 );
 const serviceProjectionMigrationPath = path.resolve(
   __dirname,
-  "../supabase/migrations/202607170002_allow_service_projection.sql"
+  "../supabase/migrations/20260717075721_allow_service_projection_20260717.sql"
 );
 const indexCleanupMigrationPath = path.resolve(
   __dirname,
-  "../supabase/migrations/202607170003_remove_duplicate_client_event_index.sql"
+  "../supabase/migrations/20260717080017_remove_duplicate_client_event_index_20260717.sql"
 );
+
+const deployedMigrationFiles = [
+  "20260711021059_auth_user_state.sql",
+  "20260711023920_audit_journal.sql",
+  "20260711024403_allow_auth_user_cascade.sql",
+  "20260711024518_audit_foreign_key_indexes.sql",
+  "20260711024913_enforce_amendment_link.sql",
+  "20260711035024_structured_market_context.sql",
+  "20260711043301_probability_provenance.sql",
+  "20260711043655_strengthen_probability_provenance.sql",
+  "20260711201314_canonical_market_identity.sql",
+  "20260711201609_fix_identity_trigger_permissions.sql",
+  "20260711204856_decision_journal_indexes.sql",
+  "20260711215305_decision_journal_indexes_v10.sql",
+  "20260717075523_align_audit_records_20260717.sql",
+  "20260717075721_allow_service_projection_20260717.sql",
+  "20260717080017_remove_duplicate_client_event_index_20260717.sql"
+];
 
 function migrationSql() {
   return fs.readFileSync(migrationPath, "utf8");
@@ -27,6 +46,14 @@ function serviceProjectionMigrationSql() {
 function indexCleanupMigrationSql() {
   return fs.readFileSync(indexCleanupMigrationPath, "utf8");
 }
+
+test("repository contains the complete deployed migration ledger", () => {
+  const migrationFiles = fs.readdirSync(migrationDir)
+    .filter((file) => file.endsWith(".sql"))
+    .sort();
+
+  assert.deepEqual(migrationFiles, deployedMigrationFiles);
+});
 
 test("migration stops unless all projection tables are empty", () => {
   const sql = migrationSql();

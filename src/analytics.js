@@ -18,6 +18,7 @@ const AMENDMENT_PATCH_FIELDS = Object.freeze([
   "settledAt",
   "closingOdds",
   "closingOppositeOdds",
+  "closingLineEvidence",
   "stake",
   "profit",
   "notes"
@@ -44,6 +45,30 @@ function isPlainObject(value) {
 
 function isFiniteNumber(value) {
   return typeof value === "number" && Number.isFinite(value);
+}
+
+function normalizeClosingLineEvidence(value) {
+  if (value === undefined || value === null) {
+    return null;
+  }
+  if (!isPlainObject(value)) {
+    throw new AuditIntegrityError("closingLineEvidence must be an object or null.");
+  }
+
+  const fields = [
+    "sportsbook",
+    "capturedAt",
+    "marketClosedAt",
+    "isFinal",
+    "sourceLocator",
+    "sourceDigest"
+  ];
+  const unknown = Object.keys(value).filter((field) => !fields.includes(field));
+  if (unknown.length > 0) {
+    throw new AuditIntegrityError(`Unsupported closingLineEvidence fields: ${unknown.join(", ")}.`);
+  }
+
+  return Object.fromEntries(fields.map((field) => [field, value[field] ?? null]));
 }
 
 function americanToDecimal(americanOdds) {
@@ -455,6 +480,9 @@ function extractSettlement(record, sequence) {
     outcome: SETTLEMENT_OUTCOMES.includes(outcome) ? outcome : "pending",
     closingOdds: isFiniteNumber(record?.closingOdds) ? record.closingOdds : null,
     closingOppositeOdds: isFiniteNumber(record?.closingOppositeOdds) ? record.closingOppositeOdds : null,
+    closingLineEvidence: isPlainObject(record?.closingLineEvidence)
+      ? structuredClone(record.closingLineEvidence)
+      : null,
     stake: isFiniteNumber(record?.stake) ? record.stake : null,
     profit: isFiniteNumber(record?.profit) ? record.profit : null,
     notes: Array.isArray(record?.notes) ? record.notes : [],
@@ -513,6 +541,12 @@ function resolveSettlementAmendments(settlements, amendments) {
       if (patch[field] === null || isFiniteNumber(patch[field])) {
         settlement[field] = patch[field];
       }
+    }
+
+    if (patch.closingLineEvidence === null || isPlainObject(patch.closingLineEvidence)) {
+      settlement.closingLineEvidence = patch.closingLineEvidence === null
+        ? null
+        : structuredClone(patch.closingLineEvidence);
     }
 
     if (Array.isArray(patch.notes)) {
@@ -954,6 +988,7 @@ function createSettlementRecord(input, context = {}) {
     outcome,
     closingOdds: input.closingOdds ?? null,
     closingOppositeOdds: input.closingOppositeOdds ?? null,
+    closingLineEvidence: normalizeClosingLineEvidence(input.closingLineEvidence),
     stake: input.stake ?? null,
     profit: input.profit ?? null,
     notes
@@ -1035,6 +1070,11 @@ function normalizeAmendmentPatch(patch) {
       }
       normalized[field] = patch[field];
     }
+  }
+
+
+  if (patch.closingLineEvidence !== undefined) {
+    normalized.closingLineEvidence = normalizeClosingLineEvidence(patch.closingLineEvidence);
   }
 
   if (patch.stake !== undefined) {

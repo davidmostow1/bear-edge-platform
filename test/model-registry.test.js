@@ -1537,11 +1537,14 @@ test("tracked registry keeps all existing MLB Poisson models research-only", () 
   }
 });
 
-test("portable package includes the tracked model registry", () => {
+test("portable package includes the model and operations assets", () => {
   const packageJson = JSON.parse(fs.readFileSync(
     path.join(__dirname, "..", "package.json"),
     "utf8"
   ));
 
   assert.ok(packageJson.files.includes("models/**/*.json"));
+  assert.ok(packageJson.files.includes(".env.example"));
+  assert.ok(packageJson.files.includes("docs/ELITE_AUDIT_OPERATIONS.md"));
+  assert.ok(packageJson.files.includes("supabase/migrations/**/*.sql"));
 });

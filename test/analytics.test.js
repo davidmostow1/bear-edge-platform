@@ -53,6 +53,15 @@ test("createSettlementRecord validates append-only outcome records", () => {
     evaluationId: "eval_123",
     outcome: "win",
     closingOdds: -125,
+    closingOppositeOdds: 105,
+    closingLineEvidence: {
+      sportsbook: "draftkings",
+      capturedAt: "2026-07-17T19:10:05.000Z",
+      marketClosedAt: "2026-07-17T19:10:00.000Z",
+      isFinal: true,
+      sourceLocator: "file:///verified-closing-line.png",
+      sourceDigest: "c".repeat(64)
+    },
     notes: "Closed shorter than entry."
   });
 
@@ -60,6 +69,8 @@ test("createSettlementRecord validates append-only outcome records", () => {
   assert.equal(settlement.evaluationId, "eval_123");
   assert.equal(settlement.outcome, "win");
   assert.equal(settlement.closingOdds, -125);
+  assert.equal(settlement.closingLineEvidence.sportsbook, "draftkings");
+  assert.equal(settlement.closingLineEvidence.sourceDigest, "c".repeat(64));
   assert.deepEqual(settlement.notes, ["Closed shorter than entry."]);
 
   assert.throws(

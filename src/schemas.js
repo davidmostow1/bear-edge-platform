@@ -13,6 +13,26 @@ const SETTLEMENT_INPUT_SCHEMA = Object.freeze({
     settledAt: { type: "string", format: "date-time" },
     closingOdds: { type: "number", not: { const: 0 } },
     closingOppositeOdds: { type: "number", not: { const: 0 } },
+    closingLineEvidence: {
+      type: "object",
+      additionalProperties: false,
+      required: [
+        "sportsbook",
+        "capturedAt",
+        "marketClosedAt",
+        "isFinal",
+        "sourceLocator",
+        "sourceDigest"
+      ],
+      properties: {
+        sportsbook: { type: "string", minLength: 1 },
+        capturedAt: { type: "string", format: "date-time" },
+        marketClosedAt: { type: "string", format: "date-time" },
+        isFinal: { type: "boolean" },
+        sourceLocator: { type: "string", minLength: 1 },
+        sourceDigest: { type: "string", pattern: "^[a-f0-9]{64}$" }
+      }
+    },
     stake: { type: "number", minimum: 0 },
     profit: { type: "number" },
     notes: {
@@ -42,6 +62,12 @@ const AMENDMENT_INPUT_SCHEMA = Object.freeze({
         settledAt: { type: "string", format: "date-time" },
         closingOdds: { type: ["number", "null"], not: { const: 0 } },
         closingOppositeOdds: { type: ["number", "null"], not: { const: 0 } },
+        closingLineEvidence: {
+          oneOf: [
+            { type: "null" },
+            SETTLEMENT_INPUT_SCHEMA.properties.closingLineEvidence
+          ]
+        },
         stake: { type: ["number", "null"], minimum: 0 },
         profit: { type: ["number", "null"] },
         notes: {

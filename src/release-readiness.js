@@ -307,7 +307,11 @@ async function getReleaseReadiness(options = {}) {
   const trackedSecrets = trackedSecretFindings(files);
   const git = await gitReadiness(rootDir);
   const providerSetup = getProviderSetupStatus({ rootDir });
-  const systemAudit = await getSystemAudit({ rootDir });
+  const systemAudit = await getSystemAudit({
+    rootDir,
+    operatorAuthStatus: options.operatorAuthStatus,
+    statsigStatus: options.statsigStatus
+  });
   const decisionLog = await getDecisionLogDashboard({
     logPath: options.logPath
   });
@@ -343,6 +347,13 @@ async function getReleaseReadiness(options = {}) {
   };
   const dataQualityStatus = decisionLog.dataQuality?.status ?? "unknown";
   const dashboardReady = dashboardHtmlExists && dashboardJsExists && dashboardCssExists;
+  const runtimeControls = systemAudit.runtimeControls;
+  const operatorWriteBoundaryReady = runtimeControls.operatorAuth.writeBoundaryReady;
+  const statsigFailClosed = runtimeControls.statsig.failClosed;
+  const localLedgerIntegrityIssues = (decisionLog.malformedLines?.length ?? 0)
+    + (decisionLog.duplicateIds?.length ?? 0)
+    + (decisionLog.digestConflicts?.length ?? 0)
+    + (decisionLog.invalidRecords?.length ?? 0);
   const localhostBound = serveText.includes('let host = process.env.BEAR_EDGE_HOST ?? "127.0.0.1"') && serveText.includes("server.listen(port, host");
   const apiSurfaceReady = [
     "/api/release-readiness",
@@ -470,6 +481,22 @@ async function getReleaseReadiness(options = {}) {
     check(git.clean ? "pass" : "warn", "github", git.clean ? "Working tree is clean" : "Working tree has uncommitted entries", git.uncommittedEntries, "Commit reviewed product changes, then rerun the release audit."),
     check(trackedSecrets.length === 0 ? "pass" : "fail", "security", "No local secrets/log/cache paths are tracked", trackedSecrets, "Remove tracked secrets/logs/cache from git and rotate any leaked credential."),
     check(localhostBound ? "pass" : "fail", "security", "Local dashboard binds to localhost by default", null, "Bind the local server to 127.0.0.1 unless an explicit host override is supplied."),
+    check(
+      operatorWriteBoundaryReady ? "pass" : "fail",
+      "security",
+      runtimeControls.operatorAuth.lanMode
+        ? "LAN write operations require operator authentication"
+        : "Localhost write policy is explicit",
+      runtimeControls.operatorAuth,
+      "Require a generated or configured operator bearer token before binding Bear Edge to a LAN interface."
+    ),
+    check(
+      statsigFailClosed ? "pass" : "fail",
+      "security",
+      "Statsig controls are presentation-only and fail closed",
+      runtimeControls.statsig,
+      "Disable remote controls and restore deterministic control fallback before release."
+    ),
     check(dashboardReady ? "pass" : "fail", "runtime", "Dashboard static assets exist"),
     check(systemAudit.readiness?.localFilesOk ? "pass" : "fail", "runtime", "Required local files exist"),
     check(systemAudit.readiness?.nodeAvailable || systemAudit.paths?.some((entry) => entry.label === "bundled node" && entry.exists) ? "pass" : "warn", "runtime", "Node runtime is available"),
@@ -481,6 +508,20 @@ async function getReleaseReadiness(options = {}) {
       projectionState.message,
       syncHealth,
       projectionState.action
+    ),
+    check(
+      localLedgerIntegrityIssues === 0 ? "pass" : "fail",
+      "analytics",
+      localLedgerIntegrityIssues === 0
+        ? "Authoritative local ledger passes integrity inspection"
+        : "Authoritative local ledger has integrity failures",
+      {
+        malformedLines: decisionLog.malformedLines?.length ?? 0,
+        duplicateIds: decisionLog.duplicateIds?.length ?? 0,
+        digestConflicts: decisionLog.digestConflicts?.length ?? 0,
+        invalidRecords: decisionLog.invalidRecords?.length ?? 0
+      },
+      "Repair malformed, duplicate, conflicting, or schema-invalid ledger records before release."
     ),
     check(releaseScriptExists ? "pass" : "warn", "runtime", "Release-readiness audit script exists"),
     check(publicMlbProviderExists && publicNhlProviderExists ? "pass" : "warn", "providers", "Official public MLB/NHL stat adapters exist", null, "Restore src/live/providers/mlb.js and src/live/providers/nhl.js before generating sport stat candidates."),
@@ -525,6 +566,36 @@ async function getReleaseReadiness(options = {}) {
     git,
     providerSummary: providerSetup.summary,
     syncHealth,
+    runtimeControls,
+    operationalEvidence: {
+      localLedger: {
+        integrityStatus: localLedgerIntegrityIssues === 0 ? "valid" : "invalid",
+        integrityIssues: localLedgerIntegrityIssues,
+        malformedLines: decisionLog.malformedLines?.length ?? 0,
+        duplicateIds: decisionLog.duplicateIds?.length ?? 0,
+        digestConflicts: decisionLog.digestConflicts?.length ?? 0,
+        invalidRecords: decisionLog.invalidRecords?.length ?? 0,
+        totalEvaluations: decisionLog.summary?.totalEvaluations ?? 0
+      },
+      outbox: {
+        configured: syncHealth.configured,
+        enabled: syncHealth.enabled,
+        pending: syncHealth.pending,
+        retryableFailures: syncHealth.retryableFailures,
+        terminalFailures: syncHealth.terminalFailures,
+        synchronized: syncHealth.synchronized,
+        integrityIssues: syncHealth.integrityIssues,
+        secretReturned: false
+      },
+      modelRegistry: {
+        status: modelCalibration.status,
+        registryValid: modelCalibration.registryValid,
+        registeredModelCount: modelCalibration.registeredModelCount,
+        validatedModelCount: modelCalibration.validatedModelCount,
+        policyVersion: modelCalibration.policyVersion,
+        policyDigest: modelCalibration.policyDigest
+      }
+    },
     dataEdge,
     modelCalibration,
     lanes,

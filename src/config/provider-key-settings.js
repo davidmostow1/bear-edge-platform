@@ -1,7 +1,7 @@
 const fs = require("node:fs/promises");
 const path = require("node:path");
 
-const { fetchOddsApiSports } = require("../live/odds-api.js");
+const { verifyOddsApiReadiness } = require("../live/odds-api.js");
 const { PROVIDER_REQUIREMENTS, getProviderSetupStatus } = require("./provider-requirements.js");
 const {
   readEnvFile,
@@ -44,21 +44,10 @@ async function verifyProviderKey(provider, apiKey, options = {}) {
     };
   }
 
-  const verification = await fetchOddsApiSports({
+  return verifyOddsApiReadiness({
     fetchJsonImpl: options.fetchJsonImpl,
     oddsApiKey: apiKey
   });
-
-  return {
-    status: verification.status,
-    mode: "live",
-    sports: verification.sports.length,
-    sample: verification.sports.slice(0, 5).map((sport) => ({
-      key: sport.key,
-      title: sport.title,
-      active: sport.active
-    }))
-  };
 }
 
 async function saveProviderApiKey(input, options = {}) {
@@ -73,6 +62,13 @@ async function saveProviderApiKey(input, options = {}) {
 
   try {
     verification = await verifyProviderKey(provider, normalized, options);
+
+    if (
+      provider.id === "the-odds-api" &&
+      (!("authenticated" in verification) || verification.authenticated !== true)
+    ) {
+      throw new Error(verification.message);
+    }
   } catch (error) {
     const message = safeErrorMessage(error);
 
@@ -104,7 +100,19 @@ async function saveProviderApiKey(input, options = {}) {
     },
     secretReturned: false,
     verification,
-    providerSetup: getProviderSetupStatus({ rootDir: options.rootDir ?? path.resolve(__dirname, "../..") })
+    providerSetup: getProviderSetupStatus({
+      rootDir: options.rootDir ?? path.resolve(__dirname, "../.."),
+      providerReadiness: {
+        [provider.id]: {
+          status: verification.status,
+          usableNow: (
+            provider.id === "the-odds-api" &&
+            "marketAccess" in verification &&
+            verification.marketAccess === true
+          )
+        }
+      }
+    })
   };
 }
 

@@ -194,6 +194,16 @@ function createSettlementAuditRecord(input, context = {}) {
     outcome: valueOrNull(input.outcome ?? "pending"),
     closingOdds: valueOrNull(input.closingOdds),
     closingOppositeOdds: valueOrNull(input.closingOppositeOdds),
+    closingLineEvidence: isPlainObject(input.closingLineEvidence)
+      ? objectWithFields(input.closingLineEvidence, [
+          "sportsbook",
+          "capturedAt",
+          "marketClosedAt",
+          "isFinal",
+          "sourceLocator",
+          "sourceDigest"
+        ])
+      : null,
     stake: valueOrNull(input.stake),
     profit: valueOrNull(input.profit),
     notes: arrayOrEmpty(
@@ -507,6 +517,43 @@ function validateAuditRecord(record) {
 
     if (!Array.isArray(record.notes)) {
       addIssue("notes", "must be an array.");
+    }
+
+    if (record.closingLineEvidence !== undefined && record.closingLineEvidence !== null) {
+      const evidence = record.closingLineEvidence;
+      validateObjectFields(evidence, "closingLineEvidence", [
+        "sportsbook",
+        "capturedAt",
+        "marketClosedAt",
+        "isFinal",
+        "sourceLocator",
+        "sourceDigest"
+      ]);
+      if (isPlainObject(evidence)) {
+        if (typeof evidence.sportsbook !== "string" || !evidence.sportsbook.trim()) {
+          addIssue("closingLineEvidence.sportsbook", "must be a non-empty string.");
+        }
+        validateIsoTimestamp(evidence.capturedAt, "closingLineEvidence.capturedAt", false);
+        validateIsoTimestamp(evidence.marketClosedAt, "closingLineEvidence.marketClosedAt", false);
+        if (typeof evidence.isFinal !== "boolean") {
+          addIssue("closingLineEvidence.isFinal", "must be a boolean.");
+        }
+        if (typeof evidence.sourceLocator !== "string" || !evidence.sourceLocator.trim()) {
+          addIssue("closingLineEvidence.sourceLocator", "must be a non-empty string.");
+        }
+        if (!DIGEST_PATTERN.test(evidence.sourceDigest ?? "")) {
+          addIssue("closingLineEvidence.sourceDigest", "must be a 64-character lowercase SHA-256 digest.");
+        }
+        if (
+          typeof evidence.capturedAt === "string"
+          && typeof evidence.marketClosedAt === "string"
+          && Number.isFinite(Date.parse(evidence.capturedAt))
+          && Number.isFinite(Date.parse(evidence.marketClosedAt))
+          && Date.parse(evidence.capturedAt) < Date.parse(evidence.marketClosedAt)
+        ) {
+          addIssue("closingLineEvidence.capturedAt", "cannot be before marketClosedAt.");
+        }
+      }
     }
   }
 

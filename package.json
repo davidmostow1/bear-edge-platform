@@ -8,13 +8,23 @@
     ".": "./src/index.js"
   },
   "files": [
+    ".env.example",
     "README.md",
     "Open Bear Edge.command",
+    "Open Bear Edge On Phone.command",
+    "docs/CALIBRATION_READINESS.md",
+    "docs/ELITE_AUDIT_OPERATIONS.md",
+    "docs/PROBABILITY_UNCERTAINTY_VALIDATION.md",
+    "docs/PRODUCTION_READINESS.md",
+    "docs/PROFESSIONAL_BETTING_FACTORY.md",
+    "governance/**/*.json",
+    "governance/source/**/*.txt",
     "src/**/*.js",
     "src/native/**/*",
     "src/dashboard/**/*",
     "models/**/*.json",
-    "script/build_calibration_report.js",
+    "script/**/*.js",
+    "supabase/migrations/**/*.sql",
     "examples/**/*.json",
     "data/logs/.gitkeep",
     "tsconfig.json"
@@ -33,10 +43,13 @@
     "evaluate": "node ./src/cli/evaluate.js",
     "evaluate:live": "node ./src/cli/evaluate-live.js",
     "launch": "node ./src/cli/launch.js",
+    "launch:lan": "node ./src/cli/launch.js --lan",
     "watch:live": "node ./src/cli/watch-live.js",
     "serve": "node ./src/cli/serve.js",
     "compare:recording": "node ./script/compare_recording_props_with_current_dk.js",
     "calibrate": "node ./script/build_calibration_report.js",
+    "audit:factory": "node ./script/build_professional_betting_factory_audit.js",
+    "audit:calibration": "node ./script/build_calibration_readiness.js",
     "audit:protocol": "node ./script/build_protocol_audit.js",
     "audit:release": "node ./script/build_release_readiness.js",
     "simulate:card": "node ./script/simulate_verified_card.js",
@@ -55,5 +68,8 @@
   "devDependencies": {
     "@types/node": "^24.0.0",
     "typescript": "^5.6.3"
+  },
+  "dependencies": {
+    "@statsig/statsig-node-core": "0.20.1"
   }
 }

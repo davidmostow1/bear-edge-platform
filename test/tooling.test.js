@@ -14,7 +14,11 @@ const { loadEnvFiles, parseEnv } = require("../src/config/env.js");
 const { redactSecrets } = require("../src/config/secrets.js");
 const { fetchJson: liveFetchJson } = require("../src/live/fetch-json.js");
 const { saveOddsApiKey, upsertEnvValue, validateOddsApiKey } = require("../src/config/odds-key-settings.js");
-const { parseArgs: parseLaunchArgs } = require("../src/cli/launch.js");
+const {
+  buildDashboardUrl,
+  displayHost,
+  parseArgs: parseLaunchArgs
+} = require("../src/cli/launch.js");
 const { parseArgs: parseServeArgs } = require("../src/cli/serve.js");
 const { parseArgs: parseEvaluateArgs } = require("../src/cli/evaluate.js");
 
@@ -168,6 +172,64 @@ test("launch CLI parses local app controls", () => {
       delete process.env.BEAR_EDGE_HOST;
     } else {
       process.env.BEAR_EDGE_HOST = originalHost;
+    }
+  }
+});
+
+test("LAN dashboard bootstrap keeps the operator token in the URL fragment only", () => {
+  const token = "private/operator+token";
+  const lanUrl = buildDashboardUrl(3000, "0.0.0.0", token);
+  const localUrl = buildDashboardUrl(3000, "127.0.0.1");
+
+  assert.equal(
+    lanUrl,
+    `http://${displayHost("0.0.0.0")}:3000/dashboard#operatorToken=private%2Foperator%2Btoken`
+  );
+  assert.equal(lanUrl.includes("?"), false);
+  assert.equal(localUrl, "http://127.0.0.1:3000/dashboard");
+});
+
+test("dashboard consumes the operator fragment, clears it, and authorizes write requests", () => {
+  const source = fs.readFileSync(path.resolve(__dirname, "../src/dashboard/app.js"), "utf8");
+
+  assert.match(source, /sessionStorage/);
+  assert.match(source, /history\.replaceState/);
+  assert.match(source, /operatorToken/);
+  assert.match(source, /Authorization/);
+  assert.match(source, /Bearer/);
+});
+
+test("release evidence cards wrap long audit details on narrow screens", () => {
+  const source = fs.readFileSync(path.resolve(__dirname, "../src/dashboard/styles.css"), "utf8");
+
+  assert.match(source, /\.release-check[^}]*min-width:\s*0/s);
+  assert.match(source, /\.release-check p[^}]*overflow-wrap:\s*anywhere/s);
+  assert.match(source, /\.release-actions article,[\s\S]*\.release-check\s*\{\s*grid-template-columns:\s*1fr;/);
+  assert.match(source, /\.system-audit-grid article[^}]*min-width:\s*0/s);
+  assert.match(source, /\.auto-update-detail p,[\s\S]*overflow-wrap:\s*anywhere;/);
+  assert.match(source, /\.provider-card-grid[^}]*minmax\(min\(360px, 100%\), 1fr\)/s);
+  assert.match(source, /section\[id\][^}]*scroll-margin-top:\s*72px/s);
+  assert.match(source, /\.quick-nav[^}]*flex-wrap:\s*nowrap[^}]*overflow-x:\s*auto/s);
+});
+
+test("operator tokens are redacted from diagnostics", () => {
+  const previous = process.env.BEAR_EDGE_OPERATOR_TOKEN;
+  process.env.BEAR_EDGE_OPERATOR_TOKEN = "private-operator-token";
+
+  try {
+    assert.equal(
+      redactSecrets("Authorization: Bearer private-operator-token"),
+      "Authorization: Bearer [REDACTED]"
+    );
+    assert.equal(
+      redactSecrets("operator=private-operator-token"),
+      "operator=[REDACTED]"
+    );
+  } finally {
+    if (previous === undefined) {
+      delete process.env.BEAR_EDGE_OPERATOR_TOKEN;
+    } else {
+      process.env.BEAR_EDGE_OPERATOR_TOKEN = previous;
     }
   }
 });

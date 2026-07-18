@@ -1,5 +1,6 @@
 const { fetchGamesForWindow } = require("./schedule.js");
 const { estimateCountProbability } = require("./estimate-prop.js");
+const { estimatePoissonProbabilityInterval } = require("./probability-uncertainty.js");
 const { fetchMlbPlayerPropSnapshot, fetchMlbRoster } = require("./providers/mlb.js");
 const { fetchNhlPlayerPropSnapshot, fetchNhlRoster } = require("./providers/nhl.js");
 
@@ -47,6 +48,31 @@ function probabilityToAmericanOdds(probability) {
   }
 
   return Math.round(100 * (1 - bounded) / bounded);
+}
+
+function buildObservedCountUncertainty(snapshot, mean, line, side) {
+  const observedTotal = snapshot.recent?.total;
+  const sampleSize = snapshot.recent?.gamesPlayed;
+
+  if (!Number.isInteger(observedTotal) || observedTotal < 0 ||
+      !Number.isInteger(sampleSize) || sampleSize <= 0) {
+    throw new Error("Official MLB recent statistics did not include an observed integer count and game sample.");
+  }
+
+  const uncertainty = estimatePoissonProbabilityInterval({
+    mean,
+    line,
+    side,
+    sampleSize,
+    observedTotal,
+    confidenceLevel: 0.95
+  });
+
+  return {
+    ...uncertainty,
+    decisionFairAmericanOdds: probabilityToAmericanOdds(uncertainty.decisionProbability),
+    decisionFairDecimalOdds: 1 / uncertainty.decisionProbability
+  };
 }
 
 function pitcherEntriesForGame(game) {
@@ -158,6 +184,7 @@ async function buildMlbBatterPropCandidate(game, batterEntry, propConfig, option
     line,
     side: lean
   });
+  const uncertainty = buildObservedCountUncertainty(snapshot, blendedMean, line, lean);
   const fairAmericanOdds = probabilityToAmericanOdds(modelProbability);
 
   return {
@@ -205,6 +232,9 @@ async function buildMlbBatterPropCandidate(game, batterEntry, propConfig, option
     stats: {
       seasonPerGame: snapshot.season.perGame,
       recentPerGame: snapshot.recent.perGame,
+      seasonGamesPlayed: snapshot.season.gamesPlayed,
+      recentGamesPlayed: snapshot.recent.gamesPlayed,
+      recentTotal: snapshot.recent.total,
       blendedMean,
       recentLimit,
       sourceUrl: snapshot.sourceUrl,
@@ -218,10 +248,15 @@ async function buildMlbBatterPropCandidate(game, batterEntry, propConfig, option
       side: lean,
       line,
       modelProbability,
+      sampleSize: uncertainty.sampleSize,
+      uncertainty,
       fairAmericanOdds,
+      conservativeFairAmericanOdds: uncertainty.decisionFairAmericanOdds,
+      conservativeFairDecimalOdds: uncertainty.decisionFairDecimalOdds,
       fairDecimalOdds: 1 / modelProbability,
       notes: [
         "Research probability only; final EV and Kelly require sportsbook odds.",
+        "The decision layer uses the lower 95% probability bound from the observed recent-game count, not this point estimate.",
         "Uses official MLB season/recent hitter rates plus active roster data; confirmed lineup and batting order still required."
       ]
     },
@@ -287,6 +322,7 @@ async function buildPitcherStrikeoutCandidate(game, pitcherEntry, options = {}) 
     line,
     side: lean
   });
+  const uncertainty = buildObservedCountUncertainty(snapshot, blendedMean, line, lean);
   const fairAmericanOdds = probabilityToAmericanOdds(modelProbability);
 
   return {
@@ -320,6 +356,9 @@ async function buildPitcherStrikeoutCandidate(game, pitcherEntry, options = {}) 
     stats: {
       seasonPerGame: snapshot.season.perGame,
       recentPerGame: snapshot.recent.perGame,
+      seasonGamesPlayed: snapshot.season.gamesPlayed,
+      recentGamesPlayed: snapshot.recent.gamesPlayed,
+      recentTotal: snapshot.recent.total,
       blendedMean,
       recentLimit,
       sourceUrl: snapshot.sourceUrl,
@@ -331,10 +370,15 @@ async function buildPitcherStrikeoutCandidate(game, pitcherEntry, options = {}) 
       side: lean,
       line,
       modelProbability,
+      sampleSize: uncertainty.sampleSize,
+      uncertainty,
       fairAmericanOdds,
+      conservativeFairAmericanOdds: uncertainty.decisionFairAmericanOdds,
+      conservativeFairDecimalOdds: uncertainty.decisionFairDecimalOdds,
       fairDecimalOdds: 1 / modelProbability,
       notes: [
         "Research probability only; final EV and Kelly require sportsbook odds.",
+        "The decision layer uses the lower 95% probability bound from the observed recent-game count, not this point estimate.",
         "Uses season/recent pitcher strikeout rates without full umpire, lineup, weather, or bullpen context."
       ]
     },
