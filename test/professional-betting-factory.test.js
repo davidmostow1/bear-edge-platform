@@ -9,8 +9,11 @@ const {
 } = require("../src/audit/professional-betting-factory.js");
 
 const ROOT_DIR = path.resolve(__dirname, "..");
-const SOURCE_PATH = path.resolve(
-  "/Users/davidbearmostow/.codex/attachments/869b6bce-030e-4566-aebd-f4b727825ad4/pasted-text.txt"
+const SOURCE_PATH = path.join(
+  ROOT_DIR,
+  "governance",
+  "source",
+  "professional-betting-factory-source.txt"
 );
 
 test("professional betting factory manifest accounts for the exact 600-line source", async () => {
