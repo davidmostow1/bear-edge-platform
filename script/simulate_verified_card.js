@@ -4,9 +4,9 @@ const fs = require("node:fs/promises");
 const path = require("node:path");
 const { simulateBetCard } = require("../src/live/probability-causality.js");
 
-const DEFAULT_INPUT =
-  "/Users/davidbearmostow/Documents/BearEdgeBettingSystem/artifacts/dk_predictions_visible_board_2026-06-27_1250.json";
-const DEFAULT_OUTPUT_DIR = "/Users/davidbearmostow/Documents/BearEdgeBettingSystem/artifacts";
+const PROJECT_ROOT = path.resolve(__dirname, "..");
+const DEFAULT_INPUT = path.join(PROJECT_ROOT, "examples", "historical-verified-card.json");
+const DEFAULT_OUTPUT_DIR = path.resolve(process.cwd(), "data", "reports");
 const DEFAULT_ITERATIONS = 100;
 const DEFAULT_SEED = "bear-edge-2026-06-27-verified-card";
 
@@ -169,12 +169,12 @@ function buildMarkdown(report, simulation, stressResults, trialRows) {
 
 ## Context
 
-This simulation uses only the two screenshot-verified choices from the DK Predictions visible-board audit:
+This simulation uses two historical screenshot-audit inputs from the source report:
 
 - AZ moneyline at +127.
 - CHC moneyline at +150.
 
-The visible bankroll from the screenshot batch is $${Number(report.visibleBankroll).toFixed(2)}. The screenshot batch was captured on ${report.evidenceClassification?.date} between ${report.evidenceClassification?.timeWindow}. The simulation uses a deterministic seed: \`${simulation.seed}\`.
+The reported bankroll in the historical fixture is $${Number(report.visibleBankroll).toFixed(2)}. The source was captured on ${report.evidenceClassification?.date} between ${report.evidenceClassification?.timeWindow}. These inputs are research evidence, not current prices or betting authorization. The simulation uses a deterministic seed: \`${simulation.seed}\`.
 
 This is a predictive risk simulation, not a causal claim. It does not prove that any feature caused either team to win. It tests what a 100-slate replay would look like if the stated ex-ante probabilities were true.
 

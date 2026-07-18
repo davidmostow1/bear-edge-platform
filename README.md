@@ -595,7 +595,8 @@ Simulate a verified screenshot-derived card:
 
 ```bash
 npm run simulate:card -- \
-  --input "/Users/davidbearmostow/Documents/BearEdgeBettingSystem/artifacts/dk_predictions_visible_board_2026-06-27_1250.json" \
+  --input examples/historical-verified-card.json \
+  --output-dir data/reports \
   --iterations 100 \
   --seed bear-edge-2026-06-27-verified-card
 ```
@@ -672,4 +673,4 @@ npm run evaluate -- --schema
 
 ## Sample
 
-Use [examples/sample-bet.json](/Users/davidbearmostow/Documents/Codex/2026-06-17-documents-openai-developers-google-drive-google/examples/sample-bet.json:1) as a starting point.
+Use [examples/sample-bet.json](examples/sample-bet.json) as a starting point.
