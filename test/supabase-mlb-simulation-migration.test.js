@@ -45,5 +45,5 @@ test("MLB simulation projection enforces identity and probability constraints", 
   assert.match(sql, /model_probability > 0 and model_probability < 1/i);
   assert.match(sql, /no_vig_probability is null or \(no_vig_probability > 0 and no_vig_probability < 1\)/i);
   assert.match(sql, /simulation_count > 0/i);
-  assert.match(sql, /authorization = 'PRICE_CHECK_ONLY'/i);
+  assert.match(sql, /authorization_status = 'PRICE_CHECK_ONLY'/i);
 });
