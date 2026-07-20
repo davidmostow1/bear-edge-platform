@@ -1,3 +1,5 @@
+begin;
+
 create table if not exists public.market_snapshots (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references auth.users(id) on delete cascade,
@@ -53,6 +55,13 @@ create index if not exists simulation_runs_market_snapshot_idx
 alter table public.market_snapshots enable row level security;
 alter table public.simulation_runs enable row level security;
 
+revoke all on table public.market_snapshots from anon;
+revoke all on table public.simulation_runs from anon;
+revoke update, delete, truncate on table public.market_snapshots from authenticated, service_role;
+revoke update, delete, truncate on table public.simulation_runs from authenticated, service_role;
+grant select, insert on table public.market_snapshots to authenticated, service_role;
+grant select, insert on table public.simulation_runs to authenticated, service_role;
+
 create policy "market_snapshots_select_own"
   on public.market_snapshots
   for select
@@ -90,3 +99,5 @@ comment on table public.market_snapshots is
 
 comment on table public.simulation_runs is
   'Immutable remote projection of deterministic MLB simulation results from the local authoritative Bear Edge ledger.';
+
+commit;
