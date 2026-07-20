@@ -23,7 +23,7 @@ function assertNormalizedDistribution(entries, label) {
   const total = entries.reduce((sum, entry) => sum + entry.probability, 0);
 
   if (Math.abs(total - 1) > PROBABILITY_TOLERANCE) {
-    throw new RangeError(`${label} probabilities must sum to 1.`);
+    throw new RangeError(`${label} must sum to 1.`);
   }
 }
 
@@ -49,7 +49,7 @@ function normalizePlateAppearances(input) {
     return { value, probability };
   });
 
-  assertNormalizedDistribution(entries, "plateAppearances");
+  assertNormalizedDistribution(entries, "plateAppearances probabilities");
   return entries;
 }
 
