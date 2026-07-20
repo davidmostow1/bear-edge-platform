@@ -32,7 +32,8 @@ const deployedMigrationFiles = [
   "20260711215305_decision_journal_indexes_v10.sql",
   "20260717075523_align_audit_records_20260717.sql",
   "20260717075721_allow_service_projection_20260717.sql",
-  "20260717080017_remove_duplicate_client_event_index_20260717.sql"
+  "20260717080017_remove_duplicate_client_event_index_20260717.sql",
+  "20260720150000_mlb_simulation_projection.sql"
 ];
 
 function migrationSql() {
