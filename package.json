@@ -53,6 +53,7 @@
     "audit:protocol": "node ./script/build_protocol_audit.js",
     "audit:release": "node ./script/build_release_readiness.js",
     "simulate:card": "node ./script/simulate_verified_card.js",
+    "simulate:mlb:tb": "node ./script/simulate_mlb_total_bases.js",
     "package:portable": "npm run verify && mkdir -p dist && npm pack --pack-destination dist"
   },
   "keywords": [
