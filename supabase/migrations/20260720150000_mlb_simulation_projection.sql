@@ -15,7 +15,7 @@ create table if not exists public.market_snapshots (
   captured_at timestamptz not null,
   source_timestamp timestamptz not null,
   input_snapshot jsonb not null check (jsonb_typeof(input_snapshot) = 'object'),
-  authorization text not null default 'PRICE_CHECK_ONLY' check (authorization = 'PRICE_CHECK_ONLY'),
+  authorization_status text not null default 'PRICE_CHECK_ONLY' check (authorization_status = 'PRICE_CHECK_ONLY'),
   created_at timestamptz not null default now(),
   unique (user_id, market_fingerprint, captured_at)
 );
@@ -34,7 +34,7 @@ create table if not exists public.simulation_runs (
   expected_value_roi double precision not null,
   quarter_kelly_fraction double precision not null check (quarter_kelly_fraction >= 0 and quarter_kelly_fraction <= 0.25),
   verdict text not null check (verdict in ('BET', 'LEAN', 'WAIT', 'PASS')),
-  authorization text not null default 'PRICE_CHECK_ONLY' check (authorization = 'PRICE_CHECK_ONLY'),
+  authorization_status text not null default 'PRICE_CHECK_ONLY' check (authorization_status = 'PRICE_CHECK_ONLY'),
   input_snapshot jsonb not null check (jsonb_typeof(input_snapshot) = 'object'),
   output_snapshot jsonb not null check (jsonb_typeof(output_snapshot) = 'object'),
   created_at timestamptz not null default now()
