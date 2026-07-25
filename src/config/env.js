@@ -44,7 +44,11 @@ function loadEnvFiles(options = {}) {
   const keys = [];
 
   for (const fileName of fileNames) {
-    const filePath = path.join(rootDir, fileName);
+    const filePath = path.resolve(rootDir, fileName);
+    const relativePath = path.relative(rootDir, filePath);
+    if (relativePath.startsWith("..") || path.isAbsolute(relativePath)) {
+      throw new Error("Invalid file path");
+    }
 
     if (!fs.existsSync(filePath)) {
       continue;
