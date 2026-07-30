@@ -183,12 +183,13 @@ function envKeyStatus(key, envFiles) {
   };
 }
 
-function providerStatus(provider, envFiles) {
+function providerStatus(provider, envFiles, readiness = null) {
   const keyStatuses = provider.envKeys.map((key) => envKeyStatus(key, envFiles));
   const configured = keyStatuses.some((key) => key.configured);
   const savedLocally = keyStatuses.some((key) => key.savedLocally);
   const blankInLocalFile = keyStatuses.some((key) => key.blankInLocalFile);
   const status = configured ? "configured" : savedLocally ? "restart_needed" : blankInLocalFile ? "blank" : "missing";
+  const usableNow = configured && readiness?.usableNow === true;
 
   return {
     ...provider,
@@ -196,7 +197,8 @@ function providerStatus(provider, envFiles) {
     configured,
     savedLocally,
     blankInLocalFile,
-    usableNow: configured,
+    usableNow,
+    liveVerificationStatus: readiness?.status ?? "not_checked",
     secretReturned: false,
     keyStatuses
   };
@@ -205,7 +207,10 @@ function providerStatus(provider, envFiles) {
 function getProviderSetupStatus(options = {}) {
   const rootDir = path.resolve(options.rootDir ?? process.cwd());
   const envFiles = [readEnvFileState(rootDir, ".env.local"), readEnvFileState(rootDir, ".env")];
-  const providers = PROVIDER_REQUIREMENTS.map((provider) => providerStatus(provider, envFiles));
+  const providerReadiness = options.providerReadiness ?? {};
+  const providers = PROVIDER_REQUIREMENTS.map((provider) => (
+    providerStatus(provider, envFiles, providerReadiness[provider.id] ?? null)
+  ));
   const required = providers.filter((provider) => provider.tier === "required");
   const recommended = providers.filter((provider) => provider.tier === "recommended");
 
@@ -223,12 +228,15 @@ function getProviderSetupStatus(options = {}) {
       savedButNeedsRestart: providers.filter((provider) => provider.status === "restart_needed").length,
       blank: providers.filter((provider) => provider.status === "blank").length,
       missing: providers.filter((provider) => provider.status === "missing").length,
-      requiredReady: required.every((provider) => provider.configured),
-      recommendedReady: recommended.every((provider) => provider.configured)
+      requiredConfigured: required.every((provider) => provider.configured),
+      recommendedConfigured: recommended.every((provider) => provider.configured),
+      requiredReady: required.every((provider) => provider.usableNow),
+      recommendedReady: recommended.every((provider) => provider.usableNow)
     },
     notes: [
       "Keys are never returned by this endpoint.",
-      "Configured means the currently running server process can use the key.",
+      "Configured means the currently running server process has a non-empty key; it does not prove provider access.",
+      "Usable now remains false until a live capability check succeeds.",
       "Saved locally means a non-empty value exists in .env.local or .env, but the server may need restart if it was edited outside the dashboard."
     ]
   };

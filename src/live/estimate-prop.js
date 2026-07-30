@@ -1,12 +1,25 @@
+const {
+  analyzeMarketIntelligence,
+  applyMarketAdjustments
+} = require("./market-intelligence.js");
+const { resolveLiveLegModelEvidence } = require("../calibration/model-evidence.js");
+
 const DEFAULT_LIVE_POLICY = Object.freeze({
   marketWeight: 0.35,
   recentWeight: 0.45,
+  minFairEdge: 0.02,
+  minEvRoi: 0.01,
+  minKellyFraction: 0.005,
   maxParlayLegs: 3,
   maxAltPropLegs: 2,
   maxSourceAgeMinutes: 20,
+  maxMarketAgeMinutes: 10,
   correlationPenalty: 0.92,
   allowCorrelatedLegs: false,
+  requireMarketTimestamp: true,
+  requireCalibratedModel: true,
   kellyMultiplier: 0.2,
+  maxStake: Infinity,
   maxBankrollFraction: 0.02,
   minStake: 1
 });
@@ -116,25 +129,49 @@ function getTwoWayNoVigProbability(americanOdds, oppositeOdds) {
   return impliedA / total;
 }
 
-function factorial(value) {
-  let result = 1;
-
-  for (let index = 2; index <= value; index += 1) {
-    result *= index;
+function poissonCdf(k, mean) {
+  if (!Number.isFinite(mean) || mean < 0) {
+    throw new RangeError("Poisson mean must be a finite non-negative number.");
   }
 
-  return result;
-}
-
-function poissonCdf(k, mean) {
   if (k < 0) {
     return 0;
   }
 
-  let sum = 0;
+  if (mean === 0) {
+    return 1;
+  }
 
-  for (let index = 0; index <= k; index += 1) {
-    sum += Math.exp(-mean) * mean ** index / factorial(index);
+  // Recurrence avoids factorial overflow and repeated exponentiation. For
+  // extreme means, use a continuity-corrected normal fallback after the
+  // initial probability underflows.
+  const firstTerm = Math.exp(-mean);
+
+  if (firstTerm === 0) {
+    const z = (k + 0.5 - mean) / Math.sqrt(mean);
+    const absoluteZ = Math.abs(z);
+    const t = 1 / (1 + 0.2316419 * absoluteZ);
+    const density = 0.39894228 * Math.exp(-0.5 * absoluteZ * absoluteZ);
+    const polynomial = t * (
+      0.31938153 +
+      t * (-0.356563782 +
+        t * (1.781477937 +
+          t * (-1.821255978 + t * 1.330274429)))
+    );
+    const tail = 1 - density * polynomial;
+    return Math.min(1, Math.max(0, z >= 0 ? tail : 1 - tail));
+  }
+
+  let term = firstTerm;
+  let sum = term;
+
+  for (let index = 1; index <= k; index += 1) {
+    term *= mean / index;
+    sum += term;
+
+    if (!Number.isFinite(sum)) {
+      break;
+    }
   }
 
   return Math.min(1, Math.max(0, sum));
@@ -225,7 +262,7 @@ function computeSourceAgeMinutes(snapshot) {
     return Infinity;
   }
 
-  return Math.max(0, (Date.now() - fetchedAtMs) / 60000);
+  return (Date.now() - fetchedAtMs) / 60000;
 }
 
 function evaluateLiveLeg(leg, snapshot, context = {}) {
@@ -234,30 +271,37 @@ function evaluateLiveLeg(leg, snapshot, context = {}) {
     ...(context.livePolicy ?? {})
   };
   const bankroll = context.bankroll;
+  const modelEvidence = resolveLiveLegModelEvidence(leg, context.modelRegistryOptions);
   const selection = leg.label || leg.selection || leg.id;
   const marketOdds = leg.marketOdds;
   const oppositeOdds = leg.oppositeOdds ?? null;
-  const marketReferenceProbability =
-    oppositeOdds === null
-      ? americanToImpliedProbability(marketOdds)
-      : getTwoWayNoVigProbability(marketOdds, oppositeOdds);
+  const marketIntelligence = analyzeMarketIntelligence({
+    marketOdds,
+    oppositeOdds,
+    marketContext: leg.marketContext,
+    baseMarketWeight: leg.marketWeight ?? policy.marketWeight,
+    policy: {
+      maxMarketAgeMinutes: leg.maxMarketAgeMinutes ?? policy.maxMarketAgeMinutes
+    }
+  });
+  const marketReferenceProbability = marketIntelligence.referenceProbability;
   const recentWeight = leg.recentWeight ?? policy.recentWeight;
   const blendedMean = snapshot.season.perGame * (1 - recentWeight) + snapshot.recent.perGame * recentWeight;
-  const liveEstimate = leg.modelProbabilityOverride === undefined
-    ? estimateLiveCountProbability(snapshot, blendedMean, leg.line, leg.side)
-    : null;
+  const liveOutcome = estimateLiveCountProbability(snapshot, blendedMean, leg.line, leg.side);
+  const liveEstimate = leg.modelProbabilityOverride === undefined ? liveOutcome : null;
   const baseProbability = leg.modelProbabilityOverride ?? liveEstimate?.probability ?? estimateCountProbability({
     mean: blendedMean,
-    line: leg.line,
-    side: leg.side
-  });
+      line: leg.line,
+      side: leg.side
+    });
+  const marketAdjustedBaseProbability = applyMarketAdjustments(baseProbability, marketIntelligence);
   const adjustedProbability =
-    liveEstimate?.resolved
+    liveOutcome?.resolved
       ? baseProbability
       : shrinkProbabilityTowardMarket(
-          baseProbability,
+          marketAdjustedBaseProbability,
           marketReferenceProbability,
-          leg.marketWeight ?? policy.marketWeight
+          marketIntelligence.marketWeight
         );
   const expectedValue = calculateExpectedValue({
     winProbability: adjustedProbability,
@@ -272,17 +316,69 @@ function evaluateLiveLeg(leg, snapshot, context = {}) {
     bankroll,
     kellyFraction: kelly.fraction,
     kellyMultiplier: leg.kellyMultiplier ?? policy.kellyMultiplier,
-    maxStake: leg.maxStake ?? Infinity,
+    maxStake: leg.maxStake ?? policy.maxStake,
     maxBankrollFraction: leg.maxBankrollFraction ?? policy.maxBankrollFraction
   });
   const fairEdge = adjustedProbability - marketReferenceProbability;
   const priceEdge = adjustedProbability - americanToImpliedProbability(marketOdds);
   const sourceAgeMinutes = computeSourceAgeMinutes(snapshot);
-  const riskFlags = [];
+  const riskFlags = Array.isArray(leg.riskFlags)
+    ? leg.riskFlags.map((flag) => ({
+        code: flag.code,
+        severity: flag.severity ?? "info",
+        message: flag.message ?? flag.code
+      }))
+    : [];
+  riskFlags.push(...marketIntelligence.riskFlags);
+
+  const usesUncalibratedBaseline = leg.modelProbabilityOverride === undefined && !liveEstimate?.resolved;
+  const usesUnvalidatedOverride = leg.modelProbabilityOverride !== undefined && !modelEvidence.validated;
+  const requiresRegisteredModel = !liveOutcome?.resolved && !modelEvidence.validated;
+
+  if (requiresRegisteredModel) {
+    riskFlags.push({
+      code: "MODEL_CALIBRATION_REQUIRED",
+      severity: "high",
+      message: usesUnvalidatedOverride
+        ? "The supplied probability is not backed by an exact validated model-registry entry and report digest."
+        : "The prop probability uses a Poisson baseline without an exact validated model-registry entry and report digest."
+    });
+  }
+
+  if (usesUncalibratedBaseline) {
+    riskFlags.push({
+      code: "POISSON_BASELINE_MODEL",
+      severity: "info",
+      message: "The research baseline does not model player-specific overdispersion, role, lineup, opponent, or venue uncertainty."
+    });
+  }
   const reasons = [];
   let verdict = "BET";
+  const marketDataRiskCodes = new Set([
+    "MISSING_MARKET_TIMESTAMP",
+    "INVALID_MARKET_TIMESTAMP",
+    "FUTURE_MARKET_TIMESTAMP",
+    "STALE_MARKET_PRICE",
+    "MARKET_DISAGREEMENT"
+  ]);
+  const hasMarketDataRisk = riskFlags.some((flag) => marketDataRiskCodes.has(flag.code));
+  const manualConfirmationRiskCodes = new Set([
+    "LINEUP_NOT_CONFIRMED",
+    "STALE_INJURY",
+    "INJURY_DATA_STALE",
+    "ROSTER_NOT_CONFIRMED"
+  ]);
+  const hasManualConfirmationRisk = riskFlags.some((flag) => manualConfirmationRiskCodes.has(flag.code));
 
-  if (sourceAgeMinutes > (leg.maxSourceAgeMinutes ?? policy.maxSourceAgeMinutes)) {
+  if (sourceAgeMinutes < 0) {
+    verdict = "WAIT";
+    riskFlags.push({
+      code: "FUTURE_SOURCE_TIMESTAMP",
+      severity: "high",
+      message: "The statistics source timestamp is in the future and indicates a data or clock error."
+    });
+    reasons.push("Statistics source timestamp is in the future.");
+  } else if (sourceAgeMinutes > (leg.maxSourceAgeMinutes ?? policy.maxSourceAgeMinutes)) {
     verdict = "WAIT";
     riskFlags.push({
       code: "STALE_SOURCE",
@@ -290,7 +386,32 @@ function evaluateLiveLeg(leg, snapshot, context = {}) {
       message: "Live stat source is older than the configured freshness threshold."
     });
     reasons.push("Live stat source is stale.");
-  } else if (expectedValue.roi < (leg.minEvRoi ?? 0)) {
+  } else if (policy.requireMarketTimestamp && hasMarketDataRisk) {
+    verdict = "WAIT";
+    reasons.push("Market timestamp or market agreement is not safe for a live decision.");
+  } else if (hasManualConfirmationRisk) {
+    verdict = "WAIT";
+    reasons.push("Lineup, roster, or injury evidence requires manual confirmation.");
+  } else if (liveOutcome?.resolved) {
+    verdict = "PASS";
+    riskFlags.push({
+      code: "MARKET_OUTCOME_RESOLVED",
+      severity: "high",
+      message: "The official live feed has already resolved this prop outcome; a new wager must not be issued."
+    });
+    reasons.push("The live outcome is already resolved.");
+  } else if (requiresRegisteredModel) {
+    verdict = "WAIT";
+    reasons.push("Validated model-registry evidence is required before a BET verdict.");
+  } else if (fairEdge <= (leg.minFairEdge ?? policy.minFairEdge)) {
+    verdict = "PASS";
+    riskFlags.push({
+      code: "EDGE_BELOW_THRESHOLD",
+      severity: "info",
+      message: "Adjusted fair edge versus the market reference does not clear the minimum edge threshold."
+    });
+    reasons.push("Adjusted fair edge is below threshold.");
+  } else if (expectedValue.roi <= (leg.minEvRoi ?? policy.minEvRoi)) {
     verdict = "PASS";
     riskFlags.push({
       code: "NEGATIVE_EV",
@@ -298,7 +419,15 @@ function evaluateLiveLeg(leg, snapshot, context = {}) {
       message: "Leg EV is negative at the offered odds."
     });
     reasons.push("Leg EV is negative.");
-  } else if (stakeRecommendation.recommendedStake < (leg.minStake ?? policy.minStake)) {
+  } else if (kelly.fraction <= (leg.minKellyFraction ?? policy.minKellyFraction)) {
+    verdict = "PASS";
+    riskFlags.push({
+      code: "KELLY_BELOW_THRESHOLD",
+      severity: "info",
+      message: "Kelly fraction does not clear the configured minimum staking threshold."
+    });
+    reasons.push("Kelly fraction is below threshold.");
+  } else if (stakeRecommendation.recommendedStake <= (leg.minStake ?? policy.minStake)) {
     verdict = "PASS";
     riskFlags.push({
       code: "STAKE_BELOW_MINIMUM",
@@ -306,6 +435,9 @@ function evaluateLiveLeg(leg, snapshot, context = {}) {
       message: "Leg stake falls below the configured minimum."
     });
     reasons.push("Leg stake is below minimum.");
+  } else if (riskFlags.some((flag) => flag.severity === "high")) {
+    verdict = "WAIT";
+    reasons.push("High-severity carried leg risk flags require manual confirmation.");
   } else {
     reasons.push("Live stats, EV, and stake sizing pass.");
   }
@@ -346,19 +478,22 @@ function evaluateLiveLeg(leg, snapshot, context = {}) {
     side: leg.side,
     line: leg.line,
     source: snapshot,
+    modelEvidence,
     derived: {
       recentWeight,
       blendedMean,
       baseProbability,
+      marketAdjustedBaseProbability,
       adjustedProbability,
       marketReferenceProbability,
       fairEdge,
       priceEdge,
+      marketIntelligence,
       sourceAgeMinutes,
-      currentGameValue: liveEstimate?.currentValue ?? null,
-      remainingMean: liveEstimate?.remainingMean ?? null,
-      remainingOpportunityFactor: liveEstimate?.remainingOpportunityFactor ?? null,
-      liveDeterministicOutcome: liveEstimate?.resolved ?? false,
+      currentGameValue: liveOutcome?.currentValue ?? null,
+      remainingMean: liveOutcome?.remainingMean ?? null,
+      remainingOpportunityFactor: liveOutcome?.remainingOpportunityFactor ?? null,
+      liveDeterministicOutcome: liveOutcome?.resolved ?? false,
       liveGameStatus: snapshot.liveGame?.status ?? null
     },
     expectedValue,
@@ -373,6 +508,10 @@ function combineParlayLegs(ticket, legResults) {
     ...(ticket.livePolicy ?? {})
   };
   const altPropLegs = legResults.filter((leg) => leg.marketType === "alt-prop").length;
+  const correlationPenalty = Number(livePolicy.correlationPenalty);
+  const safeCorrelationPenalty = Number.isFinite(correlationPenalty)
+    ? Math.min(1, Math.max(0, correlationPenalty))
+    : DEFAULT_LIVE_POLICY.correlationPenalty;
   const duplicateCorrelationKeys = new Set();
   const correlationKeys = new Set();
 
@@ -397,9 +536,8 @@ function combineParlayLegs(ticket, legResults) {
     (product, leg) => product * leg.derived.adjustedProbability,
     1
   );
-  const correlationPenaltyFactor =
-    duplicateCorrelationKeys.size > 0 && !livePolicy.allowCorrelatedLegs ? livePolicy.correlationPenalty : 1;
-  const combinedProbability = baseProbabilityProduct * correlationPenaltyFactor;
+  const correlationPenaltyFactor = duplicateCorrelationKeys.size > 0 ? safeCorrelationPenalty : 1;
+  const combinedProbability = Math.min(1, Math.max(0, baseProbabilityProduct * correlationPenaltyFactor));
   const combinedMarketProbability = legResults.reduce(
     (product, leg) => product * leg.derived.marketReferenceProbability,
     1
@@ -417,12 +555,30 @@ function combineParlayLegs(ticket, legResults) {
     bankroll: ticket.bankroll,
     kellyFraction: kelly.fraction,
     kellyMultiplier: ticket.kellyMultiplier ?? livePolicy.kellyMultiplier,
-    maxStake: ticket.maxStake ?? Infinity,
+    maxStake: ticket.maxStake ?? livePolicy.maxStake,
     maxBankrollFraction: ticket.maxBankrollFraction ?? livePolicy.maxBankrollFraction
   });
-  const riskFlags = [];
+  const carriedLegRiskFlags = legResults.flatMap((leg) =>
+    (leg.riskFlags ?? []).map((flag) => ({
+      code: `LEG_${flag.code}`,
+      severity: flag.severity ?? "info",
+      message: `${leg.selection}: ${flag.message ?? flag.code}`,
+      legId: leg.id,
+      originalCode: flag.code
+    }))
+  );
+  const riskFlags = [...carriedLegRiskFlags];
   const reasons = [];
   let verdict = "BET";
+  const hasCorrelation = duplicateCorrelationKeys.size > 0;
+
+  if (hasCorrelation && livePolicy.allowCorrelatedLegs) {
+    riskFlags.push({
+      code: "CORRELATION_OVERRIDE",
+      severity: "medium",
+      message: "Correlated legs were explicitly allowed; the configured correlation penalty was applied."
+    });
+  }
 
   if (ticket.legs.length < 2 || ticket.legs.length > livePolicy.maxParlayLegs) {
     verdict = "PASS";
@@ -450,11 +606,21 @@ function combineParlayLegs(ticket, legResults) {
     reasons.push("Correlated legs were detected.");
   } else if (hasPassLeg) {
     verdict = "PASS";
+    riskFlags.push({
+      code: "PARLAY_LEG_PASS",
+      severity: "high",
+      message: "At least one parlay leg failed its own gate."
+    });
     reasons.push("At least one leg failed its own gate.");
   } else if (hasWaitLeg) {
     verdict = "WAIT";
+    riskFlags.push({
+      code: "PARLAY_LEG_WAIT",
+      severity: "medium",
+      message: "At least one parlay leg is waiting on fresher or safer data."
+    });
     reasons.push("At least one leg is waiting on fresher live data.");
-  } else if (expectedValue.roi < (ticket.minEvRoi ?? 0)) {
+  } else if (expectedValue.roi <= (ticket.minEvRoi ?? livePolicy.minEvRoi)) {
     verdict = "PASS";
     riskFlags.push({
       code: "NEGATIVE_EV",
@@ -462,7 +628,15 @@ function combineParlayLegs(ticket, legResults) {
       message: "Parlay EV is negative at the combined offered price."
     });
     reasons.push("Parlay EV is negative.");
-  } else if (stakeRecommendation.recommendedStake < (ticket.minStake ?? livePolicy.minStake)) {
+  } else if (kelly.fraction <= (ticket.minKellyFraction ?? livePolicy.minKellyFraction)) {
+    verdict = "PASS";
+    riskFlags.push({
+      code: "KELLY_BELOW_THRESHOLD",
+      severity: "info",
+      message: "Combined Kelly fraction does not clear the configured minimum staking threshold."
+    });
+    reasons.push("Combined Kelly fraction is below threshold.");
+  } else if (stakeRecommendation.recommendedStake <= (ticket.minStake ?? livePolicy.minStake)) {
     verdict = "PASS";
     riskFlags.push({
       code: "STAKE_BELOW_MINIMUM",

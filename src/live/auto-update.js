@@ -189,6 +189,11 @@ function createAutoUpdateService(options = {}) {
     days,
     maxRosterTeams,
     maxCandidates,
+    oddsPolicy: {
+      backgroundPaidRequests: false,
+      sourceHealthUsageCreditsPerRun: 0,
+      manualPricingRequired: true
+    },
     running: false,
     started: false,
     lastRunReason: null,

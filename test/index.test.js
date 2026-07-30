@@ -11,7 +11,8 @@ const {
   calculateKellyFraction,
   applyStakeCaps,
   createDecisionLogTemplate,
-  evaluateBetDecision
+  evaluateBetDecision,
+  validateBetInput
 } = require("../src/index.js");
 
 function almostEqual(actual, expected, epsilon = 1e-9) {
@@ -75,6 +76,17 @@ test("expected value returns roi and expected profit", () => {
   almostEqual(result.decimalOdds, 2.2);
   almostEqual(result.expectedProfit, 10.5);
   almostEqual(result.roi, 0.21);
+});
+
+test("expected value and Kelly reject invalid decimal odds", () => {
+  assert.throws(
+    () => calculateExpectedValue({ winProbability: 0.5, decimalOdds: 1 }),
+    /decimalOdds must be greater than 1/
+  );
+  assert.throws(
+    () => calculateKellyFraction({ winProbability: 0.5, decimalOdds: 0.5 }),
+    /decimalOdds must be greater than 1/
+  );
 });
 
 test("kelly returns zero for negative edge and positive value for good edge", () => {
@@ -311,6 +323,81 @@ test("negative EV is rejected even when fair edge versus no-vig market is positi
   assert.ok(result.riskFlags.some((flag) => flag.code === "EV_BELOW_THRESHOLD"));
   assert.equal(result.decisionLog.metrics.fairEdge, result.fairEdge);
   assert.equal(result.decisionLog.metrics.priceEdge, result.priceEdge);
+});
+
+test("negative EV thresholds cannot be configured to permit negative-EV bets", () => {
+  assert.throws(() => validateBetInput({
+    selection: "Invalid negative threshold",
+    marketOdds: -110,
+    oppositeOdds: -110,
+    modelProbability: 0.5,
+    bankroll: 1000,
+    thresholds: { minEvRoi: -0.01 }
+  }), (error) => /** @type {any} */ (error).issues.some((issue) =>
+    issue.path === "thresholds.minEvRoi" && issue.message === "Must be >= 0."
+  ));
+
+  assert.throws(
+    () => evaluateBetDecision({
+      selection: "Invalid negative threshold",
+      marketOdds: -110,
+      oppositeOdds: -110,
+      modelProbability: 0.5,
+      bankroll: 1000,
+      thresholds: { minEvRoi: -0.01 }
+    }),
+    /thresholds\.minEvRoi must be 0 or greater/
+  );
+});
+
+test("zero edge, zero EV, and zero Kelly never qualify as a bet at the boundary", () => {
+  const result = evaluateBetDecision({
+    selection: "Exact break-even boundary",
+    marketOdds: -110,
+    oppositeOdds: -110,
+    modelProbability: 0.5,
+    bankroll: 1000,
+    marketWeight: 1,
+    thresholds: {
+      minEdge: 0,
+      minEvRoi: 0,
+      minKellyFraction: 0
+    },
+    stakePolicy: {
+      kellyMultiplier: 0.25,
+      maxStake: 100,
+      maxBankrollFraction: 0.05,
+      minStake: 0
+    }
+  });
+
+  assert.equal(result.verdict, "PASS");
+  assert.ok(result.riskFlags.some((flag) => flag.code === "EDGE_BELOW_THRESHOLD"));
+});
+
+test("zero recommended stake never qualifies as a bet", () => {
+  const result = evaluateBetDecision({
+    selection: "Zero stake guard",
+    marketOdds: 120,
+    oppositeOdds: -135,
+    modelProbability: 0.75,
+    bankroll: 1000,
+    marketWeight: 0,
+    thresholds: {
+      minEdge: 0,
+      minEvRoi: 0,
+      minKellyFraction: 0
+    },
+    stakePolicy: {
+      kellyMultiplier: 0.25,
+      maxBankrollFraction: 0,
+      minStake: 0
+    }
+  });
+
+  assert.equal(result.verdict, "PASS");
+  assert.equal(result.stakeRecommendation.recommendedStake, 0);
+  assert.ok(result.riskFlags.some((flag) => flag.code === "STAKE_BELOW_MINIMUM"));
 });
 
 test("verdict is BET when edge, EV, and Kelly all clear thresholds", () => {

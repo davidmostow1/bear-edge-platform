@@ -273,10 +273,12 @@ function summarizeCurrentOffer(offer) {
   return `${offer.boardStatus} ${offer.eventSlug ?? ""} ${offer.playerName} ${offer.threshold}+ TB ${offer.americanOdds > 0 ? "+" : ""}${offer.americanOdds}`.trim();
 }
 
-function buildComparisonTicket(currentOffer, playerId, resolvedGamePk, bankroll) {
+function buildComparisonTicket(currentOffer, playerId, resolvedGamePk, bankroll, fallbackCapturedAt = null) {
   if (!currentOffer || !Number.isFinite(playerId)) {
     return null;
   }
+
+  const offeredLastUpdate = currentOffer.capturedAt ?? fallbackCapturedAt;
 
   return validateLiveTicket({
     kind: "single",
@@ -297,6 +299,9 @@ function buildComparisonTicket(currentOffer, playerId, resolvedGamePk, bankroll)
           statKey: "totalBases",
           recentLimit: 10,
           gamePk: resolvedGamePk
+        },
+        marketContext: {
+          offeredLastUpdate
         }
       }
     ]
@@ -354,7 +359,13 @@ async function compareRecordingPropsWithCurrentBoard(input = {}, options = {}) {
     const recordingImplied = americanToImpliedProbability(recordingOdds);
     const playerId = parseNumber(row.player_id);
     const resolvedGamePk = resolveGamePk(row, currentOffer, scheduleIndex);
-    const ticketDraft = buildComparisonTicket(currentOffer, playerId, resolvedGamePk, bankroll);
+    const ticketDraft = buildComparisonTicket(
+      currentOffer,
+      playerId,
+      resolvedGamePk,
+      bankroll,
+      boardPayload.capturedAt ?? null
+    );
     let evaluation = null;
     let evaluationError = "";
 

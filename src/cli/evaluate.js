@@ -5,7 +5,8 @@ const path = require("node:path");
 
 const {
   BetInputValidationError,
-  appendDecisionLog,
+  appendAuthoritativeRecord,
+  createStraightEvaluationAuditRecord,
   evaluateBetDecision,
   validateBetInput
 } = require("../index.js");
@@ -13,8 +14,8 @@ const {
 function printUsage() {
   console.error(
     [
-      "Usage: npm run evaluate -- <bet.json> [--log-path <path>] [--no-log] [--compact]",
-      "       npm run evaluate -- --stdin [--log-path <path>] [--no-log] [--compact]",
+      "Usage: npm run evaluate -- <bet.json> [--log-path <path>] [--compact]",
+      "       npm run evaluate -- --stdin [--log-path <path>] [--compact]",
       "       npm run evaluate -- --schema"
     ].join("\n")
   );
@@ -25,7 +26,6 @@ function parseArgs(argv) {
   let inputPath = null;
   let logPath;
   let readFromStdin = false;
-  let writeLog = true;
   let compact = false;
   let printSchema = false;
 
@@ -50,11 +50,6 @@ function parseArgs(argv) {
 
     if (value === "--stdin") {
       readFromStdin = true;
-      continue;
-    }
-
-    if (value === "--no-log") {
-      writeLog = false;
       continue;
     }
 
@@ -83,7 +78,6 @@ function parseArgs(argv) {
         inputPath,
         logPath,
         readFromStdin,
-        writeLog,
         compact,
         printSchema
       };
@@ -97,7 +91,6 @@ function parseArgs(argv) {
     inputPath,
     logPath,
     readFromStdin,
-    writeLog,
     compact,
     printSchema
   };
@@ -145,18 +138,34 @@ async function main(argv = process.argv.slice(2)) {
   const rawInput = JSON.parse(fileContents);
   const validatedInput = validateBetInput(rawInput);
   const result = evaluateBetDecision(validatedInput);
-  const resolvedLogPath = parsedArgs.writeLog
-    ? await appendDecisionLog(result.decisionLog, {
-        logPath: parsedArgs.logPath
-      })
-    : null;
+  const auditRecord = createStraightEvaluationAuditRecord(validatedInput, result, {
+    origin: {
+      channel: "cli",
+      actorType: "operator",
+      sessionId: null,
+      requestId: null
+    },
+    sourceLocator: absoluteInputPath ?? "stdin"
+  });
+  const persistence = await appendAuthoritativeRecord(auditRecord, {
+    logPath: parsedArgs.logPath
+  });
 
   process.stdout.write(
     `${JSON.stringify(
       {
         ...result,
+        verdict: auditRecord.verdict,
+        reasons: auditRecord.reasons,
+        riskFlags: auditRecord.riskFlags,
+        decisionLog: auditRecord,
+        recordId: auditRecord.id,
+        clientEventId: auditRecord.clientEventId,
+        contentDigest: auditRecord.contentDigest,
+        persistedAt: persistence.persistedAt,
         inputPath: absoluteInputPath,
-        logPath: resolvedLogPath
+        logPath: persistence.ledgerPath,
+        ledgerPath: persistence.ledgerPath
       },
       null,
       parsedArgs.compact ? 0 : 2

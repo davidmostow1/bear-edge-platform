@@ -2,7 +2,7 @@ const { fetchJson } = require("./fetch-json.js");
 const { safeErrorMessage } = require("../config/secrets.js");
 const { formatDate } = require("./schedule.js");
 
-const AUTO_REFRESH_MS = 5 * 60 * 1000;
+const AUTO_REFRESH_MS = 60 * 1000;
 const ESPN_SPORTS = Object.freeze([
   { id: "mlb", label: "MLB", path: "baseball/mlb" },
   { id: "nhl", label: "NHL", path: "hockey/nhl" },
@@ -19,17 +19,6 @@ const STAT_NEWS_SEARCH_URL =
 const STATMUSE_HOME_URL = "https://www.statmuse.com/";
 const STATMUSE_SCORES_URL = "https://www.statmuse.com/scores";
 const STATMUSE_QUERY_SPORTS = Object.freeze(["mlb", "nba", "nhl", "nfl", "wnba"]);
-const TENNIS_ODDS_SPORT_KEYS = Object.freeze([
-  "tennis_atp_aus_open_singles",
-  "tennis_wta_aus_open_singles",
-  "tennis_atp_french_open",
-  "tennis_wta_french_open",
-  "tennis_atp_wimbledon",
-  "tennis_wta_wimbledon",
-  "tennis_atp_us_open",
-  "tennis_wta_us_open"
-]);
-
 function pad2(value) {
   return String(value).padStart(2, "0");
 }
@@ -271,44 +260,9 @@ async function fetchDraftKingsStatus(options = {}) {
   const oddsApiKey = options.oddsApiKey ?? process.env.THE_ODDS_API_KEY ?? process.env.ODDS_API_KEY ?? null;
 
   if (oddsApiKey) {
-    const sourceUrl =
-      "https://api.the-odds-api.com/v4/sports/baseball_mlb/odds?regions=us&markets=h2h,spreads,totals" +
-      "&bookmakers=draftkings&oddsFormat=american";
-
-    try {
-      const response = await fetchTextImpl(`${sourceUrl}&apiKey=${encodeURIComponent(oddsApiKey)}`);
-      const text = typeof response === "string" ? response : response.text;
-
-      if (response.ok === false) {
-        throw new Error(`${response.status} ${response.statusText ?? ""}`.trim());
-      }
-
-      const events = JSON.parse(text);
-
-      if (Array.isArray(events)) {
-        return sourceRecord({
-          provider: "DraftKings",
-          status: "ok",
-          sourceType: "The Odds API DraftKings bookmaker feed",
-          fetchedAt,
-          sources: [
-            {
-              name: "DraftKings odds via The Odds API",
-              sourceUrl,
-              count: events.length
-            }
-          ],
-          summary: {
-            eventCount: events.length,
-            requiresApiKey: true,
-            directDraftKingsReachable: false
-          },
-          warnings: ["DraftKings direct public JSON is not stable; odds are routed through a configured odds API key."]
-        });
-      }
-    } catch (error) {
-      warnings.push(`Configured odds API DraftKings fetch failed: ${safeError(error)}`);
-    }
+    warnings.push(
+      "Configured odds key detected. The recurring source-health check intentionally skipped paid market endpoints."
+    );
   }
 
   for (const sourceUrl of DRAFTKINGS_DIRECT_ENDPOINTS) {
@@ -365,7 +319,10 @@ async function fetchDraftKingsStatus(options = {}) {
       eventCount: 0,
       offerCount: 0,
       requiresApiKey: true,
-      directDraftKingsReachable: false
+      directDraftKingsReachable: false,
+      oddsApiConfigured: Boolean(oddsApiKey),
+      paidOddsProbeEnabled: false,
+      backgroundUsageCredits: 0
     },
     warnings: [
       ...warnings,
@@ -544,7 +501,6 @@ async function fetchStatMuseStatus(options = {}) {
 
 async function fetchTennisStatus(options = {}) {
   const fetchedAt = new Date().toISOString();
-  const fetchTextImpl = options.fetchTextImpl ?? defaultFetchText;
   const oddsApiKey = options.oddsApiKey ?? process.env.THE_ODDS_API_KEY ?? process.env.ODDS_API_KEY ?? null;
   const tennisApiKey = options.tennisApiKey ?? process.env.TENNIS_API_KEY ?? process.env.SPORTDEVS_API_KEY ?? null;
   const sources = [];
@@ -573,29 +529,7 @@ async function fetchTennisStatus(options = {}) {
   }
 
   if (oddsApiKey) {
-    for (const sportKey of TENNIS_ODDS_SPORT_KEYS.slice(0, 2)) {
-      const sourceUrl =
-        `https://api.the-odds-api.com/v4/sports/${encodeURIComponent(sportKey)}/odds` +
-        "?regions=us&markets=h2h&bookmakers=draftkings&oddsFormat=american";
-
-      try {
-        const response = await fetchTextImpl(`${sourceUrl}&apiKey=${encodeURIComponent(oddsApiKey)}`);
-        const text = typeof response === "string" ? response : response.text;
-
-        if (response.ok === false) {
-          throw new Error(`${response.status} ${response.statusText ?? ""}`.trim());
-        }
-
-        const events = JSON.parse(text);
-        sources.push({
-          name: `Tennis odds ${sportKey}`,
-          sourceUrl,
-          count: Array.isArray(events) ? events.length : 0
-        });
-      } catch (error) {
-        warnings.push(`Tennis odds check failed for ${sportKey}: ${safeError(error)}`);
-      }
-    }
+    warnings.push("Recurring tennis health checks intentionally skip paid odds markets.");
   }
 
   return sourceRecord({
@@ -609,6 +543,8 @@ async function fetchTennisStatus(options = {}) {
       oddsApiConfigured: Boolean(oddsApiKey),
       tennisStatsApiConfigured: Boolean(tennisApiKey),
       oddsSourcesChecked: sources.length,
+      paidOddsProbeEnabled: false,
+      backgroundUsageCredits: 0,
       supportedInputs: ["manual ticket JSON", "pasted odds text", "screenshot OCR"]
     },
     warnings

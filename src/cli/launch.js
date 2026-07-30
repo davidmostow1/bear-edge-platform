@@ -2,15 +2,17 @@
 
 const fs = require("node:fs");
 const http = require("node:http");
+const os = require("node:os");
 const path = require("node:path");
 const { spawn } = require("node:child_process");
 
 const { loadEnvFiles } = require("../config/env.js");
+const { createOperatorAuth, envFlagEnabled } = require("../config/operator-auth.js");
 
 const PROJECT_ROOT = path.resolve(__dirname, "../..");
 const DEFAULT_PORT = 3000;
 const DEFAULT_HEALTH_TIMEOUT_MS = 20_000;
-const DEFAULT_AUTO_UPDATE_INTERVAL_MS = 5 * 60 * 1000;
+const DEFAULT_AUTO_UPDATE_INTERVAL_MS = 60 * 1000;
 
 loadEnvFiles({ rootDir: PROJECT_ROOT });
 
@@ -19,6 +21,7 @@ function parseArgs(argv) {
   const options = {
     autoUpdate: process.env.BEAR_EDGE_AUTO_UPDATE === "0" ? false : true,
     autoUpdateIntervalMs: Number(process.env.BEAR_EDGE_AUTO_UPDATE_INTERVAL_MS ?? DEFAULT_AUTO_UPDATE_INTERVAL_MS),
+    host: process.env.BEAR_EDGE_HOST ?? "127.0.0.1",
     openBrowser: true,
     port: Number(process.env.PORT ?? DEFAULT_PORT),
     timeoutMs: DEFAULT_HEALTH_TIMEOUT_MS
@@ -30,6 +33,17 @@ function parseArgs(argv) {
     if (value === "--port") {
       options.port = Number(args[index + 1]);
       index += 1;
+      continue;
+    }
+
+    if (value === "--host") {
+      options.host = String(args[index + 1] ?? "").trim();
+      index += 1;
+      continue;
+    }
+
+    if (value === "--lan") {
+      options.host = "0.0.0.0";
       continue;
     }
 
@@ -62,6 +76,10 @@ function parseArgs(argv) {
     throw new Error("Port must be a positive number.");
   }
 
+  if (!options.host) {
+    throw new Error("Host must be a non-empty string.");
+  }
+
   if (!Number.isFinite(options.timeoutMs) || options.timeoutMs <= 0) {
     throw new Error("Health timeout must be a positive number of milliseconds.");
   }
@@ -73,11 +91,37 @@ function parseArgs(argv) {
   return options;
 }
 
-function healthCheck(port) {
+function urlHost(host) {
+  return host === "0.0.0.0" ? "127.0.0.1" : host;
+}
+
+function preferredLanAddress() {
+  const interfaces = os.networkInterfaces();
+
+  for (const entries of Object.values(interfaces)) {
+    for (const entry of entries ?? []) {
+      if (entry.family === "IPv4" && !entry.internal) {
+        return entry.address;
+      }
+    }
+  }
+
+  return "127.0.0.1";
+}
+
+function displayHost(host) {
+  return host === "0.0.0.0" ? preferredLanAddress() : host;
+}
+
+function healthHost(host) {
+  return host === "0.0.0.0" ? preferredLanAddress() : urlHost(host);
+}
+
+function healthCheck(port, host = "127.0.0.1") {
   return new Promise((resolve) => {
     const request = http.get(
       {
-        hostname: "127.0.0.1",
+        hostname: healthHost(host),
         path: "/health",
         port,
         timeout: 1500
@@ -96,11 +140,11 @@ function healthCheck(port) {
   });
 }
 
-async function waitForHealth(port, timeoutMs = DEFAULT_HEALTH_TIMEOUT_MS) {
+async function waitForHealth(port, timeoutMs = DEFAULT_HEALTH_TIMEOUT_MS, host = "127.0.0.1") {
   const startedAt = Date.now();
 
   while (Date.now() - startedAt < timeoutMs) {
-    if (await healthCheck(port)) {
+    if (await healthCheck(port, host)) {
       return true;
     }
 
@@ -122,7 +166,7 @@ function createLogStreams() {
 
 function startServer(options) {
   const servePath = path.join(PROJECT_ROOT, "src/cli/serve.js");
-  const serveArgs = [servePath, "--port", String(options.port)];
+  const serveArgs = [servePath, "--port", String(options.port), "--host", options.host];
 
   if (!options.autoUpdate) {
     serveArgs.push("--no-auto-update");
@@ -134,7 +178,10 @@ function startServer(options) {
   const child = spawn(process.execPath, serveArgs, {
     cwd: PROJECT_ROOT,
     detached: true,
-    env: process.env,
+    env: {
+      ...process.env,
+      ...(options.operatorToken ? { BEAR_EDGE_OPERATOR_TOKEN: options.operatorToken } : {})
+    },
     stdio: ["ignore", logs.stdout, logs.stderr]
   });
 
@@ -143,8 +190,16 @@ function startServer(options) {
   return child.pid;
 }
 
-function openDashboard(port) {
-  const url = `http://127.0.0.1:${port}/dashboard`;
+function buildDashboardUrl(port, host = "127.0.0.1", operatorToken = null) {
+  const baseUrl = `http://${displayHost(host)}:${port}/dashboard`;
+
+  return operatorToken
+    ? `${baseUrl}#operatorToken=${encodeURIComponent(operatorToken)}`
+    : baseUrl;
+}
+
+function openDashboard(port, host = "127.0.0.1", operatorToken = null) {
+  const url = buildDashboardUrl(port, host, operatorToken);
 
   if (process.platform === "darwin") {
     const child = spawn("open", [url], {
@@ -160,14 +215,34 @@ function openDashboard(port) {
 }
 
 async function launch(options) {
-  const alreadyRunning = await healthCheck(options.port);
+  const alreadyRunning = await healthCheck(options.port, options.host);
   let startedPid = null;
+  const lanMode = !["127.0.0.1", "localhost", "::1"].includes(options.host);
+  const tokenRequired = lanMode || envFlagEnabled(process.env.BEAR_EDGE_REQUIRE_OPERATOR_TOKEN);
+  const configuredOperatorToken = String(process.env.BEAR_EDGE_OPERATOR_TOKEN ?? "").trim() || null;
+  let operatorToken = configuredOperatorToken;
 
-  if (!alreadyRunning) {
-    startedPid = startServer(options);
+  if (alreadyRunning && tokenRequired && !operatorToken) {
+    throw new Error(
+      "An authenticated Bear Edge server is already running, but its one-time operator token is unavailable. Restart it with the LAN launcher or set BEAR_EDGE_OPERATOR_TOKEN."
+    );
   }
 
-  const healthy = await waitForHealth(options.port, options.timeoutMs);
+  if (!alreadyRunning) {
+    if (options.host === "0.0.0.0" && await healthCheck(options.port, "127.0.0.1")) {
+      throw new Error(
+        `Port ${options.port} is already used by a local-only Bear Edge server. Stop it or choose another port for LAN mode.`
+      );
+    }
+    if (tokenRequired && !operatorToken) {
+      const bootstrapAuth = createOperatorAuth({ lanMode, requireToken: true });
+      operatorToken = bootstrapAuth.createLaunchToken();
+    }
+
+    startedPid = startServer({ ...options, operatorToken });
+  }
+
+  const healthy = await waitForHealth(options.port, options.timeoutMs, options.host);
 
   if (!healthy) {
     throw new Error(
@@ -175,7 +250,9 @@ async function launch(options) {
     );
   }
 
-  const url = options.openBrowser ? openDashboard(options.port) : `http://127.0.0.1:${options.port}/dashboard`;
+  const url = options.openBrowser
+    ? openDashboard(options.port, options.host, operatorToken)
+    : buildDashboardUrl(options.port, options.host, operatorToken);
 
   return {
     alreadyRunning,
@@ -208,6 +285,7 @@ if (require.main === module) {
 }
 
 module.exports = {
+  buildDashboardUrl,
   DEFAULT_HEALTH_TIMEOUT_MS,
   DEFAULT_PORT,
   healthCheck,
@@ -215,6 +293,10 @@ module.exports = {
   main,
   openDashboard,
   parseArgs,
+  preferredLanAddress,
   startServer,
+  displayHost,
+  healthHost,
+  urlHost,
   waitForHealth
 };

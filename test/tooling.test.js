@@ -12,9 +12,15 @@ const {
 } = require("../src/index.js");
 const { loadEnvFiles, parseEnv } = require("../src/config/env.js");
 const { redactSecrets } = require("../src/config/secrets.js");
+const { fetchJson: liveFetchJson } = require("../src/live/fetch-json.js");
 const { saveOddsApiKey, upsertEnvValue, validateOddsApiKey } = require("../src/config/odds-key-settings.js");
-const { parseArgs: parseLaunchArgs } = require("../src/cli/launch.js");
+const {
+  buildDashboardUrl,
+  displayHost,
+  parseArgs: parseLaunchArgs
+} = require("../src/cli/launch.js");
 const { parseArgs: parseServeArgs } = require("../src/cli/serve.js");
+const { parseArgs: parseEvaluateArgs } = require("../src/cli/evaluate.js");
 
 test("validateBetInput normalizes a valid CLI payload", () => {
   const normalized = validateBetInput({
@@ -59,21 +65,26 @@ test("validateBetInput rejects unknown fields and invalid odds", () => {
 test("serve CLI parses auto-update controls", () => {
   const originalAutoUpdate = process.env.BEAR_EDGE_AUTO_UPDATE;
   const originalInterval = process.env.BEAR_EDGE_AUTO_UPDATE_INTERVAL_MS;
+  const originalHost = process.env.BEAR_EDGE_HOST;
 
   try {
     delete process.env.BEAR_EDGE_AUTO_UPDATE;
     delete process.env.BEAR_EDGE_AUTO_UPDATE_INTERVAL_MS;
+    delete process.env.BEAR_EDGE_HOST;
 
     assert.deepEqual(parseServeArgs(["--port", "3030"]), {
       autoUpdate: true,
-      autoUpdateIntervalMs: 300000,
+      autoUpdateIntervalMs: 60000,
+      host: "127.0.0.1",
       port: 3030
     });
-    assert.deepEqual(parseServeArgs(["--port", "3031", "--no-auto-update", "--auto-update-interval-ms", "60000"]), {
+    assert.deepEqual(parseServeArgs(["--port", "3031", "--host", "localhost", "--no-auto-update", "--auto-update-interval-ms", "60000"]), {
       autoUpdate: false,
       autoUpdateIntervalMs: 60000,
+      host: "localhost",
       port: 3031
     });
+    assert.equal(parseServeArgs(["--lan", "--no-auto-update"]).host, "0.0.0.0");
   } finally {
     if (originalAutoUpdate === undefined) {
       delete process.env.BEAR_EDGE_AUTO_UPDATE;
@@ -86,6 +97,12 @@ test("serve CLI parses auto-update controls", () => {
     } else {
       process.env.BEAR_EDGE_AUTO_UPDATE_INTERVAL_MS = originalInterval;
     }
+
+    if (originalHost === undefined) {
+      delete process.env.BEAR_EDGE_HOST;
+    } else {
+      process.env.BEAR_EDGE_HOST = originalHost;
+    }
   }
 });
 
@@ -93,15 +110,18 @@ test("launch CLI parses local app controls", () => {
   const originalPort = process.env.PORT;
   const originalAutoUpdate = process.env.BEAR_EDGE_AUTO_UPDATE;
   const originalInterval = process.env.BEAR_EDGE_AUTO_UPDATE_INTERVAL_MS;
+  const originalHost = process.env.BEAR_EDGE_HOST;
 
   try {
     delete process.env.PORT;
     delete process.env.BEAR_EDGE_AUTO_UPDATE;
     delete process.env.BEAR_EDGE_AUTO_UPDATE_INTERVAL_MS;
+    delete process.env.BEAR_EDGE_HOST;
 
     assert.deepEqual(parseLaunchArgs([]), {
       autoUpdate: true,
-      autoUpdateIntervalMs: 300000,
+      autoUpdateIntervalMs: 60000,
+      host: "127.0.0.1",
       openBrowser: true,
       port: 3000,
       timeoutMs: 20000
@@ -110,6 +130,8 @@ test("launch CLI parses local app controls", () => {
       parseLaunchArgs([
         "--port",
         "3032",
+        "--host",
+        "localhost",
         "--timeout-ms",
         "5000",
         "--no-open",
@@ -120,11 +142,13 @@ test("launch CLI parses local app controls", () => {
       {
         autoUpdate: false,
         autoUpdateIntervalMs: 60000,
+        host: "localhost",
         openBrowser: false,
         port: 3032,
         timeoutMs: 5000
       }
     );
+    assert.equal(parseLaunchArgs(["--lan", "--no-open"]).host, "0.0.0.0");
   } finally {
     if (originalPort === undefined) {
       delete process.env.PORT;
@@ -142,6 +166,70 @@ test("launch CLI parses local app controls", () => {
       delete process.env.BEAR_EDGE_AUTO_UPDATE_INTERVAL_MS;
     } else {
       process.env.BEAR_EDGE_AUTO_UPDATE_INTERVAL_MS = originalInterval;
+    }
+
+    if (originalHost === undefined) {
+      delete process.env.BEAR_EDGE_HOST;
+    } else {
+      process.env.BEAR_EDGE_HOST = originalHost;
+    }
+  }
+});
+
+test("LAN dashboard bootstrap keeps the operator token in the URL fragment only", () => {
+  const token = "private/operator+token";
+  const lanUrl = buildDashboardUrl(3000, "0.0.0.0", token);
+  const localUrl = buildDashboardUrl(3000, "127.0.0.1");
+
+  assert.equal(
+    lanUrl,
+    `http://${displayHost("0.0.0.0")}:3000/dashboard#operatorToken=private%2Foperator%2Btoken`
+  );
+  assert.equal(lanUrl.includes("?"), false);
+  assert.equal(localUrl, "http://127.0.0.1:3000/dashboard");
+});
+
+test("dashboard consumes the operator fragment, clears it, and authorizes write requests", () => {
+  const source = fs.readFileSync(path.resolve(__dirname, "../src/dashboard/app.js"), "utf8");
+
+  assert.match(source, /sessionStorage/);
+  assert.match(source, /history\.replaceState/);
+  assert.match(source, /operatorToken/);
+  assert.match(source, /Authorization/);
+  assert.match(source, /Bearer/);
+});
+
+test("release evidence cards wrap long audit details on narrow screens", () => {
+  const source = fs.readFileSync(path.resolve(__dirname, "../src/dashboard/styles.css"), "utf8");
+
+  assert.match(source, /\.release-check[^}]*min-width:\s*0/s);
+  assert.match(source, /\.release-check p[^}]*overflow-wrap:\s*anywhere/s);
+  assert.match(source, /\.release-actions article,[\s\S]*\.release-check\s*\{\s*grid-template-columns:\s*1fr;/);
+  assert.match(source, /\.system-audit-grid article[^}]*min-width:\s*0/s);
+  assert.match(source, /\.auto-update-detail p,[\s\S]*overflow-wrap:\s*anywhere;/);
+  assert.match(source, /\.provider-card-grid[^}]*minmax\(min\(360px, 100%\), 1fr\)/s);
+  assert.match(source, /section\[id\][^}]*scroll-margin-top:\s*72px/s);
+  assert.match(source, /\.quick-nav[^}]*flex-wrap:\s*nowrap[^}]*overflow-x:\s*auto/s);
+});
+
+test("operator tokens are redacted from diagnostics", () => {
+  const previous = process.env.BEAR_EDGE_OPERATOR_TOKEN;
+  process.env.BEAR_EDGE_OPERATOR_TOKEN = "private-operator-token";
+
+  try {
+    assert.equal(
+      redactSecrets("Authorization: Bearer private-operator-token"),
+      "Authorization: Bearer [REDACTED]"
+    );
+    assert.equal(
+      redactSecrets("operator=private-operator-token"),
+      "operator=[REDACTED]"
+    );
+  } finally {
+    if (previous === undefined) {
+      delete process.env.BEAR_EDGE_OPERATOR_TOKEN;
+    } else {
+      process.env.BEAR_EDGE_OPERATOR_TOKEN = previous;
     }
   }
 });
@@ -210,6 +298,7 @@ test("odds API key settings update local env without exposing secrets", async ()
     assert.match(contents, /TENNIS_API_KEY=tennis-existing/);
     assert.match(contents, /THE_ODDS_API_KEY=test-odds-key/);
     assert.equal((contents.match(/THE_ODDS_API_KEY=/g) ?? []).length, 1);
+    assert.equal(fs.statSync(envPath).mode & 0o777, 0o600);
     assert.equal(redactSecrets("Failed https://example.test/?apiKey=test-odds-key"), "Failed https://example.test/?apiKey=[REDACTED]");
   } finally {
     if (originalOddsApiKey === undefined) {
@@ -230,6 +319,61 @@ test("odds API key validation rejects placeholders and env upsert preserves comm
   assert.match(updated, /^# config/m);
   assert.match(updated, /^THE_ODDS_API_KEY=new-key/m);
   assert.match(updated, /^ODDS_API_KEY=alias/m);
+});
+
+test("live fetch errors redact API keys from URLs", async () => {
+  const originalFetch = globalThis.fetch;
+
+  globalThis.fetch = /** @type {any} */ (async () => ({
+    ok: false,
+    status: 401,
+    statusText: "Unauthorized"
+  }));
+
+  try {
+    await assert.rejects(
+      () => liveFetchJson("https://example.test/v1?apiKey=super-secret-provider-key&market=mlb"),
+      (error) => {
+        const message = error instanceof Error ? error.message : String(error);
+
+        assert.match(message, /apiKey=\[REDACTED\]/);
+        assert.equal(message.includes("super-secret-provider-key"), false);
+        return true;
+      }
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("live fetch errors preserve provider quota codes without secrets", async () => {
+  const originalFetch = globalThis.fetch;
+
+  globalThis.fetch = /** @type {any} */ (async () => ({
+    ok: false,
+    status: 401,
+    statusText: "Unauthorized",
+    text: async () => JSON.stringify({
+      error_code: "OUT_OF_USAGE_CREDITS",
+      message: "Usage quota has been reached."
+    })
+  }));
+
+  try {
+    await assert.rejects(
+      () => liveFetchJson("https://example.test/v1?apiKey=super-secret-provider-key"),
+      (error) => {
+        const message = error instanceof Error ? error.message : String(error);
+
+        assert.match(message, /OUT_OF_USAGE_CREDITS/);
+        assert.match(message, /Usage quota has been reached/);
+        assert.equal(message.includes("super-secret-provider-key"), false);
+        return true;
+      }
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
 });
 
 test("appendDecisionLog writes JSONL output to the requested path", async () => {
@@ -286,35 +430,22 @@ test("CLI evaluates valid input and appends a log line", () => {
   const output = JSON.parse(command.stdout);
   const logLines = fs.readFileSync(logPath, "utf8").trim().split("\n");
 
-  assert.equal(output.verdict, "BET");
+  assert.equal(output.verdict, "WAIT");
   assert.equal(output.logPath, logPath);
+  assert.match(output.recordId, /^eval_/);
+  assert.match(output.clientEventId, /^[0-9a-f-]{36}$/);
+  assert.match(output.contentDigest, /^[a-f0-9]{64}$/);
+  assert.equal(typeof output.persistedAt, "string");
   assert.equal(logLines.length, 1);
-  assert.equal(JSON.parse(logLines[0]).verdict, "BET");
+  assert.equal(JSON.parse(logLines[0]).schemaVersion, "2.0.0");
+  assert.equal(JSON.parse(logLines[0]).verdict, "WAIT");
 });
 
-test("CLI can evaluate stdin without writing a log", () => {
-  const command = spawnSync(
-    process.execPath,
-    [path.resolve(__dirname, "../src/cli/evaluate.js"), "--stdin", "--no-log", "--compact"],
-    {
-      cwd: path.resolve(__dirname, ".."),
-      encoding: "utf8",
-      input: JSON.stringify({
-        selection: "Lakers ML",
-        marketOdds: 120,
-        oppositeOdds: -135,
-        modelProbability: 0.59,
-        bankroll: 2500
-      })
-    }
+test("parseArgs rejects the removed --no-log option", () => {
+  assert.throws(
+    () => parseEvaluateArgs(["example.json", "--no-log"]),
+    /Unexpected argument: --no-log/
   );
-
-  assert.equal(command.status, 0, command.stderr);
-
-  const output = JSON.parse(command.stdout);
-
-  assert.equal(output.verdict, "BET");
-  assert.equal(output.logPath, null);
 });
 
 test("CLI can print the input schema", () => {
