@@ -10,13 +10,19 @@ const {
   buildMarkdownReport
 } = require("../src/audit/protocol-ledger.js");
 
+const DEFAULT_OUTPUT_PATHS = Object.freeze({
+  outJsonPath: "data/reports/bear_edge_protocol_audit.json",
+  outCsvPath: "data/reports/bear_edge_protocol_audit.csv",
+  outMdPath: "data/reports/bear_edge_protocol_audit.md"
+});
+
 function printUsage() {
   console.error(
     [
       "Usage: node ./script/build_protocol_audit.js \\",
-      "  --out-json <path> \\",
-      "  --out-csv <path> \\",
-      "  --out-md <path> \\",
+      "  [--out-json <path>] \\",
+      "  [--out-csv <path>] \\",
+      "  [--out-md <path>] \\",
       "  [--bankroll <number>]"
     ].join("\n")
   );
@@ -24,7 +30,9 @@ function printUsage() {
 
 function parseArgs(argv) {
   const parsed = {
-    bankroll: undefined
+    bankroll: undefined,
+    help: false,
+    ...DEFAULT_OUTPUT_PATHS
   };
 
   for (let index = 0; index < argv.length; index += 1) {
@@ -78,11 +86,6 @@ async function main(argv = process.argv.slice(2)) {
     return 0;
   }
 
-  if (!args.outJsonPath || !args.outCsvPath || !args.outMdPath) {
-    printUsage();
-    throw new Error("Missing required output path.");
-  }
-
   if (args.bankroll !== undefined && (!Number.isFinite(args.bankroll) || args.bankroll <= 0)) {
     throw new Error("--bankroll must be a positive number when supplied.");
   }
@@ -125,6 +128,7 @@ if (require.main === module) {
 }
 
 module.exports = {
+  DEFAULT_OUTPUT_PATHS,
   main,
   parseArgs
 };

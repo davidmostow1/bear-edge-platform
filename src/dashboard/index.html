@@ -3,8 +3,14 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#b9ff2c">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Bear Edge">
     <title>Bear Edge Dashboard</title>
     <link rel="stylesheet" href="/dashboard/styles.css">
+    <link rel="manifest" href="/dashboard/manifest.json">
   </head>
   <body>
     <div id="globalDropOverlay" class="global-drop-overlay" aria-hidden="true">
@@ -20,6 +26,8 @@
         <h1>Bet Research Desk</h1>
       </div>
       <div class="status-strip">
+        <button id="installAppButton" type="button" class="secondary install-app-button">Install on phone</button>
+        <span id="appStatus" class="app-status">Local shell loading...</span>
         <span id="healthDot" class="dot"></span>
         <span id="logPath">Loading log...</span>
       </div>
@@ -63,11 +71,12 @@
 
       <nav class="quick-nav" aria-label="Dashboard sections">
         <a href="#operator">Operator</a>
-        <a href="#best-targets">Best 3</a>
+        <a href="#best-targets">Decision Board</a>
         <a href="#candidates">Props</a>
         <a href="#parlay-builder">Parlay Builder</a>
         <a href="#screenshotIntakePanel">Screenshots</a>
         <a href="#sources">Sources</a>
+        <a href="#release">Release</a>
         <a href="#ticket">Evaluate</a>
         <a href="#history">Log</a>
       </nav>
@@ -122,6 +131,8 @@
           <div class="button-row">
             <select id="screenshotParserSelect" aria-label="Screenshot parser">
               <option value="draftkings">DraftKings odds board</option>
+              <option value="espn">ESPN odds page</option>
+              <option value="dk-predictions">DK Predictions / Pick6 props</option>
               <option value="worldcup-goalscorer">World Cup goalscorer</option>
               <option value="statmuse">StatMuse context</option>
             </select>
@@ -153,6 +164,20 @@
         <div id="autoUpdateBoard" class="auto-update-board"></div>
       </section>
 
+      <section class="panel live-data-panel">
+        <div class="panel-title">
+          <div>
+            <h2>Live Data Heartbeat</h2>
+            <p class="panel-subtitle">One place to see whether scoreboards, research pages, odds, tennis, auto-update, and the last-good snapshot are usable right now.</p>
+          </div>
+          <div class="button-row">
+            <span id="liveDataHealthTimestamp" class="muted">Not checked yet</span>
+            <button id="liveDataHealthRefreshButton" type="button" class="secondary">Refresh Live Data</button>
+          </div>
+        </div>
+        <div id="liveDataHealthBoard" class="live-data-health-board"></div>
+      </section>
+
       <section class="panel system-audit-panel">
         <div class="panel-title">
           <div>
@@ -165,6 +190,20 @@
           </div>
         </div>
         <div id="systemAuditBoard" class="system-audit-board"></div>
+      </section>
+
+      <section class="panel release-readiness-panel" id="release">
+        <div class="panel-title">
+          <div>
+            <h2>Release Readiness</h2>
+            <p class="panel-subtitle">Product-grade checks for CI, GitHub, tracked secrets, runtime, providers, analytics quality, and validation status.</p>
+          </div>
+          <div class="button-row">
+            <span id="releaseReadinessTimestamp" class="muted">Not checked yet</span>
+            <button id="releaseReadinessRefreshButton" type="button" class="secondary">Refresh Release Check</button>
+          </div>
+        </div>
+        <div id="releaseReadinessBoard" class="release-readiness-board"></div>
       </section>
 
       <section class="panel odds-key-panel" id="odds">
@@ -240,7 +279,7 @@
         <div class="panel-title">
           <div>
             <h2>StatMuse Snapshot Intake</h2>
-            <p class="panel-subtitle">Paste text or drop/upload a screenshot to parse scores, displayed odds, and musings into audit context.</p>
+            <p class="panel-subtitle">Paste text or drop/upload a screenshot to parse scores, Notes-tab context, displayed odds, and Predictions-tab markets into audit context.</p>
           </div>
           <div class="button-row">
             <label class="file-button">
@@ -251,6 +290,8 @@
             <button id="statMuseSnapshotClearButton" type="button" class="secondary">Clear Snapshot</button>
           </div>
         </div>
+        <label class="snapshot-source-label" for="statMuseSourceUrlInput">Source page URL (optional)</label>
+        <input id="statMuseSourceUrlInput" class="snapshot-source-input" type="url" placeholder="https://www.statmuse.com/mlb/game/..." aria-label="StatMuse source page URL">
         <textarea id="statMuseSnapshotInput" class="snapshot-input" spellcheck="false" aria-label="StatMuse pasted page text"></textarea>
         <p id="statMuseSnapshotStatus" class="form-status" role="status"></p>
         <div id="statMuseSnapshotResult" class="snapshot-result"></div>
@@ -274,6 +315,28 @@
         <textarea id="draftKingsSnapshotInput" class="snapshot-input" spellcheck="false" aria-label="DraftKings pasted board text"></textarea>
         <p id="draftKingsSnapshotStatus" class="form-status" role="status"></p>
         <div id="draftKingsSnapshotResult" class="snapshot-result"></div>
+      </section>
+
+      <section class="panel espn-panel">
+        <div class="panel-title">
+          <div>
+            <h2>ESPN Snapshot Intake</h2>
+            <p class="panel-subtitle">Paste text or drop/upload an ESPN odds-page screenshot to preserve displayed DraftKings lines, props, injuries, recent schedule, and predictor context for manual review.</p>
+          </div>
+          <div class="button-row">
+            <label class="file-button">
+              Upload Screenshot
+              <input id="espnImageInput" type="file" accept="image/png,image/jpeg,image/webp,image/tiff,image/heic,image/heif">
+            </label>
+            <button id="espnSnapshotParseButton" type="button">Parse ESPN</button>
+            <button id="espnSnapshotClearButton" type="button" class="secondary">Clear Snapshot</button>
+          </div>
+        </div>
+        <label class="snapshot-source-label" for="espnSourceUrlInput">Source page URL (optional)</label>
+        <input id="espnSourceUrlInput" class="snapshot-source-input" type="url" placeholder="https://www.espn.com/mlb/odds/_/gameId/..." aria-label="ESPN source page URL">
+        <textarea id="espnSnapshotInput" class="snapshot-input" spellcheck="false" aria-label="ESPN pasted odds page text"></textarea>
+        <p id="espnSnapshotStatus" class="form-status" role="status"></p>
+        <div id="espnSnapshotResult" class="snapshot-result"></div>
       </section>
 
       <section class="panel comparison-panel">
@@ -333,15 +396,31 @@
       <section class="panel best-targets-panel" id="best-targets">
         <div class="panel-title">
           <div>
-            <h2>Best Current MLB Targets</h2>
-            <p class="panel-subtitle">Top three from official stats. If a verified odds key is saved, this panel prices props and shows EV/Kelly verdicts.</p>
+            <h2>Evidence-Classified MLB Board</h2>
+            <p class="panel-subtitle">Every row is separated by evidence state. Only a persisted, provider-priced, calibrated BET with verified permission can enter Qualified BET Calls.</p>
           </div>
           <div class="button-row">
             <span id="bestTargetsTimestamp" class="muted">Not checked yet</span>
-            <button id="bestTargetsRefreshButton" type="button" class="secondary">Refresh Best 3</button>
+            <button id="bestTargetsRefreshButton" type="button" class="secondary">Refresh Market Prices (uses odds credits)</button>
           </div>
         </div>
-        <div id="bestTargetsBoard" class="best-targets-board"></div>
+        <div id="bestTargetsBoard" class="best-targets-board">
+          <section class="recommendation-classification" data-classification="research">
+            <h3>Research Candidates</h3>
+          </section>
+          <section class="recommendation-classification" data-classification="price-check">
+            <h3>Price-Check Targets</h3>
+          </section>
+          <section class="recommendation-classification" data-classification="waiting">
+            <h3>Waiting for Evidence</h3>
+          </section>
+          <section class="recommendation-classification" data-classification="passed">
+            <h3>Passed Markets</h3>
+          </section>
+          <section class="recommendation-classification" data-classification="qualified">
+            <h3>Qualified BET Calls</h3>
+          </section>
+        </div>
       </section>
 
       <section class="panel candidates-panel" id="candidates">
@@ -451,6 +530,7 @@
           </div>
           <div class="action-row">
             <button type="submit">Evaluate</button>
+            <button id="simulateTicketButton" type="button" class="secondary">Simulate Risk</button>
             <button id="refreshButton" type="button" class="secondary">Refresh Log</button>
           </div>
           <p id="formStatus" class="form-status" role="status"></p>

@@ -1,34 +1,18 @@
 const fs = require("node:fs/promises");
 const path = require("node:path");
 
-const { fetchOddsApiSports } = require("../live/odds-api.js");
+const { verifyOddsApiReadiness } = require("../live/odds-api.js");
 const { PROVIDER_REQUIREMENTS, getProviderSetupStatus } = require("./provider-requirements.js");
+const {
+  readEnvFile,
+  resolveEnvPath,
+  upsertEnvValue,
+  validateApiKey
+} = require("./key-settings-utils.js");
 const { safeErrorMessage } = require("./secrets.js");
 
-function normalizeApiKey(apiKey) {
-  return String(apiKey ?? "").trim();
-}
-
 function validateProviderApiKey(apiKey) {
-  const normalized = normalizeApiKey(apiKey);
-
-  if (!normalized) {
-    throw new Error("Provider API key is required.");
-  }
-
-  if (normalized.length < 8) {
-    throw new Error("Provider API key is too short to be valid.");
-  }
-
-  if (/\s/.test(normalized)) {
-    throw new Error("Provider API key cannot contain whitespace.");
-  }
-
-  if (/^(your_|YOUR_|placeholder|null|undefined|changeme|change_me)/.test(normalized)) {
-    throw new Error("Provider API key looks like a placeholder.");
-  }
-
-  return normalized;
+  return validateApiKey(apiKey, { label: "Provider API key" });
 }
 
 function providerForId(providerId) {
@@ -51,56 +35,6 @@ function writableEnvKeyFor(provider, requestedEnvKey) {
   return envKey;
 }
 
-function resolveEnvPath(options = {}) {
-  const rootDir = path.resolve(options.rootDir ?? path.resolve(__dirname, "../.."));
-  return path.resolve(options.envPath ?? path.join(rootDir, ".env.local"));
-}
-
-async function readEnvFile(filePath) {
-  try {
-    return await fs.readFile(filePath, "utf8");
-  } catch (error) {
-    if (error.code === "ENOENT") {
-      return "";
-    }
-
-    throw error;
-  }
-}
-
-function upsertEnvValue(contents, key, value) {
-  const lines = String(contents ?? "").split(/\r?\n/);
-  let replaced = false;
-  const output = [];
-
-  for (const line of lines) {
-    if (new RegExp(`^\\s*${key}\\s*=`).test(line)) {
-      if (!replaced) {
-        output.push(`${key}=${value}`);
-        replaced = true;
-      }
-      continue;
-    }
-
-    output.push(line);
-  }
-
-  while (output.length > 0 && output[output.length - 1] === "") {
-    output.pop();
-  }
-
-  if (!replaced) {
-    if (output.length > 0) {
-      output.push("");
-    }
-
-    output.push(`# ${key} is managed by the Bear Edge local provider setup.`);
-    output.push(`${key}=${value}`);
-  }
-
-  return `${output.join("\n")}\n`;
-}
-
 async function verifyProviderKey(provider, apiKey, options = {}) {
   if (provider.id !== "the-odds-api") {
     return {
@@ -110,21 +44,10 @@ async function verifyProviderKey(provider, apiKey, options = {}) {
     };
   }
 
-  const verification = await fetchOddsApiSports({
+  return verifyOddsApiReadiness({
     fetchJsonImpl: options.fetchJsonImpl,
     oddsApiKey: apiKey
   });
-
-  return {
-    status: verification.status,
-    mode: "live",
-    sports: verification.sports.length,
-    sample: verification.sports.slice(0, 5).map((sport) => ({
-      key: sport.key,
-      title: sport.title,
-      active: sport.active
-    }))
-  };
 }
 
 async function saveProviderApiKey(input, options = {}) {
@@ -139,6 +62,13 @@ async function saveProviderApiKey(input, options = {}) {
 
   try {
     verification = await verifyProviderKey(provider, normalized, options);
+
+    if (
+      provider.id === "the-odds-api" &&
+      (!("authenticated" in verification) || verification.authenticated !== true)
+    ) {
+      throw new Error(verification.message);
+    }
   } catch (error) {
     const message = safeErrorMessage(error);
 
@@ -170,7 +100,19 @@ async function saveProviderApiKey(input, options = {}) {
     },
     secretReturned: false,
     verification,
-    providerSetup: getProviderSetupStatus({ rootDir: options.rootDir ?? path.resolve(__dirname, "../..") })
+    providerSetup: getProviderSetupStatus({
+      rootDir: options.rootDir ?? path.resolve(__dirname, "../.."),
+      providerReadiness: {
+        [provider.id]: {
+          status: verification.status,
+          usableNow: (
+            provider.id === "the-odds-api" &&
+            "marketAccess" in verification &&
+            verification.marketAccess === true
+          )
+        }
+      }
+    })
   };
 }
 

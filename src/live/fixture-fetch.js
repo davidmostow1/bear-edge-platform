@@ -39,6 +39,21 @@ async function fetchJson(url) {
                 ]
               }
             ]
+          },
+          {
+            key: "fanduel",
+            title: "FanDuel",
+            last_update: "2026-07-08T16:01:00Z",
+            markets: [
+              {
+                key: "h2h",
+                last_update: "2026-07-08T16:01:00Z",
+                outcomes: [
+                  { name: "Cincinnati Reds", price: -140 },
+                  { name: "New York Mets", price: 120 }
+                ]
+              }
+            ]
           }
         ]
       }
@@ -86,6 +101,43 @@ async function fetchJson(url) {
                 { name: "Under", description: "Mets Sample Batter", price: -120, point: 1.5 },
                 { name: "Over", description: "Reds Sample Batter", price: -105, point: 1.5 },
                 { name: "Under", description: "Reds Sample Batter", price: -125, point: 1.5 }
+              ]
+            }
+          ]
+        },
+        {
+          key: "fanduel",
+          title: "FanDuel",
+          last_update: "2026-06-17T21:01:00Z",
+          markets: [
+            {
+              key: "pitcher_strikeouts",
+              last_update: "2026-06-17T21:01:00Z",
+              outcomes: [
+                { name: "Over", description: "Nolan McLean", price: 135, point: 1.5 },
+                { name: "Under", description: "Nolan McLean", price: -165, point: 1.5 },
+                { name: "Over", description: "Nick Lodolo", price: 115, point: 1.5 },
+                { name: "Under", description: "Nick Lodolo", price: -140, point: 1.5 }
+              ]
+            },
+            {
+              key: "batter_total_bases",
+              last_update: "2026-06-17T21:01:00Z",
+              outcomes: [
+                { name: "Over", description: "Mets Sample Batter", price: 105, point: 1.5 },
+                { name: "Under", description: "Mets Sample Batter", price: -130, point: 1.5 },
+                { name: "Over", description: "Reds Sample Batter", price: 110, point: 1.5 },
+                { name: "Under", description: "Reds Sample Batter", price: -135, point: 1.5 }
+              ]
+            },
+            {
+              key: "batter_hits",
+              last_update: "2026-06-17T21:01:00Z",
+              outcomes: [
+                { name: "Over", description: "Mets Sample Batter", price: -105, point: 1.5 },
+                { name: "Under", description: "Mets Sample Batter", price: -115, point: 1.5 },
+                { name: "Over", description: "Reds Sample Batter", price: -100, point: 1.5 },
+                { name: "Under", description: "Reds Sample Batter", price: -120, point: 1.5 }
               ]
             }
           ]

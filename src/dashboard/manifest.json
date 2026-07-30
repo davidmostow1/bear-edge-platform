@@ -1,0 +1,18 @@
+{
+  "name": "Bear Edge Betting Research Desk",
+  "short_name": "Bear Edge",
+  "description": "A local, source-aware betting research and decision-log dashboard.",
+  "start_url": "/dashboard",
+  "scope": "/dashboard/",
+  "display": "standalone",
+  "background_color": "#0b0d0d",
+  "theme_color": "#b9ff2c",
+  "icons": [
+    {
+      "src": "/dashboard/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
