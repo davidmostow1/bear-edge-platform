@@ -1,0 +1,4 @@
+48ec5c6642750df2e0eb7d1616b78aff520decd3c50c038430d89fdc4b03ba17  sweet-bear-pitcher-strikeout-machine-v1.tar.gz
+c9f9563e7811aa3f827fc0ad68e9fa2a927f51ccc2af3631c2b3215a3eb28e77  sweet-bear-strikeout-machine.mjs
+25d39aa2a3beda744cbd8b07fc7f0850538c9bd7f18831a3c5d1545bab026d3f  models/research-prior-v1.json
+47b734553265b7ab92d3846651341d287476e5e07adbf89d2adad5bcbda056b1  examples/demo-input.json
