@@ -27,6 +27,23 @@ const LIVE_TICKET_SCHEMA = Object.freeze({
           line: { type: "number", minimum: 0 },
           marketOdds: { type: "number" },
           oppositeOdds: { type: "number" },
+          modelProbabilityOverride: { type: "number", minimum: 0, maximum: 1 },
+          recentWeight: { type: "number", minimum: 0, maximum: 1 },
+          marketWeight: { type: "number", minimum: 0, maximum: 1 },
+          minEvRoi: { type: "number" },
+          minStake: { type: "number", minimum: 0 },
+          maxStake: { type: "number", exclusiveMinimum: 0 },
+          maxBankrollFraction: { type: "number", minimum: 0, maximum: 1 },
+          maxSourceAgeMinutes: { type: "number", minimum: 0 },
+          maxMarketAgeMinutes: { type: "number", minimum: 0 },
+          marketContext: {
+            type: "object",
+            additionalProperties: true
+          },
+          riskFlags: {
+            type: "array",
+            items: { type: "object" }
+          },
           source: { type: "object" }
         }
       }
@@ -116,6 +133,15 @@ function validateLiveLeg(leg, index, issues) {
     line,
     marketOdds,
     oppositeOdds,
+    riskFlags: Array.isArray(leg.riskFlags)
+      ? leg.riskFlags
+          .filter((flag) => isPlainObject(flag))
+          .map((flag) => ({
+            code: typeof flag.code === "string" && flag.code.trim() ? flag.code : "UNKNOWN",
+            severity: typeof flag.severity === "string" ? flag.severity : "info",
+            message: typeof flag.message === "string" ? flag.message : String(flag.code ?? "Risk flag")
+          }))
+      : [],
     source: leg.source,
     correlationKey: typeof leg.correlationKey === "string" ? leg.correlationKey : undefined,
     recentWeight:
@@ -148,7 +174,12 @@ function validateLiveLeg(leg, index, issues) {
     maxSourceAgeMinutes:
       leg.maxSourceAgeMinutes === undefined
         ? undefined
-        : readNumber(leg.maxSourceAgeMinutes, `legs[${index}].maxSourceAgeMinutes`, issues, { min: 0 })
+        : readNumber(leg.maxSourceAgeMinutes, `legs[${index}].maxSourceAgeMinutes`, issues, { min: 0 }),
+    maxMarketAgeMinutes:
+      leg.maxMarketAgeMinutes === undefined
+        ? undefined
+        : readNumber(leg.maxMarketAgeMinutes, `legs[${index}].maxMarketAgeMinutes`, issues, { min: 0 }),
+    marketContext: isPlainObject(leg.marketContext) ? leg.marketContext : undefined
   };
 }
 

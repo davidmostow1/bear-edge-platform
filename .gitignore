@@ -10,4 +10,5 @@ data/logs/*.jsonl
 data/logs/*.json
 data/logs/*.log
 data/cache/
+data/reports/
 dist/

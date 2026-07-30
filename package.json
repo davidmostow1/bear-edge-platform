@@ -35,6 +35,7 @@
     "serve": "node ./src/cli/serve.js",
     "compare:recording": "node ./script/compare_recording_props_with_current_dk.js",
     "audit:protocol": "node ./script/build_protocol_audit.js",
+    "audit:release": "node ./script/build_release_readiness.js",
     "simulate:card": "node ./script/simulate_verified_card.js",
     "package:portable": "npm run verify && mkdir -p dist && npm pack --pack-destination dist"
   },

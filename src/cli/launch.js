@@ -10,7 +10,7 @@ const { loadEnvFiles } = require("../config/env.js");
 const PROJECT_ROOT = path.resolve(__dirname, "../..");
 const DEFAULT_PORT = 3000;
 const DEFAULT_HEALTH_TIMEOUT_MS = 20_000;
-const DEFAULT_AUTO_UPDATE_INTERVAL_MS = 5 * 60 * 1000;
+const DEFAULT_AUTO_UPDATE_INTERVAL_MS = 60 * 1000;
 
 loadEnvFiles({ rootDir: PROJECT_ROOT });
 
@@ -19,6 +19,7 @@ function parseArgs(argv) {
   const options = {
     autoUpdate: process.env.BEAR_EDGE_AUTO_UPDATE === "0" ? false : true,
     autoUpdateIntervalMs: Number(process.env.BEAR_EDGE_AUTO_UPDATE_INTERVAL_MS ?? DEFAULT_AUTO_UPDATE_INTERVAL_MS),
+    host: process.env.BEAR_EDGE_HOST ?? "127.0.0.1",
     openBrowser: true,
     port: Number(process.env.PORT ?? DEFAULT_PORT),
     timeoutMs: DEFAULT_HEALTH_TIMEOUT_MS
@@ -29,6 +30,12 @@ function parseArgs(argv) {
 
     if (value === "--port") {
       options.port = Number(args[index + 1]);
+      index += 1;
+      continue;
+    }
+
+    if (value === "--host") {
+      options.host = String(args[index + 1] ?? "").trim();
       index += 1;
       continue;
     }
@@ -62,6 +69,10 @@ function parseArgs(argv) {
     throw new Error("Port must be a positive number.");
   }
 
+  if (!options.host) {
+    throw new Error("Host must be a non-empty string.");
+  }
+
   if (!Number.isFinite(options.timeoutMs) || options.timeoutMs <= 0) {
     throw new Error("Health timeout must be a positive number of milliseconds.");
   }
@@ -73,11 +84,15 @@ function parseArgs(argv) {
   return options;
 }
 
-function healthCheck(port) {
+function urlHost(host) {
+  return host === "0.0.0.0" ? "127.0.0.1" : host;
+}
+
+function healthCheck(port, host = "127.0.0.1") {
   return new Promise((resolve) => {
     const request = http.get(
       {
-        hostname: "127.0.0.1",
+        hostname: urlHost(host),
         path: "/health",
         port,
         timeout: 1500
@@ -96,11 +111,11 @@ function healthCheck(port) {
   });
 }
 
-async function waitForHealth(port, timeoutMs = DEFAULT_HEALTH_TIMEOUT_MS) {
+async function waitForHealth(port, timeoutMs = DEFAULT_HEALTH_TIMEOUT_MS, host = "127.0.0.1") {
   const startedAt = Date.now();
 
   while (Date.now() - startedAt < timeoutMs) {
-    if (await healthCheck(port)) {
+    if (await healthCheck(port, host)) {
       return true;
     }
 
@@ -122,7 +137,7 @@ function createLogStreams() {
 
 function startServer(options) {
   const servePath = path.join(PROJECT_ROOT, "src/cli/serve.js");
-  const serveArgs = [servePath, "--port", String(options.port)];
+  const serveArgs = [servePath, "--port", String(options.port), "--host", options.host];
 
   if (!options.autoUpdate) {
     serveArgs.push("--no-auto-update");
@@ -143,8 +158,8 @@ function startServer(options) {
   return child.pid;
 }
 
-function openDashboard(port) {
-  const url = `http://127.0.0.1:${port}/dashboard`;
+function openDashboard(port, host = "127.0.0.1") {
+  const url = `http://${urlHost(host)}:${port}/dashboard`;
 
   if (process.platform === "darwin") {
     const child = spawn("open", [url], {
@@ -160,14 +175,14 @@ function openDashboard(port) {
 }
 
 async function launch(options) {
-  const alreadyRunning = await healthCheck(options.port);
+  const alreadyRunning = await healthCheck(options.port, options.host);
   let startedPid = null;
 
   if (!alreadyRunning) {
     startedPid = startServer(options);
   }
 
-  const healthy = await waitForHealth(options.port, options.timeoutMs);
+  const healthy = await waitForHealth(options.port, options.timeoutMs, options.host);
 
   if (!healthy) {
     throw new Error(
@@ -175,7 +190,9 @@ async function launch(options) {
     );
   }
 
-  const url = options.openBrowser ? openDashboard(options.port) : `http://127.0.0.1:${options.port}/dashboard`;
+  const url = options.openBrowser
+    ? openDashboard(options.port, options.host)
+    : `http://${urlHost(options.host)}:${options.port}/dashboard`;
 
   return {
     alreadyRunning,
@@ -216,5 +233,6 @@ module.exports = {
   openDashboard,
   parseArgs,
   startServer,
+  urlHost,
   waitForHealth
 };

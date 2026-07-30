@@ -12,14 +12,21 @@ loadEnvFiles({ rootDir: PROJECT_ROOT });
 function parseArgs(argv) {
   const args = [...argv];
   let port = Number(process.env.PORT ?? 3000);
+  let host = process.env.BEAR_EDGE_HOST ?? "127.0.0.1";
   let autoUpdate = process.env.BEAR_EDGE_AUTO_UPDATE === "0" ? false : true;
-  let autoUpdateIntervalMs = Number(process.env.BEAR_EDGE_AUTO_UPDATE_INTERVAL_MS ?? 5 * 60 * 1000);
+  let autoUpdateIntervalMs = Number(process.env.BEAR_EDGE_AUTO_UPDATE_INTERVAL_MS ?? 60 * 1000);
 
   for (let index = 0; index < args.length; index += 1) {
     const value = args[index];
 
     if (value === "--port") {
       port = Number(args[index + 1]);
+      index += 1;
+      continue;
+    }
+
+    if (value === "--host") {
+      host = String(args[index + 1] ?? "").trim();
       index += 1;
       continue;
     }
@@ -42,15 +49,19 @@ function parseArgs(argv) {
     throw new Error("Port must be a positive number.");
   }
 
+  if (!host) {
+    throw new Error("Host must be a non-empty string.");
+  }
+
   if (!Number.isFinite(autoUpdateIntervalMs) || autoUpdateIntervalMs <= 0) {
     throw new Error("Auto-update interval must be a positive number of milliseconds.");
   }
 
-  return { autoUpdate, autoUpdateIntervalMs, port };
+  return { autoUpdate, autoUpdateIntervalMs, host, port };
 }
 
 async function main(argv = process.argv.slice(2)) {
-  const { autoUpdate, autoUpdateIntervalMs, port } = parseArgs(argv);
+  const { autoUpdate, autoUpdateIntervalMs, host, port } = parseArgs(argv);
   const autoUpdateService = autoUpdate
     ? createAutoUpdateService({
         intervalMs: autoUpdateIntervalMs,
@@ -61,8 +72,8 @@ async function main(argv = process.argv.slice(2)) {
     autoUpdateService
   });
 
-  await new Promise((resolve) => server.listen(port, () => resolve(undefined)));
-  process.stdout.write(`Bear Edge server listening on http://127.0.0.1:${port}\n`);
+  await new Promise((resolve) => server.listen(port, host, () => resolve(undefined)));
+  process.stdout.write(`Bear Edge server listening on http://${host}:${port}\n`);
   if (autoUpdateService) {
     autoUpdateService.start();
     process.stdout.write(`Auto-update enabled every ${Math.round(autoUpdateIntervalMs / 1000)} seconds.\n`);

@@ -68,6 +68,7 @@
         <a href="#parlay-builder">Parlay Builder</a>
         <a href="#screenshotIntakePanel">Screenshots</a>
         <a href="#sources">Sources</a>
+        <a href="#release">Release</a>
         <a href="#ticket">Evaluate</a>
         <a href="#history">Log</a>
       </nav>
@@ -153,6 +154,20 @@
         <div id="autoUpdateBoard" class="auto-update-board"></div>
       </section>
 
+      <section class="panel live-data-panel">
+        <div class="panel-title">
+          <div>
+            <h2>Live Data Heartbeat</h2>
+            <p class="panel-subtitle">One place to see whether scoreboards, research pages, odds, tennis, auto-update, and the last-good snapshot are usable right now.</p>
+          </div>
+          <div class="button-row">
+            <span id="liveDataHealthTimestamp" class="muted">Not checked yet</span>
+            <button id="liveDataHealthRefreshButton" type="button" class="secondary">Refresh Live Data</button>
+          </div>
+        </div>
+        <div id="liveDataHealthBoard" class="live-data-health-board"></div>
+      </section>
+
       <section class="panel system-audit-panel">
         <div class="panel-title">
           <div>
@@ -165,6 +180,20 @@
           </div>
         </div>
         <div id="systemAuditBoard" class="system-audit-board"></div>
+      </section>
+
+      <section class="panel release-readiness-panel" id="release">
+        <div class="panel-title">
+          <div>
+            <h2>Release Readiness</h2>
+            <p class="panel-subtitle">Product-grade checks for CI, GitHub, tracked secrets, runtime, providers, analytics quality, and validation status.</p>
+          </div>
+          <div class="button-row">
+            <span id="releaseReadinessTimestamp" class="muted">Not checked yet</span>
+            <button id="releaseReadinessRefreshButton" type="button" class="secondary">Refresh Release Check</button>
+          </div>
+        </div>
+        <div id="releaseReadinessBoard" class="release-readiness-board"></div>
       </section>
 
       <section class="panel odds-key-panel" id="odds">
@@ -451,6 +480,7 @@
           </div>
           <div class="action-row">
             <button type="submit">Evaluate</button>
+            <button id="simulateTicketButton" type="button" class="secondary">Simulate Risk</button>
             <button id="refreshButton" type="button" class="secondary">Refresh Log</button>
           </div>
           <p id="formStatus" class="form-status" role="status"></p>

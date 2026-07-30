@@ -22,13 +22,20 @@ const els = {
   ticketPreflightBoard: document.querySelector("#ticketPreflightBoard"),
   fileInput: document.querySelector("#fileInput"),
   clearButton: document.querySelector("#clearButton"),
+  simulateTicketButton: document.querySelector("#simulateTicketButton"),
   refreshButton: document.querySelector("#refreshButton"),
   autoUpdateBoard: document.querySelector("#autoUpdateBoard"),
   autoUpdateRunButton: document.querySelector("#autoUpdateRunButton"),
   autoUpdateTimestamp: document.querySelector("#autoUpdateTimestamp"),
+  liveDataHealthBoard: document.querySelector("#liveDataHealthBoard"),
+  liveDataHealthRefreshButton: document.querySelector("#liveDataHealthRefreshButton"),
+  liveDataHealthTimestamp: document.querySelector("#liveDataHealthTimestamp"),
   systemAuditBoard: document.querySelector("#systemAuditBoard"),
   systemAuditRefreshButton: document.querySelector("#systemAuditRefreshButton"),
   systemAuditTimestamp: document.querySelector("#systemAuditTimestamp"),
+  releaseReadinessBoard: document.querySelector("#releaseReadinessBoard"),
+  releaseReadinessRefreshButton: document.querySelector("#releaseReadinessRefreshButton"),
+  releaseReadinessTimestamp: document.querySelector("#releaseReadinessTimestamp"),
   oddsKeyForm: document.querySelector("#oddsKeyForm"),
   oddsApiKeyInput: document.querySelector("#oddsApiKeyInput"),
   oddsKeyStatus: document.querySelector("#oddsKeyStatus"),
@@ -99,6 +106,7 @@ const els = {
 };
 
 const AUTO_REFRESH_MS = 5 * 60 * 1000;
+const LIVE_DATA_HEARTBEAT_MS = 60 * 1000;
 
 const percentFormatter = new Intl.NumberFormat(undefined, {
   style: "percent",
@@ -249,6 +257,7 @@ const templates = Object.freeze({
 });
 
 window.__bearEdgeCandidates = [];
+window.__bearEdgeBestTargets = [];
 window.__bearEdgeComparisonRows = [];
 window.__bearEdgeParlayLegs = [];
 window.__bearEdgeLoadedSummary = null;
@@ -731,17 +740,24 @@ function validateTicketPreflight(ticket) {
   }
 
   if (Array.isArray(ticket?.legs)) {
-    if (legs.length < 2) {
+    const isSingleTicket = ticket.kind === "single" || (!ticket.kind && legs.length === 1);
+    const isParlayTicket = ticket.kind === "parlay" || (!ticket.kind && legs.length > 1);
+
+    if (isSingleTicket && legs.length !== 1) {
+      findings.push({ severity: "blocker", code: "SINGLE_LEG_COUNT", message: "A live single ticket needs exactly 1 leg." });
+    }
+
+    if (isParlayTicket && legs.length < 2) {
       findings.push({ severity: "blocker", code: "PARLAY_TOO_SHORT", message: "A parlay ticket needs at least 2 legs." });
     }
 
-    if (legs.length > 3) {
+    if (isParlayTicket && legs.length > 3) {
       findings.push({ severity: "blocker", code: "PARLAY_TOO_LONG", message: "Parlays are capped at 3 legs." });
     }
 
     const altPropLegs = legs.filter((leg) => leg.marketType === "alt-prop").length;
 
-    if (altPropLegs > 2) {
+    if (isParlayTicket && altPropLegs > 2) {
       findings.push({ severity: "blocker", code: "ALT_PROP_CAP", message: "Parlays allow a maximum of 2 alt-prop legs." });
     }
 
@@ -754,7 +770,7 @@ function validateTicketPreflight(ticket) {
       .filter(([, count]) => count > 1)
       .map(([key]) => key);
 
-    if (correlatedKeys.length > 0) {
+    if (isParlayTicket && correlatedKeys.length > 0) {
       findings.push({ severity: "blocker", code: "CORRELATION_RISK", message: `Correlated parlay legs detected: ${correlatedKeys.join(", ")}.` });
     }
   }
@@ -1225,6 +1241,204 @@ function formatDurationMs(value) {
   return `${(value / 1000).toFixed(1)}s`;
 }
 
+function liveDataStatusClass(status) {
+  if (status === "live") {
+    return "ok";
+  }
+
+  if (status === "live-with-warnings") {
+    return "medium";
+  }
+
+  return "high";
+}
+
+function renderRequirementPill(label, ok) {
+  return `
+    <article class="live-requirement ${ok ? "ok" : "blocked"}">
+      <span>${escapeHtml(label)}</span>
+      <strong>${ok ? "usable" : "blocked"}</strong>
+    </article>
+  `;
+}
+
+function providerCapabilityStatus(provider, capability) {
+  const liveStatus = provider?.liveStatus ?? "unavailable";
+  const usable = liveStatus === "live" || liveStatus === "degraded";
+  const degraded = liveStatus === "degraded";
+
+  if (capability === "scoreboards") {
+    return provider.provider === "ESPN"
+      ? { state: degraded ? "medium" : usable ? "ok" : "high", label: usable ? "yes" : "no" }
+      : { state: "neutral", label: "-" };
+  }
+
+  if (capability === "research") {
+    return ["STAT News", "StatMuse"].includes(provider.provider)
+      ? { state: degraded ? "medium" : usable ? "ok" : "high", label: usable ? "yes" : "no" }
+      : { state: "neutral", label: "-" };
+  }
+
+  if (capability === "odds") {
+    return provider.provider === "DraftKings"
+      ? { state: liveStatus === "live" ? "ok" : liveStatus === "degraded" ? "medium" : "high", label: liveStatus === "live" ? "yes" : "no" }
+      : { state: "neutral", label: "-" };
+  }
+
+  if (capability === "tennis") {
+    return provider.provider === "Tennis"
+      ? { state: liveStatus === "live" ? "ok" : "high", label: liveStatus === "live" ? "yes" : "manual" }
+      : { state: "neutral", label: "-" };
+  }
+
+  if (capability === "freshness") {
+    if (provider.stale) {
+      return { state: "high", label: "stale" };
+    }
+
+    return provider.ageMs === null || provider.ageMs === undefined
+      ? { state: "neutral", label: "-" }
+      : { state: "ok", label: "fresh" };
+  }
+
+  return { state: "neutral", label: "-" };
+}
+
+function renderLiveSourceMatrix(providers) {
+  const columns = [
+    { key: "scoreboards", label: "Scores" },
+    { key: "research", label: "Research" },
+    { key: "odds", label: "Odds" },
+    { key: "tennis", label: "Tennis" },
+    { key: "freshness", label: "Fresh" }
+  ];
+
+  return `
+    <section class="live-source-matrix" aria-label="Live source capability matrix">
+      <header>
+        <div>
+          <h3>Source Health Matrix</h3>
+          <p>Rows are data providers. Columns show what each provider can support right now.</p>
+        </div>
+        <span class="sources">Green usable / amber degraded / red blocked</span>
+      </header>
+      <div class="live-source-matrix-grid" role="table" aria-label="Live source capability matrix">
+        <div class="matrix-head provider-name" role="columnheader">Provider</div>
+        ${columns.map((column) => `<div class="matrix-head" role="columnheader">${escapeHtml(column.label)}</div>`).join("")}
+        ${providers
+          .map((provider) => `
+            <div class="matrix-provider" role="rowheader">
+              <strong>${escapeHtml(provider.provider)}</strong>
+              <span>${escapeHtml(provider.liveStatus)} / ${escapeHtml(formatDurationMs(provider.ageMs))}</span>
+            </div>
+            ${columns
+              .map((column) => {
+                const cell = providerCapabilityStatus(provider, column.key);
+
+                return `<div class="matrix-cell ${escapeHtml(cell.state)}" role="cell">${escapeHtml(cell.label)}</div>`;
+              })
+              .join("")}
+          `)
+          .join("")}
+      </div>
+    </section>
+  `;
+}
+
+function renderLiveDataHealth(payload) {
+  const providers = Array.isArray(payload?.providers) ? payload.providers : [];
+  const actions = Array.isArray(payload?.actions) ? payload.actions : [];
+  const requirements = payload?.requirements ?? {};
+  const summary = payload?.summary ?? {};
+  const coverage = payload?.coverage ?? {};
+  const autoUpdate = payload?.autoUpdate ?? {};
+  const snapshot = payload?.snapshot ?? {};
+
+  els.liveDataHealthTimestamp.textContent = payload?.generatedAt
+    ? `Checked ${shortTimestamp(payload.generatedAt)}`
+    : "Checked";
+
+  els.liveDataHealthBoard.innerHTML = `
+    <div class="live-data-hero edge-${liveDataStatusClass(payload?.status)}">
+      <div>
+        <h3>${escapeHtml(payload?.status ?? "unknown")}</h3>
+        <p>${escapeHtml(summary.manualOddsRequired ? "Live stats are available, but verified sportsbook odds still need manual entry or a fixed odds key." : "Live stats and verified odds are usable.")}</p>
+      </div>
+      <strong>${escapeHtml((coverage.officialScoreboardSports ?? []).join(", ") || "no sports")}</strong>
+    </div>
+    <div class="live-data-grid">
+      ${[
+        ["Heartbeat", formatDurationMs(payload?.heartbeatMs)],
+        ["Source age", formatDurationMs(payload?.sourceStatusAgeMs)],
+        ["Snapshot age", formatDurationMs(snapshot.ageMs)],
+        ["Auto update", autoUpdate.started ? "on" : "off"],
+        ["Next run", autoUpdate.nextRunAt ? shortTimestamp(autoUpdate.nextRunAt) : "-"],
+        ["Events", coverage.eventCount ?? 0],
+        ["Live providers", (summary.liveProviders ?? []).length],
+        ["Blocked", (summary.blockedProviders ?? []).join(", ") || "none"]
+      ]
+        .map(([label, value]) => `<article class="metric compact"><span>${escapeHtml(label)}</span><strong>${escapeHtml(value)}</strong></article>`)
+        .join("")}
+    </div>
+    <div class="live-requirement-grid">
+      ${renderRequirementPill("Official scoreboards", Boolean(requirements.officialScoreboards))}
+      ${renderRequirementPill("Research pages", Boolean(requirements.researchPages))}
+      ${renderRequirementPill("Verified odds", Boolean(requirements.verifiedOdds))}
+      ${renderRequirementPill("Tennis automation", Boolean(requirements.tennisAutomation))}
+    </div>
+    ${renderLiveSourceMatrix(providers)}
+    <div class="live-provider-grid">
+      ${providers
+        .map((provider) => `
+          <article class="live-provider-card edge-${liveDataStatusClass(provider.liveStatus === "live" ? "live" : provider.liveStatus === "degraded" ? "live-with-warnings" : "blocked")}">
+            <header>
+              <div>
+                <strong>${escapeHtml(provider.provider)}</strong>
+                <p class="sources">${escapeHtml(provider.sourceType)} / ${escapeHtml(shortTimestamp(provider.fetchedAt))}</p>
+              </div>
+              <span class="tag ${provider.liveStatus === "live" ? "ok" : provider.liveStatus === "degraded" ? "medium" : "high"}">${escapeHtml(provider.liveStatus)}</span>
+            </header>
+            <p>${escapeHtml(provider.status)} / age ${escapeHtml(formatDurationMs(provider.ageMs))}</p>
+            ${
+              provider.warnings?.length
+                ? `<p class="sources">${escapeHtml(provider.warnings[0])}</p>`
+                : ""
+            }
+          </article>
+        `)
+        .join("")}
+    </div>
+    ${
+      actions.length > 0
+        ? `<div class="live-action-list">
+            <h3>Next Live-Data Actions</h3>
+            ${actions.map((action) => `<p>${escapeHtml(action)}</p>`).join("")}
+          </div>`
+        : '<p class="muted auto-update-empty">No live-data actions required right now.</p>'
+    }
+  `;
+}
+
+async function loadLiveDataHealth({ quiet = false } = {}) {
+  if (!quiet) {
+    els.liveDataHealthBoard.innerHTML = '<p class="muted auto-update-empty">Checking live data heartbeat...</p>';
+  }
+
+  try {
+    const response = await fetch("/api/live-data-health?date=today&days=2");
+    const payload = await response.json();
+
+    if (!response.ok) {
+      throw new Error(payload.error ?? "Unable to load live data health.");
+    }
+
+    renderLiveDataHealth(payload);
+  } catch (error) {
+    els.liveDataHealthBoard.innerHTML = `<p class="muted auto-update-empty">${escapeHtml(error.message)}</p>`;
+    els.liveDataHealthTimestamp.textContent = "Live data check failed";
+  }
+}
+
 function renderAutoUpdateStatus(payload, history = null, snapshotPayload = null) {
   window.__bearEdgeAutoUpdate = payload;
   const result = payload?.lastResult ?? null;
@@ -1469,6 +1683,148 @@ async function loadSystemAudit() {
   } catch (error) {
     els.systemAuditBoard.innerHTML = `<p class="muted auto-update-empty">${escapeHtml(error.message)}</p>`;
     els.systemAuditTimestamp.textContent = "Audit failed";
+  }
+}
+
+function releaseStatusClass(status) {
+  if (status === "ready") {
+    return "ok";
+  }
+
+  if (status === "shippable-with-warnings" || status === "needs-work" || status === "needs-evidence" || status === "ready-with-evidence-gates") {
+    return "medium";
+  }
+
+  return "high";
+}
+
+function renderReleaseReadiness(payload) {
+  const checks = Array.isArray(payload?.checks) ? payload.checks : [];
+  const lanes = Array.isArray(payload?.lanes) ? payload.lanes : [];
+  const nextActions = Array.isArray(payload?.nextActions) ? payload.nextActions : [];
+  const evidenceGates = Array.isArray(payload?.evidenceGates) ? payload.evidenceGates : [];
+  const importantChecks = checks
+    .filter((entry) => entry.status !== "pass")
+    .concat(checks.filter((entry) => entry.status === "pass").slice(0, 5));
+  const summary = payload?.summary ?? {};
+  const formatDetail = (detail) => {
+    if (Array.isArray(detail)) {
+      return detail.join(" / ");
+    }
+
+    if (detail && typeof detail === "object") {
+      return JSON.stringify(detail);
+    }
+
+    return detail ?? "";
+  };
+
+  els.releaseReadinessTimestamp.textContent = payload?.generatedAt
+    ? `Checked ${shortTimestamp(payload.generatedAt)}`
+    : "Checked";
+
+  els.releaseReadinessBoard.innerHTML = `
+    <div class="release-hero edge-${releaseStatusClass(payload?.status)}">
+      <div>
+        <h3>${escapeHtml(payload?.status ?? "unknown")}</h3>
+        <p>${escapeHtml(payload?.package?.name ?? "package")} ${escapeHtml(payload?.package?.version ?? "")} / ${escapeHtml(payload?.git?.branch ?? "no branch")} / ${escapeHtml(payload?.git?.upstream ?? "no upstream")}</p>
+      </div>
+      <strong>${escapeHtml(summary.score ?? 0)}/100</strong>
+    </div>
+    <div class="release-summary-grid">
+      ${[
+        ["Passed", summary.passed ?? 0],
+        ["Warnings", summary.warnings ?? 0],
+        ["Failed", summary.failed ?? 0],
+        ["Info gates", summary.info ?? 0],
+        ["Tracked files", payload?.trackedFiles?.count ?? 0],
+        ["BET calls", payload?.decisionLog?.betCalls ?? 0],
+        ["3-win gate", payload?.decisionLog?.validationGate?.complete ? "complete" : `${payload?.decisionLog?.validationGate?.currentWinStreak ?? 0}/${payload?.decisionLog?.validationGate?.requiredWinStreak ?? 3}`]
+      ]
+        .map(([label, value]) => `<article class="metric compact"><span>${escapeHtml(label)}</span><strong>${escapeHtml(value)}</strong></article>`)
+        .join("")}
+    </div>
+    ${lanes.length > 0
+      ? `<div class="release-lane-grid">
+          ${lanes
+            .map((lane) => `
+              <article class="release-lane edge-${releaseStatusClass(lane.status)}">
+                <span>${escapeHtml(lane.label)}</span>
+                <strong>${escapeHtml(lane.status)}</strong>
+                <p>${escapeHtml(lane.description ?? "")}</p>
+                <small>${escapeHtml(lane.summary?.score ?? 0)}/100 / ${escapeHtml(lane.summary?.warnings ?? 0)} warnings / ${escapeHtml(lane.summary?.failed ?? 0)} failed</small>
+              </article>
+            `)
+            .join("")}
+        </div>`
+      : ""}
+    ${evidenceGates.length > 0
+      ? `<div class="release-evidence">
+          <h3>Evidence Gates</h3>
+          <p>These are betting-proof and licensed-data gates. They stay visible, but they do not count as local software-release failures.</p>
+          <div class="release-evidence-grid">
+            ${evidenceGates
+              .map((gate) => `
+                <article class="${gate.complete ? "complete" : "incomplete"}">
+                  <span class="tag ${gate.complete ? "ok" : "medium"}">${gate.complete ? "complete" : "needed"}</span>
+                  <strong>${escapeHtml(gate.label)}</strong>
+                  <small>${escapeHtml(gate.status)}${gate.current !== undefined ? ` / ${escapeHtml(gate.current)}/${escapeHtml(gate.required)}` : ""}</small>
+                  <p>${escapeHtml(gate.action)}</p>
+                </article>
+              `)
+              .join("")}
+          </div>
+        </div>`
+      : ""}
+    ${nextActions.length > 0
+      ? `<div class="release-actions">
+          <h3>Next Actions</h3>
+          ${nextActions
+            .slice(0, 6)
+            .map((entry) => `
+              <article>
+                <span class="tag ${entry.status === "fail" ? "high" : entry.status === "info" ? "low" : "medium"}">${escapeHtml(entry.status)}</span>
+                <div>
+                  <strong>${escapeHtml(entry.area)}: ${escapeHtml(entry.check)}</strong>
+                  <p>${escapeHtml(entry.action)}</p>
+                </div>
+              </article>
+            `)
+            .join("")}
+        </div>`
+      : ""}
+    <div class="release-check-list">
+      ${importantChecks
+        .map((entry) => `
+          <article class="release-check ${escapeHtml(entry.status)}">
+            <span class="tag ${entry.status === "pass" ? "ok" : entry.status === "warn" ? "medium" : entry.status === "info" ? "low" : "high"}">${escapeHtml(entry.status)}</span>
+            <div>
+              <strong>${escapeHtml(entry.area)}</strong>
+              <p>${escapeHtml(entry.message)}</p>
+              ${entry.detail ? `<p class="sources">${escapeHtml(formatDetail(entry.detail))}</p>` : ""}
+            </div>
+          </article>
+        `)
+        .join("")}
+    </div>
+  `;
+}
+
+async function loadReleaseReadiness() {
+  els.releaseReadinessBoard.innerHTML = '<p class="muted auto-update-empty">Checking release readiness...</p>';
+
+  try {
+    const response = await fetch("/api/release-readiness");
+    const payload = await response.json();
+
+    if (!response.ok) {
+      throw new Error(payload.error ?? "Unable to load release readiness.");
+    }
+
+    renderReleaseReadiness(payload);
+  } catch (error) {
+    els.releaseReadinessBoard.innerHTML = `<p class="muted auto-update-empty">${escapeHtml(error.message)}</p>`;
+    els.releaseReadinessTimestamp.textContent = "Release check failed";
   }
 }
 
@@ -1781,7 +2137,7 @@ async function runAutoUpdateNow() {
       throw new Error(payload.error ?? "Auto-update run failed.");
     }
 
-    await Promise.all([loadDashboard(), loadAutoUpdateStatus(), loadSystemAudit(), loadSourceStatus("today"), loadGames("today"), loadCandidates("today")]);
+    await Promise.all([loadDashboard(), loadAutoUpdateStatus(), loadLiveDataHealth(), loadSystemAudit(), loadSourceStatus("today"), loadGames("today"), loadCandidates("today")]);
     setStatus("Auto-update run completed.");
   } catch (error) {
     setStatus(error.message, true);
@@ -2687,6 +3043,133 @@ function updateAllCandidateEdgePreviews() {
   els.candidateBoard.querySelectorAll(".candidate-card").forEach(updateCandidateEdgePreview);
 }
 
+function targetPreviewFromCard(card) {
+  const target = findBestTarget(card?.dataset?.targetId);
+
+  if (!target) {
+    return null;
+  }
+
+  let market;
+  let opposite;
+
+  try {
+    market = { value: parseAmericanOddsInput(card.querySelector(".best-target-market-odds")?.value), error: null };
+  } catch (error) {
+    return { target, error: error.message };
+  }
+
+  try {
+    opposite = { value: parseAmericanOddsInput(card.querySelector(".best-target-opposite-odds")?.value), error: null };
+  } catch (error) {
+    return { target, error: error.message };
+  }
+
+  const modelProbability = target.modelProbability;
+
+  if (typeof modelProbability !== "number" || !Number.isFinite(modelProbability)) {
+    return { target, error: "This target is missing a model probability for manual pricing." };
+  }
+
+  if (market.value === null) {
+    return {
+      target,
+      marketOdds: null,
+      oppositeOdds: opposite.value,
+      modelProbability,
+      fairAmericanOdds: target.fairAmericanOdds ?? probabilityToAmerican(modelProbability),
+      error: null
+    };
+  }
+
+  const breakEven = americanToImpliedProbability(market.value);
+  const evRoi = expectedValueRoiFromOdds(modelProbability, market.value);
+  const noVigProbability = noVigProbabilityFromOdds(market.value, opposite.value);
+
+  return {
+    target,
+    marketOdds: market.value,
+    oppositeOdds: opposite.value,
+    modelProbability,
+    breakEven,
+    evRoi,
+    noVigProbability,
+    noVigEdge: typeof noVigProbability === "number" ? modelProbability - noVigProbability : null,
+    fairAmericanOdds: target.fairAmericanOdds ?? probabilityToAmerican(modelProbability),
+    error: null
+  };
+}
+
+function updateBestTargetManualPreview(card) {
+  const preview = card?.querySelector(".best-target-edge-preview");
+  const data = targetPreviewFromCard(card);
+  const manualButtons = card?.querySelectorAll(
+    ".load-best-target-with-odds-button, .evaluate-best-target-with-odds-button, .add-best-target-with-odds-to-parlay-button"
+  );
+
+  if (!preview || !data) {
+    return;
+  }
+
+  if (data.error) {
+    card.dataset.manualPriced = "false";
+    manualButtons?.forEach((button) => {
+      button.disabled = true;
+    });
+    preview.className = "candidate-edge-preview best-target-edge-preview edge-high";
+    preview.innerHTML = `
+      <div class="edge-preview-head">
+        <strong>Manual price check</strong>
+        <span class="tag high">invalid odds</span>
+      </div>
+      <p>${escapeHtml(data.error)}</p>
+    `;
+    return;
+  }
+
+  if (data.marketOdds === null) {
+    card.dataset.manualPriced = "false";
+    manualButtons?.forEach((button) => {
+      button.disabled = true;
+    });
+    preview.className = "candidate-edge-preview best-target-edge-preview";
+    preview.innerHTML = `
+      <div class="edge-preview-head">
+        <strong>Manual price check</strong>
+        <span class="tag medium">odds needed</span>
+      </div>
+      <p>Type the sportsbook price from your screen. Then load, evaluate, or add this target to a 2-3 leg parlay.</p>
+    `;
+    return;
+  }
+
+  const tone = edgePreviewTone(data.evRoi);
+  card.dataset.manualPriced = "true";
+  manualButtons?.forEach((button) => {
+    button.disabled = false;
+  });
+  preview.className = `candidate-edge-preview best-target-edge-preview edge-${tone.className}`;
+  preview.innerHTML = `
+    <div class="edge-preview-head">
+      <strong>Manual price check</strong>
+      <span class="tag ${tone.className}">${escapeHtml(tone.label)}</span>
+    </div>
+    <div class="edge-preview-grid">
+      <div><span>Break-even</span><strong>${formatPercent(data.breakEven)}</strong></div>
+      <div><span>Model</span><strong>${formatPercent(data.modelProbability)}</strong></div>
+      <div><span>Rough EV</span><strong>${formatPercent(data.evRoi)}</strong></div>
+      <div><span>Fair line</span><strong>${formatOdds(data.fairAmericanOdds)}</strong></div>
+      <div><span>No-vig prob</span><strong>${data.noVigProbability === null ? "add opposite" : formatPercent(data.noVigProbability)}</strong></div>
+      <div><span>No-vig edge</span><strong>${data.noVigEdge === null ? "-" : formatPercent(data.noVigEdge)}</strong></div>
+    </div>
+    <p>${escapeHtml(tone.message)} Evaluate still runs stale-data, EV, Kelly, caps, and parlay gates.</p>
+  `;
+}
+
+function updateAllBestTargetManualPreviews() {
+  els.bestTargetsBoard.querySelectorAll(".best-target-card").forEach(updateBestTargetManualPreview);
+}
+
 function candidateRowsFromCards() {
   return Array.from(els.candidateBoard.querySelectorAll(".candidate-card")).map((card, index) => {
     const preview = candidatePreviewFromCard(card);
@@ -2966,10 +3449,22 @@ function renderCandidates(payload) {
   applyCandidateFilters();
 }
 
+function summaryLabelForOdds(summary = {}) {
+  return summary?.oddsApiConfigured ? "odds key connected" : "odds key missing";
+}
+
 function renderBestTargets(payload) {
   const targets = Array.isArray(payload?.best) ? payload.best : [];
-  const modeLabel = payload?.status === "priced" ? "priced" : "price check";
   const summary = payload?.summary ?? {};
+  const modeLabel = payload?.status === "priced"
+    ? "priced"
+    : payload?.status === "odds_error"
+      ? "odds error"
+      : "price check";
+  const providerLabel = payload?.status === "odds_error"
+    ? "odds provider error"
+    : summaryLabelForOdds(summary);
+  window.__bearEdgeBestTargets = targets;
 
   els.bestTargetsTimestamp.textContent = payload?.fetchedAt
     ? `Updated ${shortTimestamp(payload.fetchedAt)}`
@@ -2984,14 +3479,14 @@ function renderBestTargets(payload) {
     <div class="best-targets-summary">
       <span class="tag ${payload.status === "priced" ? "low" : "medium"}">${escapeHtml(modeLabel)}</span>
       <span>${escapeHtml(summary.pricedCandidates ?? 0)} priced / ${escapeHtml(summary.candidates ?? 0)} candidates</span>
-      <span>${escapeHtml(summary.oddsApiConfigured ? "odds key connected" : "odds key missing")}</span>
+      <span>${escapeHtml(providerLabel)}</span>
     </div>
     <div class="best-targets-grid">
       ${targets.map((target, index) => {
         const evaluation = target.evaluation;
         const odds = target.odds;
         return `
-          <article class="best-target-card">
+          <article class="best-target-card" data-target-id="${escapeHtml(target.id)}" data-manual-priced="false">
             <header>
               <span class="rank-pill">#${index + 1}</span>
               <div>
@@ -3009,8 +3504,40 @@ function renderBestTargets(payload) {
               <div><span>Kelly</span><strong>${formatPercent(evaluation?.kellyFraction)}</strong></div>
               <div><span>Stake</span><strong>${formatMoney(evaluation?.recommendedStake)}</strong></div>
             </div>
-            <p class="sources">${escapeHtml(odds?.bookmaker?.title ?? "No verified odds yet")} ${odds?.bookmaker?.lastUpdate ? `/ ${escapeHtml(shortTimestamp(odds.bookmaker.lastUpdate))}` : ""}</p>
+            <p class="sources">${escapeHtml(odds?.bookmaker?.title ?? "No verified odds yet")} ${odds?.bookmaker?.lastUpdate ? `/ ${escapeHtml(shortTimestamp(odds.bookmaker.lastUpdate))}` : ""}${odds?.match ? ` / ${escapeHtml(odds.match.method)} ${escapeHtml(Math.round((odds.match.confidence ?? 0) * 100))}%` : ""}</p>
             ${renderRiskFlags(evaluation?.riskFlags ?? target.riskFlags)}
+            <div class="candidate-edge-preview best-target-edge-preview">
+              <div class="edge-preview-head">
+                <strong>Manual price check</strong>
+                <span class="tag medium">odds needed</span>
+              </div>
+              <p>Type the sportsbook price from your screen. Then load, evaluate, or add this target to a 2-3 leg parlay.</p>
+            </div>
+            <div class="best-target-manual-odds">
+              <label>
+                <span>Market odds</span>
+                <input class="best-target-market-odds" inputmode="numeric" placeholder="-115 or +140" aria-label="Market odds for ${escapeHtml(target.player?.name ?? "target")}">
+              </label>
+              <label>
+                <span>Opposite odds</span>
+                <input class="best-target-opposite-odds" inputmode="numeric" placeholder="optional" aria-label="Opposite odds for no-vig normalization">
+              </label>
+              <label>
+                <span>Leg type</span>
+                <select class="best-target-market-type" aria-label="Leg type for ${escapeHtml(target.player?.name ?? "target")}">
+                  <option value="prop" ${target.ticketDraft?.legs?.[0]?.marketType === "alt-prop" ? "" : "selected"}>Standard</option>
+                  <option value="alt-prop" ${target.ticketDraft?.legs?.[0]?.marketType === "alt-prop" ? "selected" : ""}>Alt prop</option>
+                </select>
+              </label>
+              <button type="button" class="load-best-target-with-odds-button" data-target-id="${escapeHtml(target.id)}" disabled>Load Manual</button>
+              <button type="button" class="evaluate-best-target-with-odds-button" data-target-id="${escapeHtml(target.id)}" disabled>Evaluate Manual</button>
+              <button type="button" class="secondary add-best-target-with-odds-to-parlay-button" data-target-id="${escapeHtml(target.id)}" disabled>Add Manual To Parlay</button>
+            </div>
+            <footer>
+              <button type="button" class="secondary load-best-target-button" data-target-id="${escapeHtml(target.id)}" ${target.ticketDraft ? "" : "disabled"}>${target.odds ? "Load Single" : "Load Draft"}</button>
+              <button type="button" class="evaluate-best-target-button" data-target-id="${escapeHtml(target.id)}" ${target.ticketDraft && evaluation?.verdict === "BET" ? "" : "disabled"}>Evaluate</button>
+              <button type="button" class="secondary add-best-target-to-parlay-button" data-target-id="${escapeHtml(target.id)}" ${target.ticketDraft && target.odds ? "" : "disabled"}>Add To Parlay</button>
+            </footer>
           </article>
         `;
       }).join("")}
@@ -3019,6 +3546,7 @@ function renderBestTargets(payload) {
       ? `<ul class="warning-list">${payload.warnings.slice(0, 4).map((warning) => `<li>${escapeHtml(warning)}</li>`).join("")}</ul>`
       : ""}
   `;
+  updateAllBestTargetManualPreviews();
 }
 
 async function loadBestTargets(date = "today") {
@@ -3236,6 +3764,73 @@ async function loadDashboard() {
   renderHistory(payload.evaluations);
 }
 
+function renderDeferredPanelPlaceholders() {
+  els.onlineOpportunitiesBoard.innerHTML = '<p class="muted auto-update-empty">Loading market opportunities after core dashboard...</p>';
+  els.gameBoard.innerHTML = '<p class="muted">Loading games after core dashboard...</p>';
+  els.bestTargetsBoard.innerHTML = '<p class="muted">Ranking best targets after core dashboard...</p>';
+  els.candidateBoard.innerHTML = '<p class="muted">Building prop candidates after core dashboard...</p>';
+}
+
+function deferDashboardWork(callback) {
+  const run = () => {
+    callback().catch((error) => setStatus(error.message, true));
+  };
+
+  if (typeof window.requestIdleCallback === "function") {
+    window.requestIdleCallback(run, { timeout: 1200 });
+    return;
+  }
+
+  window.setTimeout(run, 150);
+}
+
+async function loadInitialDashboardPanels() {
+  await Promise.all([
+    loadDashboard(),
+    loadAutoUpdateStatus(),
+    loadLiveDataHealth(),
+    loadSystemAudit(),
+    loadReleaseReadiness(),
+    loadProviderSetup(),
+    loadOddsKeyStatus(),
+    loadSourceStatus("today")
+  ]);
+}
+
+async function loadDeferredDashboardPanels() {
+  await Promise.all([
+    loadOnlineOpportunities(),
+    loadGames("today"),
+    loadBestTargets("today"),
+    loadCandidates("today")
+  ]);
+}
+
+async function refreshDashboardPanels() {
+  await Promise.all([
+    loadDashboard(),
+    loadAutoUpdateStatus(),
+    loadSystemAudit(),
+    loadReleaseReadiness(),
+    loadProviderSetup(),
+    loadOddsKeyStatus(),
+    loadSourceStatus("today"),
+    loadOnlineOpportunities(),
+    loadGames("today"),
+    loadBestTargets("today"),
+    loadCandidates("today")
+  ]);
+}
+
+function startDashboardRefreshLoops() {
+  window.setInterval(() => {
+    refreshDashboardPanels().catch((error) => setStatus(error.message, true));
+  }, AUTO_REFRESH_MS);
+  window.setInterval(() => {
+    loadLiveDataHealth({ quiet: true }).catch((error) => setStatus(error.message, true));
+  }, LIVE_DATA_HEARTBEAT_MS);
+}
+
 function parseTicket() {
   const text = els.ticketInput.value.trim();
 
@@ -3254,6 +3849,252 @@ function findCandidate(candidateId) {
   return window.__bearEdgeCandidates.find((entry) => entry.id === candidateId);
 }
 
+function findBestTarget(targetId) {
+  return window.__bearEdgeBestTargets.find((entry) => entry.id === targetId);
+}
+
+function bestTargetTicket(target) {
+  if (!target?.ticketDraft) {
+    throw new Error("This best target does not have a reusable ticket draft.");
+  }
+
+  return applyBankrollPolicyToTicket(cloneJson(target.ticketDraft));
+}
+
+function buildLegFromBestTarget(target, card) {
+  const marketOdds = parseAmericanOddsInput(card.querySelector(".best-target-market-odds")?.value);
+  const oppositeOdds = parseAmericanOddsInput(card.querySelector(".best-target-opposite-odds")?.value);
+  const marketType = card.querySelector(".best-target-market-type")?.value || target.ticketDraft?.legs?.[0]?.marketType || "prop";
+
+  if (marketOdds === null) {
+    throw new Error("Enter real sportsbook marketOdds before loading this target.");
+  }
+
+  if (!target?.ticketDraft?.legs?.[0]) {
+    throw new Error("This best target is missing a reusable ticket leg.");
+  }
+
+  const leg = cloneJson(target.ticketDraft.legs[0]);
+  leg.marketOdds = marketOdds;
+  leg.marketType = marketType;
+  leg.correlationKey = leg.correlationKey ?? `${target.sport}:${target.gameId}`;
+  leg.riskFlags = (target.riskFlags ?? []).filter((flag) => flag.code !== "MISSING_MARKET_ODDS");
+
+  if (typeof target.modelProbability === "number" && Number.isFinite(target.modelProbability)) {
+    leg.modelProbabilityOverride = target.modelProbability;
+  }
+
+  if (oppositeOdds === null) {
+    delete leg.oppositeOdds;
+  } else {
+    leg.oppositeOdds = oppositeOdds;
+  }
+
+  return leg;
+}
+
+function buildTicketFromBestTarget(target, card) {
+  const ticket = cloneJson(target.ticketDraft);
+  const leg = buildLegFromBestTarget(target, card);
+
+  ticket.legs[0] = leg;
+  ticket.selection = `${target.ticketDraft.selection} at ${formatOdds(leg.marketOdds)}`;
+
+  return applyBankrollPolicyToTicket(ticket);
+}
+
+function parlayEntryFromBestTarget(target) {
+  const ticket = bestTargetTicket(target);
+  const leg = cloneJson(ticket.legs[0]);
+
+  return {
+    candidateId: target.id,
+    leg,
+    label: leg.label,
+    matchup: target.matchup,
+    sport: target.sport,
+    statLabel: target.statLabel ?? target.statKey,
+    modelProbability: target.modelProbability ?? null,
+    evRoi: target.evaluation?.expectedValueRoi ?? null,
+    correlationKey: leg.correlationKey ?? `${target.sport}:${target.gameId}`
+  };
+}
+
+function addBestTargetToParlay(target) {
+  const entry = parlayEntryFromBestTarget(target);
+  const existingIndex = window.__bearEdgeParlayLegs.findIndex((item) => item.candidateId === target.id);
+
+  if (existingIndex >= 0) {
+    window.__bearEdgeParlayLegs[existingIndex] = entry;
+  } else {
+    if (window.__bearEdgeParlayLegs.length >= 3) {
+      throw new Error("Parlay builder supports a maximum of 3 legs.");
+    }
+
+    window.__bearEdgeParlayLegs.push(entry);
+  }
+
+  renderParlayBuilder();
+}
+
+function parlayEntryFromBestTargetManual(target, card) {
+  const leg = buildLegFromBestTarget(target, card);
+
+  return {
+    candidateId: target.id,
+    leg,
+    label: leg.label,
+    matchup: target.matchup,
+    sport: target.sport,
+    statLabel: target.statLabel ?? target.statKey,
+    modelProbability: target.modelProbability ?? null,
+    evRoi: expectedValueRoiFromOdds(target.modelProbability, leg.marketOdds),
+    correlationKey: leg.correlationKey
+  };
+}
+
+function addBestTargetManualToParlay(target, card) {
+  const entry = parlayEntryFromBestTargetManual(target, card);
+  const existingIndex = window.__bearEdgeParlayLegs.findIndex((item) => item.candidateId === target.id);
+
+  if (existingIndex >= 0) {
+    window.__bearEdgeParlayLegs[existingIndex] = entry;
+  } else {
+    if (window.__bearEdgeParlayLegs.length >= 3) {
+      throw new Error("Parlay builder supports a maximum of 3 legs.");
+    }
+
+    window.__bearEdgeParlayLegs.push(entry);
+  }
+
+  renderParlayBuilder();
+}
+
+function simulationProbabilityForLeg(leg) {
+  if (typeof leg.modelProbabilityOverride === "number" && Number.isFinite(leg.modelProbabilityOverride)) {
+    return leg.modelProbabilityOverride;
+  }
+
+  return null;
+}
+
+function simulationInputFromTicket(ticket) {
+  const settings = getBankrollSettings();
+  const policy = riskModePolicy(settings.riskMode);
+  const bankroll = Number(ticket.bankroll ?? settings.bankroll);
+  const legs = Array.isArray(ticket.legs) ? ticket.legs : [];
+
+  if (legs.length === 0) {
+    throw new Error("Simulation needs a loaded live ticket with at least one leg.");
+  }
+
+  const missingProbability = legs.find((leg) => simulationProbabilityForLeg(leg) === null);
+
+  if (missingProbability) {
+    throw new Error("Simulation needs modelProbabilityOverride. Load from Best 3 or Research Candidates after entering real odds.");
+  }
+
+  if (legs.length === 1) {
+    const leg = legs[0];
+    const stake = Math.max(settings.sportsbookMinimum, bankroll * policy.singleUnitFraction * 0.5);
+
+    return {
+      seed: `bear-edge:${ticket.selection ?? leg.label}`,
+      scenario: "half_edge",
+      iterations: 1000,
+      startingBankroll: bankroll,
+      bets: [
+        {
+          selection: leg.label ?? ticket.selection ?? leg.id,
+          americanOdds: leg.marketOdds,
+          stake,
+          fairProbability: simulationProbabilityForLeg(leg),
+          marketImpliedProbability: americanToImpliedProbability(leg.marketOdds),
+          marketType: leg.marketType,
+          source: leg.source
+        }
+      ]
+    };
+  }
+
+  const combinedDecimal = legs.reduce((total, leg) => total * americanToDecimal(leg.marketOdds), 1);
+  const combinedAmerican = decimalToAmerican(combinedDecimal);
+  const fairProbability = legs.reduce((total, leg) => total * simulationProbabilityForLeg(leg), 1);
+  const stake = Math.max(settings.sportsbookMinimum, bankroll * policy.parlayFraction);
+
+  return {
+    seed: `bear-edge:${ticket.selection ?? "parlay"}`,
+    scenario: "half_edge",
+    iterations: 1000,
+    startingBankroll: bankroll,
+    bets: [
+      {
+        selection: ticket.selection ?? `${legs.length}-leg parlay`,
+        americanOdds: combinedAmerican,
+        stake,
+        fairProbability,
+        marketImpliedProbability: 1 / combinedDecimal,
+        marketType: "parlay",
+        evidence: {
+          legCount: legs.length,
+          legs: legs.map((leg) => ({
+            label: leg.label,
+            marketOdds: leg.marketOdds,
+            modelProbability: simulationProbabilityForLeg(leg)
+          }))
+        }
+      }
+    ]
+  };
+}
+
+function renderSimulationResult(payload) {
+  els.latestTimestamp.textContent = `Simulated ${formatDate(payload.generatedAt)}`;
+  els.latestDecision.className = "latest-content";
+  els.latestDecision.innerHTML = `
+    <div class="decision-head">
+      <div>
+        <span class="eyebrow">Risk Simulation</span>
+        <h3>${escapeHtml(payload.bets?.[0]?.selection ?? "Loaded ticket")}</h3>
+      </div>
+      <span class="verdict-badge ${payload.expectedReturnOnStake > 0 ? "bet" : "pass"}">${escapeHtml(payload.scenario)}</span>
+    </div>
+    <div class="decision-grid">
+      ${[
+        ["Iterations", payload.iterations],
+        ["Expected ROI", formatPercent(payload.expectedReturnOnStake)],
+        ["Expected net", formatSignedMoney(payload.expectedNetProfitPerTrial)],
+        ["Positive trials", formatPercent(payload.probabilityOfPositiveTrial)],
+        ["Losing trials", formatPercent(payload.probabilityOfLosingTrial)],
+        ["5th percentile", formatSignedMoney(payload.summary?.percentile05NetProfit)]
+      ]
+        .map(([label, value]) => `<article><span>${escapeHtml(label)}</span><strong>${escapeHtml(value)}</strong></article>`)
+        .join("")}
+    </div>
+    <p class="sources">Scenario is half-edge stress: the simulator cuts the apparent edge in half before sampling. It is variance/risk analysis, not proof of future wins.</p>
+  `;
+}
+
+async function simulateLoadedTicket() {
+  const ticket = parseTicket();
+  const simulationInput = simulationInputFromTicket(ticket);
+  const response = await fetch("/api/simulate-card", {
+    method: "POST",
+    headers: {
+      "content-type": "application/json"
+    },
+    body: JSON.stringify(simulationInput)
+  });
+  const payload = await response.json();
+
+  if (!response.ok) {
+    throw new Error(payload.error ?? "Simulation failed.");
+  }
+
+  renderSimulationResult(payload);
+  setStatus("Simulation complete. Read it as variance risk, not a prediction guarantee.");
+}
+
 function buildLegFromCandidate(candidate, card) {
   const marketOdds = parseAmericanOddsInput(card.querySelector(".candidate-market-odds")?.value);
   const oppositeOdds = parseAmericanOddsInput(card.querySelector(".candidate-opposite-odds")?.value);
@@ -3267,6 +4108,10 @@ function buildLegFromCandidate(candidate, card) {
   leg.marketOdds = marketOdds;
   leg.marketType = marketType;
   leg.correlationKey = `${candidate.sport}:${candidate.gameId}`;
+  leg.riskFlags = (candidate.riskFlags ?? []).filter((flag) => flag.code !== "MISSING_MARKET_ODDS");
+  if (typeof candidate.prediction?.modelProbability === "number" && Number.isFinite(candidate.prediction.modelProbability)) {
+    leg.modelProbabilityOverride = candidate.prediction.modelProbability;
+  }
 
   if (oppositeOdds === null) {
     delete leg.oppositeOdds;
@@ -3633,6 +4478,14 @@ async function settleEvaluation(event) {
 }
 
 els.ticketForm.addEventListener("submit", evaluateTicket);
+els.simulateTicketButton.addEventListener("click", async () => {
+  try {
+    setStatus("Running ticket risk simulation...");
+    await simulateLoadedTicket();
+  } catch (error) {
+    setStatus(error.message, true);
+  }
+});
 els.ticketInput.addEventListener("input", renderTicketPreflightFromText);
 [
   els.bankrollInput,
@@ -3664,6 +4517,83 @@ els.ticketInput.addEventListener("input", renderTicketPreflightFromText);
   });
 });
 els.historyBody.addEventListener("submit", settleEvaluation);
+els.bestTargetsBoard.addEventListener("click", async (event) => {
+  const manualLoadButton = event.target.closest(".load-best-target-with-odds-button");
+  const manualEvaluateButton = event.target.closest(".evaluate-best-target-with-odds-button");
+  const manualParlayButton = event.target.closest(".add-best-target-with-odds-to-parlay-button");
+  const loadButton = event.target.closest(".load-best-target-button");
+  const evaluateButton = event.target.closest(".evaluate-best-target-button");
+  const parlayButton = event.target.closest(".add-best-target-to-parlay-button");
+  const button = manualLoadButton ?? manualEvaluateButton ?? manualParlayButton ?? loadButton ?? evaluateButton ?? parlayButton;
+
+  if (!button) {
+    return;
+  }
+
+  const target = findBestTarget(button.dataset.targetId);
+
+  if (!target) {
+    setStatus("Best target is no longer available. Refresh best targets.", true);
+    return;
+  }
+
+  try {
+    if (manualParlayButton) {
+      addBestTargetManualToParlay(target, button.closest(".best-target-card"));
+      setStatus("Manual-priced best target added to the parlay builder.");
+      return;
+    }
+
+    if (manualLoadButton || manualEvaluateButton) {
+      const ticket = buildTicketFromBestTarget(target, button.closest(".best-target-card"));
+
+      setTicketInputValue(ticket);
+      setStatus("Manual-priced best target loaded into the ticket evaluator.");
+
+      if (manualEvaluateButton) {
+        setStatus("Evaluating manual-priced best target...");
+        await submitTicket(ticket);
+      }
+
+      return;
+    }
+
+    if (parlayButton) {
+      addBestTargetToParlay(target);
+      setStatus("Best target added to the parlay builder.");
+      return;
+    }
+
+    const ticket = bestTargetTicket(target);
+    setTicketInputValue(ticket);
+    setStatus("Best target loaded into the ticket evaluator.");
+
+    if (evaluateButton) {
+      if (target.evaluation?.verdict !== "BET") {
+        throw new Error("Only BET verdict best targets can be evaluated from the quick action.");
+      }
+
+      setStatus("Evaluating best target...");
+      await submitTicket(ticket);
+    }
+  } catch (error) {
+    setStatus(error.message, true);
+  }
+});
+els.bestTargetsBoard.addEventListener("input", (event) => {
+  if (!event.target.matches(".best-target-market-odds, .best-target-opposite-odds")) {
+    return;
+  }
+
+  updateBestTargetManualPreview(event.target.closest(".best-target-card"));
+});
+els.bestTargetsBoard.addEventListener("change", (event) => {
+  if (!event.target.matches(".best-target-market-type")) {
+    return;
+  }
+
+  updateBestTargetManualPreview(event.target.closest(".best-target-card"));
+});
 els.recordingComparisonResult.addEventListener("click", async (event) => {
   const loadButton = event.target.closest(".load-comparison-ticket-button");
   const evaluateButton = event.target.closest(".evaluate-comparison-ticket-button");
@@ -3830,6 +4760,9 @@ els.parlayBuilderBoard.addEventListener("click", (event) => {
 els.sourceStatusRefreshButton.addEventListener("click", () => {
   loadSourceStatus("today");
 });
+els.liveDataHealthRefreshButton.addEventListener("click", () => {
+  loadLiveDataHealth();
+});
 els.oddsKeyForm.addEventListener("submit", saveOddsApiKey);
 els.oddsKeyTestButton.addEventListener("click", testSavedOddsApiKey);
 els.onlineOpportunitiesRefreshButton.addEventListener("click", () => {
@@ -3888,6 +4821,9 @@ els.refreshButton.addEventListener("click", () => {
 });
 els.systemAuditRefreshButton.addEventListener("click", () => {
   loadSystemAudit();
+});
+els.releaseReadinessRefreshButton.addEventListener("click", () => {
+  loadReleaseReadiness();
 });
 els.providerSetupRefreshButton.addEventListener("click", () => {
   loadProviderSetup();
@@ -4083,15 +5019,13 @@ document.addEventListener("drop", async (event) => {
 
 initializeBankrollControls();
 renderOperatorBoards();
+renderDeferredPanelPlaceholders();
 
 loadHealth()
   .then(async () => {
-    await Promise.all([loadDashboard(), loadAutoUpdateStatus(), loadSystemAudit(), loadProviderSetup(), loadOddsKeyStatus(), loadSourceStatus("today"), loadOnlineOpportunities(), loadGames("today"), loadBestTargets("today"), loadCandidates("today")]);
-    window.setInterval(() => {
-      Promise.all([loadDashboard(), loadAutoUpdateStatus(), loadSystemAudit(), loadProviderSetup(), loadOddsKeyStatus(), loadSourceStatus("today"), loadOnlineOpportunities(), loadGames("today"), loadBestTargets("today"), loadCandidates("today")]).catch(
-        (error) => setStatus(error.message, true)
-      );
-    }, AUTO_REFRESH_MS);
+    await loadInitialDashboardPanels();
+    deferDashboardWork(() => loadDeferredDashboardPanels());
+    startDashboardRefreshLoops();
   })
   .catch((error) => {
     els.healthDot.classList.remove("ok");

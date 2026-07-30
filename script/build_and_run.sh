@@ -3,6 +3,7 @@ set -euo pipefail
 
 MODE="${1:-run}"
 PORT="${PORT:-3000}"
+LIVE_UPDATE_INTERVAL_MS="${BEAR_EDGE_LIVE_UPDATE_INTERVAL_MS:-60000}"
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 cd "$ROOT_DIR"
@@ -29,7 +30,7 @@ build_app() {
 }
 
 launch_app() {
-  npm run launch -- --port "$PORT" --auto-update-interval-ms 300000 "$@"
+  npm run launch -- --port "$PORT" --auto-update-interval-ms "$LIVE_UPDATE_INTERVAL_MS" "$@"
 }
 
 case "$MODE" in
@@ -41,7 +42,7 @@ case "$MODE" in
   --debug|debug)
     stop_server
     build_app
-    node --inspect ./src/cli/serve.js --port "$PORT" --auto-update-interval-ms 300000
+    node --inspect ./src/cli/serve.js --port "$PORT" --auto-update-interval-ms "$LIVE_UPDATE_INTERVAL_MS"
     ;;
   --logs|logs)
     tail -f data/logs/server.log data/logs/server-error.log

@@ -12,6 +12,7 @@ const {
 } = require("../src/index.js");
 const { loadEnvFiles, parseEnv } = require("../src/config/env.js");
 const { redactSecrets } = require("../src/config/secrets.js");
+const { fetchJson: liveFetchJson } = require("../src/live/fetch-json.js");
 const { saveOddsApiKey, upsertEnvValue, validateOddsApiKey } = require("../src/config/odds-key-settings.js");
 const { parseArgs: parseLaunchArgs } = require("../src/cli/launch.js");
 const { parseArgs: parseServeArgs } = require("../src/cli/serve.js");
@@ -59,19 +60,23 @@ test("validateBetInput rejects unknown fields and invalid odds", () => {
 test("serve CLI parses auto-update controls", () => {
   const originalAutoUpdate = process.env.BEAR_EDGE_AUTO_UPDATE;
   const originalInterval = process.env.BEAR_EDGE_AUTO_UPDATE_INTERVAL_MS;
+  const originalHost = process.env.BEAR_EDGE_HOST;
 
   try {
     delete process.env.BEAR_EDGE_AUTO_UPDATE;
     delete process.env.BEAR_EDGE_AUTO_UPDATE_INTERVAL_MS;
+    delete process.env.BEAR_EDGE_HOST;
 
     assert.deepEqual(parseServeArgs(["--port", "3030"]), {
       autoUpdate: true,
-      autoUpdateIntervalMs: 300000,
+      autoUpdateIntervalMs: 60000,
+      host: "127.0.0.1",
       port: 3030
     });
-    assert.deepEqual(parseServeArgs(["--port", "3031", "--no-auto-update", "--auto-update-interval-ms", "60000"]), {
+    assert.deepEqual(parseServeArgs(["--port", "3031", "--host", "localhost", "--no-auto-update", "--auto-update-interval-ms", "60000"]), {
       autoUpdate: false,
       autoUpdateIntervalMs: 60000,
+      host: "localhost",
       port: 3031
     });
   } finally {
@@ -86,6 +91,12 @@ test("serve CLI parses auto-update controls", () => {
     } else {
       process.env.BEAR_EDGE_AUTO_UPDATE_INTERVAL_MS = originalInterval;
     }
+
+    if (originalHost === undefined) {
+      delete process.env.BEAR_EDGE_HOST;
+    } else {
+      process.env.BEAR_EDGE_HOST = originalHost;
+    }
   }
 });
 
@@ -93,15 +104,18 @@ test("launch CLI parses local app controls", () => {
   const originalPort = process.env.PORT;
   const originalAutoUpdate = process.env.BEAR_EDGE_AUTO_UPDATE;
   const originalInterval = process.env.BEAR_EDGE_AUTO_UPDATE_INTERVAL_MS;
+  const originalHost = process.env.BEAR_EDGE_HOST;
 
   try {
     delete process.env.PORT;
     delete process.env.BEAR_EDGE_AUTO_UPDATE;
     delete process.env.BEAR_EDGE_AUTO_UPDATE_INTERVAL_MS;
+    delete process.env.BEAR_EDGE_HOST;
 
     assert.deepEqual(parseLaunchArgs([]), {
       autoUpdate: true,
-      autoUpdateIntervalMs: 300000,
+      autoUpdateIntervalMs: 60000,
+      host: "127.0.0.1",
       openBrowser: true,
       port: 3000,
       timeoutMs: 20000
@@ -110,6 +124,8 @@ test("launch CLI parses local app controls", () => {
       parseLaunchArgs([
         "--port",
         "3032",
+        "--host",
+        "localhost",
         "--timeout-ms",
         "5000",
         "--no-open",
@@ -120,6 +136,7 @@ test("launch CLI parses local app controls", () => {
       {
         autoUpdate: false,
         autoUpdateIntervalMs: 60000,
+        host: "localhost",
         openBrowser: false,
         port: 3032,
         timeoutMs: 5000
@@ -142,6 +159,12 @@ test("launch CLI parses local app controls", () => {
       delete process.env.BEAR_EDGE_AUTO_UPDATE_INTERVAL_MS;
     } else {
       process.env.BEAR_EDGE_AUTO_UPDATE_INTERVAL_MS = originalInterval;
+    }
+
+    if (originalHost === undefined) {
+      delete process.env.BEAR_EDGE_HOST;
+    } else {
+      process.env.BEAR_EDGE_HOST = originalHost;
     }
   }
 });
@@ -230,6 +253,31 @@ test("odds API key validation rejects placeholders and env upsert preserves comm
   assert.match(updated, /^# config/m);
   assert.match(updated, /^THE_ODDS_API_KEY=new-key/m);
   assert.match(updated, /^ODDS_API_KEY=alias/m);
+});
+
+test("live fetch errors redact API keys from URLs", async () => {
+  const originalFetch = globalThis.fetch;
+
+  globalThis.fetch = /** @type {any} */ (async () => ({
+    ok: false,
+    status: 401,
+    statusText: "Unauthorized"
+  }));
+
+  try {
+    await assert.rejects(
+      () => liveFetchJson("https://example.test/v1?apiKey=super-secret-provider-key&market=mlb"),
+      (error) => {
+        const message = error instanceof Error ? error.message : String(error);
+
+        assert.match(message, /apiKey=\[REDACTED\]/);
+        assert.equal(message.includes("super-secret-provider-key"), false);
+        return true;
+      }
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
 });
 
 test("appendDecisionLog writes JSONL output to the requested path", async () => {

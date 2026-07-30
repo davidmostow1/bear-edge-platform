@@ -1,3 +1,5 @@
+const { redactSecrets } = require("../config/secrets.js");
+
 async function fetchJson(url, options = {}) {
   const response = await fetch(url, {
     method: "GET",
@@ -9,7 +11,7 @@ async function fetchJson(url, options = {}) {
   });
 
   if (!response.ok) {
-    throw new Error(`Failed to fetch ${url}: ${response.status} ${response.statusText}`);
+    throw new Error(redactSecrets(`Failed to fetch ${url}: ${response.status} ${response.statusText}`));
   }
 
   return response.json();

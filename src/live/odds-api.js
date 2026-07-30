@@ -38,8 +38,32 @@ function sportKeyFor(value) {
   return SPORT_KEYS[key] ?? key;
 }
 
+function redactBookmaker(bookmaker) {
+  return {
+    key: bookmaker.key,
+    title: bookmaker.title,
+    lastUpdate: bookmaker.last_update,
+    markets: (bookmaker.markets ?? []).map((market) => ({
+      key: market.key,
+      lastUpdate: market.last_update,
+      outcomes: (market.outcomes ?? []).map((outcome) => ({
+        name: outcome.name,
+        description: outcome.description ?? null,
+        price: outcome.price,
+        point: outcome.point ?? null
+      }))
+    }))
+  };
+}
+
 function redactBookmakerEvent(event, bookmakerKey = DEFAULT_BOOKMAKER) {
-  const bookmaker = (event.bookmakers ?? []).find((entry) => entry.key === bookmakerKey) ?? event.bookmakers?.[0] ?? null;
+  const preferredBookmakerKeys = String(bookmakerKey ?? DEFAULT_BOOKMAKER)
+    .split(",")
+    .map((entry) => entry.trim())
+    .filter(Boolean);
+  const bookmakers = (event.bookmakers ?? []).map(redactBookmaker);
+  const bookmaker =
+    bookmakers.find((entry) => preferredBookmakerKeys.includes(entry.key)) ?? bookmakers[0] ?? null;
 
   return {
     id: event.id,
@@ -47,23 +71,8 @@ function redactBookmakerEvent(event, bookmakerKey = DEFAULT_BOOKMAKER) {
     commenceTime: event.commence_time,
     homeTeam: event.home_team,
     awayTeam: event.away_team,
-    bookmaker: bookmaker
-      ? {
-          key: bookmaker.key,
-          title: bookmaker.title,
-          lastUpdate: bookmaker.last_update,
-          markets: (bookmaker.markets ?? []).map((market) => ({
-            key: market.key,
-            lastUpdate: market.last_update,
-            outcomes: (market.outcomes ?? []).map((outcome) => ({
-              name: outcome.name,
-              description: outcome.description ?? null,
-              price: outcome.price,
-              point: outcome.point ?? null
-            }))
-          }))
-        }
-      : null
+    bookmaker,
+    bookmakers
   };
 }
 

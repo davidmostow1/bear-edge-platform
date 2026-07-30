@@ -5,6 +5,7 @@ const os = require("node:os");
 const path = require("node:path");
 
 const { createServer } = require("../src/server.js");
+const { getBestMlbTargets } = require("../src/live/best-mlb-targets.js");
 const {
   createAutoUpdateService,
   readAutoUpdateHistory,
@@ -118,6 +119,29 @@ test("HTTP API simulates a verified betting card", async () => {
   });
 });
 
+test("HTTP API reports live data health with provider freshness", async () => {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "bear-edge-live-health-"));
+
+  await withServer(
+    async (baseUrl) => {
+      const response = await fetch(`${baseUrl}/api/live-data-health?date=2026-06-17&days=1`);
+      const payload = await response.json();
+
+      assert.equal(response.status, 200);
+      assert.ok(["live", "live-with-warnings", "stale", "blocked"].includes(payload.status));
+      assert.equal(payload.heartbeatMs, 60000);
+      assert.equal(typeof payload.requirements.officialScoreboards, "boolean");
+      assert.ok(payload.providers.some((provider) => provider.provider === "ESPN"));
+      assert.ok(payload.providers.every((provider) => typeof provider.liveStatus === "string"));
+      assert.equal(JSON.stringify(payload).includes("apiKey="), false);
+      assert.ok(Array.isArray(payload.actions));
+    },
+    {
+      autoUpdateSnapshotPath: path.join(tempDir, "snapshot.json")
+    }
+  );
+});
+
 test("HTTP API serves the local dashboard", async () => {
   await withServer(async (baseUrl) => {
     const dashboardResponse = await fetch(`${baseUrl}/dashboard`);
@@ -132,6 +156,7 @@ test("HTTP API serves the local dashboard", async () => {
     assert.match(dashboardHtml, /riskModeSelect/);
     assert.match(dashboardHtml, /unitGuardBoard/);
     assert.match(dashboardHtml, /ticketPreflightBoard/);
+    assert.match(dashboardHtml, /simulateTicketButton/);
     assert.match(dashboardHtml, /Universal Screenshot Intake/);
     assert.match(dashboardHtml, /globalDropOverlay/);
     assert.match(dashboardHtml, /screenshotImageInput/);
@@ -139,8 +164,13 @@ test("HTTP API serves the local dashboard", async () => {
     assert.match(dashboardHtml, /worldcup-goalscorer/);
     assert.match(dashboardHtml, /screenshotDropZone/);
     assert.match(dashboardHtml, /Auto Update/);
+    assert.match(dashboardHtml, /Live Data Heartbeat/);
+    assert.match(dashboardHtml, /liveDataHealthBoard/);
+    assert.match(dashboardHtml, /liveDataHealthRefreshButton/);
     assert.match(dashboardHtml, /System Audit/);
     assert.match(dashboardHtml, /systemAuditRefreshButton/);
+    assert.match(dashboardHtml, /Release Readiness/);
+    assert.match(dashboardHtml, /releaseReadinessRefreshButton/);
     assert.match(dashboardHtml, /Verified Odds API/);
     assert.match(dashboardHtml, /oddsApiKeyInput/);
     assert.match(dashboardHtml, /Online Opportunities/);
@@ -169,10 +199,24 @@ test("HTTP API serves the local dashboard", async () => {
     assert.match(dashboardScript, /renderUnitGuard/);
     assert.match(dashboardScript, /renderOperatorStatus/);
     assert.match(dashboardScript, /validateTicketPreflight/);
+    assert.match(dashboardScript, /isSingleTicket/);
+    assert.match(dashboardScript, /isParlayTicket/);
     assert.match(dashboardScript, /applyBankrollPolicyToTicket/);
     assert.match(dashboardScript, /Ticket preflight blocked evaluation/);
     assert.match(dashboardScript, /loadAutoUpdateStatus/);
+    assert.match(dashboardScript, /LIVE_DATA_HEARTBEAT_MS/);
+    assert.match(dashboardScript, /loadLiveDataHealth/);
+    assert.match(dashboardScript, /renderLiveSourceMatrix/);
+    assert.match(dashboardScript, /Source Health Matrix/);
+    assert.match(dashboardScript, /live-source-matrix/);
+    assert.match(dashboardScript, /\/api\/live-data-health/);
     assert.match(dashboardScript, /loadSystemAudit/);
+    assert.match(dashboardScript, /loadReleaseReadiness/);
+    assert.match(dashboardScript, /\/api\/release-readiness/);
+    assert.match(dashboardScript, /release-lane/);
+    assert.match(dashboardScript, /release-evidence/);
+    assert.match(dashboardScript, /Evidence Gates/);
+    assert.match(dashboardScript, /Next Actions/);
     assert.match(dashboardScript, /loadOddsKeyStatus/);
     assert.match(dashboardScript, /loadProviderSetup/);
     assert.match(dashboardScript, /saveProviderKey/);
@@ -207,6 +251,16 @@ test("HTTP API serves the local dashboard", async () => {
     assert.match(dashboardScript, /DraftKings Network Editorial Context/);
     assert.match(dashboardScript, /Cross-sport 2-leg alt prop parlay/);
     assert.match(dashboardScript, /loadCandidates/);
+    assert.match(dashboardScript, /findBestTarget/);
+    assert.match(dashboardScript, /load-best-target-button/);
+    assert.match(dashboardScript, /evaluate-best-target-button/);
+    assert.match(dashboardScript, /add-best-target-to-parlay-button/);
+    assert.match(dashboardScript, /best-target-market-odds/);
+    assert.match(dashboardScript, /evaluate-best-target-with-odds-button/);
+    assert.match(dashboardScript, /buildTicketFromBestTarget/);
+    assert.match(dashboardScript, /simulateLoadedTicket/);
+    assert.match(dashboardScript, /modelProbabilityOverride/);
+    assert.match(dashboardScript, /Load Draft/);
     assert.match(dashboardScript, /Load With Odds/);
     assert.match(dashboardScript, /parseAmericanOddsInput/);
     assert.match(dashboardScript, /updateCandidateEdgePreview/);
@@ -219,6 +273,16 @@ test("HTTP API serves the local dashboard", async () => {
     assert.match(dashboardScript, /No-vig edge/);
     assert.match(dashboardScript, /Add real sportsbook marketOdds/);
     assert.match(dashboardScript, /manual sportsbook odds/);
+    assert.match(dashboardScript, /loadInitialDashboardPanels/);
+    assert.match(dashboardScript, /loadDeferredDashboardPanels/);
+    assert.match(dashboardScript, /deferDashboardWork/);
+    const startupIndex = dashboardScript.lastIndexOf("loadHealth()\n  .then");
+    assert.notEqual(startupIndex, -1);
+    const startupBlock = dashboardScript.slice(startupIndex);
+    assert.match(startupBlock, /await loadInitialDashboardPanels\(\)/);
+    assert.match(startupBlock, /deferDashboardWork\(\(\) => loadDeferredDashboardPanels\(\)\)/);
+    assert.doesNotMatch(startupBlock, /loadBestTargets\("today"\)/);
+    assert.doesNotMatch(startupBlock, /loadCandidates\("today"\)/);
   });
 });
 
@@ -343,12 +407,34 @@ test("HTTP API exposes local system audit without leaking key values", async () 
 
     assert.equal(response.status, 200);
     assert.equal(payload.package.name, "betting-decision-engine");
-    assert.ok(payload.rootDir.endsWith("2026-06-17-documents-openai-developers-google-drive-google"));
+    assert.equal(payload.rootDir, path.resolve(__dirname, ".."));
     assert.equal(payload.readiness.localFilesOk, true);
     assert.equal(payload.paths.some((entry) => entry.label === "dashboard js" && entry.exists), true);
     assert.equal(payload.commands.some((entry) => entry.command === "git"), true);
     assert.ok(payload.nextActions.some((entry) => entry.area === "Live odds"));
     assert.equal(payload.environment.keys.some((entry) => entry.name === "THE_ODDS_API_KEY" && typeof entry.configured === "boolean"), true);
+    assert.equal(JSON.stringify(payload).includes(process.env.THE_ODDS_API_KEY ?? "unlikely-secret-marker"), false);
+  });
+});
+
+test("HTTP API exposes release readiness checks", async () => {
+  await withServer(async (baseUrl) => {
+    const response = await fetch(`${baseUrl}/api/release-readiness`);
+    const payload = await response.json();
+
+    assert.equal(response.status, 200);
+    assert.equal(payload.package.name, "betting-decision-engine");
+    assert.equal(["ready", "ready-with-evidence-gates", "shippable-with-warnings", "blocked"].includes(payload.status), true);
+    assert.equal(typeof payload.summary.score, "number");
+    assert.equal(typeof payload.summary.info, "number");
+    assert.equal(payload.lanes.some((entry) => entry.id === "local-app"), true);
+    assert.equal(payload.lanes.some((entry) => entry.id === "data-edge"), true);
+    assert.equal(payload.evidenceGates.some((entry) => entry.id === "three-win-validation"), true);
+    assert.equal(payload.nextActions.every((entry) => typeof entry.action === "string"), true);
+    assert.equal(payload.checks.some((entry) => entry.area === "security"), true);
+    assert.equal(payload.checks.some((entry) => entry.message === "GitHub Actions CI workflow exists"), true);
+    assert.equal(payload.checks.some((entry) => entry.message === "Local dashboard binds to localhost by default" && entry.status === "pass"), true);
+    assert.deepEqual(payload.trackedFiles.blockedMatches, []);
     assert.equal(JSON.stringify(payload).includes(process.env.THE_ODDS_API_KEY ?? "unlikely-secret-marker"), false);
   });
 });
@@ -559,7 +645,7 @@ test("HTTP API reports live source freshness and blocked market feeds", async ()
 
     assert.equal(response.status, 200);
     assert.deepEqual(payload.dates, ["2026-06-17"]);
-    assert.equal(payload.refreshPolicy.autoRefreshMs, 300000);
+    assert.equal(payload.refreshPolicy.autoRefreshMs, 60000);
 
     const espn = payload.providers.find((provider) => provider.provider === "ESPN");
     const draftKings = payload.providers.find((provider) => provider.provider === "DraftKings");
@@ -709,12 +795,53 @@ test("HTTP API prices and evaluates best MLB targets with a configured odds key"
       assert.ok(payload.best.length >= 1);
       assert.equal(payload.best[0].status, "priced");
       assert.equal(payload.best[0].odds.bookmaker.key, "draftkings");
+      assert.ok(payload.best[0].odds.marketContext.consensus.length >= 2);
+      assert.equal(payload.best[0].evaluation.marketIntelligence.consensus.bookCount >= 2, true);
       assert.equal(typeof payload.best[0].odds.marketOdds, "number");
+      assert.equal(payload.best[0].odds.match.confidence, 1);
+      assert.equal(payload.best[0].ticketDraft.legs[0].marketOdds, payload.best[0].odds.marketOdds);
+      assert.ok(payload.best[0].ticketDraft.legs[0].marketContext.consensus.length >= 2);
+      assert.equal(payload.best[0].riskFlags.some((flag) => flag.code === "MISSING_MARKET_ODDS"), false);
       assert.ok(["BET", "PASS", "WAIT"].includes(payload.best[0].evaluation.verdict));
       assert.equal(typeof payload.best[0].evaluation.expectedValueRoi, "number");
       assert.equal(payload.oddsSources.eventsSourceUrl?.includes("test-odds-key"), false);
       assert.equal(JSON.stringify(payload).includes("test-odds-key"), false);
     });
+  } finally {
+    if (previousOddsApiKey === undefined) {
+      delete process.env.THE_ODDS_API_KEY;
+    } else {
+      process.env.THE_ODDS_API_KEY = previousOddsApiKey;
+    }
+  }
+});
+
+test("best MLB targets fall back to price checks when verified odds provider fails", async () => {
+  const previousOddsApiKey = process.env.THE_ODDS_API_KEY;
+
+  process.env.THE_ODDS_API_KEY = "test-odds-key";
+
+  try {
+    const payload = await getBestMlbTargets({
+      date: "2026-06-17",
+      days: 1,
+      limit: 3,
+      bankroll: 1000,
+      fetchJsonImpl: async (url) => {
+        if (String(url).includes("/odds?")) {
+          throw new Error("Provider failed for apiKey=test-odds-key");
+        }
+
+        return fetchJson(url);
+      }
+    });
+
+    assert.equal(payload.status, "odds_error");
+    assert.equal(payload.summary.pricedCandidates, 0);
+    assert.equal(payload.best[0].status, "price_check");
+    assert.equal(payload.best[0].odds, null);
+    assert.ok(payload.warnings.some((warning) => warning.includes("price-check targets")));
+    assert.equal(JSON.stringify(payload).includes("test-odds-key"), false);
   } finally {
     if (previousOddsApiKey === undefined) {
       delete process.env.THE_ODDS_API_KEY;

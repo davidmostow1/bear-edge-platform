@@ -16,6 +16,7 @@ const { generateResearchCandidates } = require("./live/candidates.js");
 const { getBestMlbTargets } = require("./live/best-mlb-targets.js");
 const { matchCandidateOdds } = require("./live/candidate-odds-import.js");
 const { fetchGamesForWindow } = require("./live/schedule.js");
+const { getLiveDataHealth } = require("./live/live-data-health.js");
 const { getSourceStatusDashboard } = require("./live/source-status.js");
 const { parseDraftKingsSnapshot } = require("./live/draftkings-snapshot.js");
 const { parseDkPredictionsBoardSnapshot } = require("./live/dk-predictions-board-snapshot.js");
@@ -28,6 +29,7 @@ const { parseWorldCupGoalscorerSnapshot } = require("./live/worldcup-goalscorer-
 const { fetchOddsApiMarkets, fetchOddsApiSports } = require("./live/odds-api.js");
 const { fetchJson, fetchText } = require("./live/fixture-fetch.js");
 const { getSystemAudit } = require("./system-audit.js");
+const { getReleaseReadiness } = require("./release-readiness.js");
 const { getOddsKeyStatus, saveOddsApiKey, validateOddsApiKey } = require("./config/odds-key-settings.js");
 const { getProviderSetupStatus } = require("./config/provider-requirements.js");
 const { saveProviderApiKey } = require("./config/provider-key-settings.js");
@@ -105,6 +107,14 @@ function createServer(options = {}) {
 
       if (request.method === "GET" && url.pathname === "/api/system-audit") {
         const result = await getSystemAudit();
+
+        return jsonResponse(response, 200, result);
+      }
+
+      if (request.method === "GET" && url.pathname === "/api/release-readiness") {
+        const result = await getReleaseReadiness({
+          rootDir: options.settingsRootDir ?? PROJECT_ROOT
+        });
 
         return jsonResponse(response, 200, result);
       }
@@ -328,6 +338,23 @@ function createServer(options = {}) {
           fetchJsonImpl: process.env.BEAR_EDGE_TEST_MODE ? fetchJson : options.fetchJsonImpl,
           fetchTextImpl: process.env.BEAR_EDGE_TEST_MODE ? fetchText : options.fetchTextImpl,
           oddsApiKey: process.env.THE_ODDS_API_KEY ?? process.env.ODDS_API_KEY
+        });
+
+        return jsonResponse(response, 200, result);
+      }
+
+      if (request.method === "GET" && url.pathname === "/api/live-data-health") {
+        const result = await getLiveDataHealth({
+          date: url.searchParams.get("date") ?? "today",
+          days: Number(url.searchParams.get("days") ?? 2),
+          maxRosterTeams: Number(url.searchParams.get("maxRosterTeams") ?? 6),
+          fetchJsonImpl: process.env.BEAR_EDGE_TEST_MODE ? fetchJson : options.fetchJsonImpl,
+          fetchTextImpl: process.env.BEAR_EDGE_TEST_MODE ? fetchText : options.fetchTextImpl,
+          oddsApiKey: process.env.THE_ODDS_API_KEY ?? process.env.ODDS_API_KEY,
+          autoUpdateStatus: typeof options.autoUpdateService?.getStatus === "function"
+            ? options.autoUpdateService.getStatus()
+            : null,
+          autoUpdateSnapshotPath: options.autoUpdateSnapshotPath
         });
 
         return jsonResponse(response, 200, result);
