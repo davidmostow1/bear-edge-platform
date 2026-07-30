@@ -5,7 +5,8 @@
   "main": "src/index.js",
   "type": "commonjs",
   "exports": {
-    ".": "./src/index.js"
+    ".": "./src/index.js",
+    "./mlb": "./src/mlb/index.js"
   },
   "files": [
     "README.md",
@@ -14,7 +15,10 @@
     "src/native/**/*",
     "src/dashboard/**/*",
     "examples/**/*.json",
+    "config/mlb-model-registry.json",
+    "docs/MLB_PREDICTION_MACHINE.md",
     "data/logs/.gitkeep",
+    "data/history/mlb/README.md",
     "tsconfig.json"
   ],
   "bin": {
@@ -22,10 +26,13 @@
     "bear-edge-live-evaluate": "./src/cli/evaluate-live.js",
     "bear-edge-live-watch": "./src/cli/watch-live.js",
     "bear-edge-launch": "./src/cli/launch.js",
-    "bear-edge-server": "./src/cli/serve.js"
+    "bear-edge-server": "./src/cli/serve.js",
+    "sweet-bear-mlb-predict": "./src/cli/mlb-predict.js",
+    "sweet-bear-mlb-history": "./src/cli/mlb-history-build.js"
   },
   "scripts": {
     "test": "node --test",
+    "test:mlb": "node --test test/mlb/*.test.js",
     "typecheck": "tsc --project tsconfig.json",
     "verify": "npm run typecheck && npm test",
     "evaluate": "node ./src/cli/evaluate.js",
@@ -33,6 +40,8 @@
     "launch": "node ./src/cli/launch.js",
     "watch:live": "node ./src/cli/watch-live.js",
     "serve": "node ./src/cli/serve.js",
+    "mlb:predict": "node ./src/cli/mlb-predict.js",
+    "mlb:history": "node ./src/cli/mlb-history-build.js",
     "compare:recording": "node ./script/compare_recording_props_with_current_dk.js",
     "audit:protocol": "node ./script/build_protocol_audit.js",
     "simulate:card": "node ./script/simulate_verified_card.js",
@@ -42,7 +51,9 @@
     "betting",
     "kelly",
     "odds",
-    "expected-value"
+    "expected-value",
+    "mlb",
+    "probability"
   ],
   "engines": {
     "node": ">=20"
