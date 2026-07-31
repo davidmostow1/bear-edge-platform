@@ -1,0 +1,44 @@
+{
+  "schema_version": "1.0.0",
+  "archive_id": "canonical-betting-state-2026-07-31",
+  "repository": "davidmostow1/bear-edge-platform",
+  "branch": "archive/canonical-betting-state-2026-07-31",
+  "base_branch": "master",
+  "base_sha": "e428eae1ebe2b44fbfdd6c3ba2d589405e7f96ef",
+  "application_code_modified": false,
+  "operational_authority": "RESEARCH_ONLY_OR_PRICE_CHECK_ONLY",
+  "profitability_claim_authorized": false,
+  "verification_method": "GitHub refetch plus Git blob SHA-1 inventory and master-to-branch path diff",
+  "self_referential_metadata_excluded": [
+    "manifest.json",
+    "GIT_BLOB_SHAS.txt"
+  ],
+  "content_files": [
+    {"path": "README.md", "git_blob_sha1": "bea062c21a4a11d3a3c551350811412063482f08"},
+    {"path": "SYSTEM_MAP.md", "git_blob_sha1": "08f42fc78888ed93e3e47f03cd903048dbc6a01e"},
+    {"path": "CURRENT_STATE.md", "git_blob_sha1": "63fcf89674cbf963a14af5d10e563d2e91defef2"},
+    {"path": "AUTHORITY_AND_CONTRADICTION_REGISTER.md", "git_blob_sha1": "3376ac4044bb11dcb01a8a8534e1757b1ebae22c"},
+    {"path": "DATA_LEDGER_AUDIT.md", "git_blob_sha1": "18ba1874862187101fca5fe83059474f9161d765"},
+    {"path": "VALIDATION_AND_PROMOTION.md", "git_blob_sha1": "7257b309b93b4f0c75edf98ca424af6fde1452dc"},
+    {"path": "GITHUB_REF_MAP.md", "git_blob_sha1": "0661f37644469441b0be5e495aecf6ca1da9482e"},
+    {"path": "PLATE_APPEARANCE_SHORTFALL_DIAGNOSIS.md", "git_blob_sha1": "8f2158bcc9e5e3a8cd88af72cc3de84b32db544f"},
+    {"path": "OPEN_RISKS_AND_NEXT_ACTIONS.md", "git_blob_sha1": "d6bfa52ebee2ab949f6067bcd11c6a0e230aabf9"},
+    {"path": "SOURCE_INVENTORY.md", "git_blob_sha1": "acc8b9df89dc668bdf653dd6bf1acf08bc27f7c0"},
+    {"path": "SENSITIVE_DATA_EXCLUSIONS.md", "git_blob_sha1": "ae45a0e7974c383246e2cd830bb366be090b634b"},
+    {"path": "AUDIT_REPORT.md", "git_blob_sha1": "30f3533b31ec9e12eaccebabf960564cfd07d9bd"},
+    {"path": "CONNECTED_SYSTEM_STATE.json", "git_blob_sha1": "2bccd30f1d1a7d67e6ef39cbea54f9eaf19b1197"}
+  ],
+  "source_systems_swept": [
+    "GitHub",
+    "ChatGPT file library",
+    "Google Drive",
+    "Notion",
+    "Gmail",
+    "Airtable",
+    "Supabase",
+    "Statsig",
+    "MLB Stats API",
+    "Baseball Savant"
+  ],
+  "sensitive_material_committed": false
+}
