@@ -1,0 +1,17 @@
+# Git blob SHA-1 inventory for canonical archive content
+# Captured after refetch from branch archive/canonical-betting-state-2026-07-31
+# manifest.json and this file are verification metadata and are excluded from self-referential hashing.
+
+bea062c21a4a11d3a3c551350811412063482f08  README.md
+08f42fc78888ed93e3e47f03cd903048dbc6a01e  SYSTEM_MAP.md
+63fcf89674cbf963a14af5d10e563d2e91defef2  CURRENT_STATE.md
+3376ac4044bb11dcb01a8a8534e1757b1ebae22c  AUTHORITY_AND_CONTRADICTION_REGISTER.md
+18ba1874862187101fca5fe83059474f9161d765  DATA_LEDGER_AUDIT.md
+7257b309b93b4f0c75edf98ca424af6fde1452dc  VALIDATION_AND_PROMOTION.md
+0661f37644469441b0be5e495aecf6ca1da9482e  GITHUB_REF_MAP.md
+8f2158bcc9e5e3a8cd88af72cc3de84b32db544f  PLATE_APPEARANCE_SHORTFALL_DIAGNOSIS.md
+d6bfa52ebee2ab949f6067bcd11c6a0e230aabf9  OPEN_RISKS_AND_NEXT_ACTIONS.md
+acc8b9df89dc668bdf653dd6bf1acf08bc27f7c0  SOURCE_INVENTORY.md
+ae45a0e7974c383246e2cd830bb366be090b634b  SENSITIVE_DATA_EXCLUSIONS.md
+30f3533b31ec9e12eaccebabf960564cfd07d9bd  AUDIT_REPORT.md
+2bccd30f1d1a7d67e6ef39cbea54f9eaf19b1197  CONNECTED_SYSTEM_STATE.json
