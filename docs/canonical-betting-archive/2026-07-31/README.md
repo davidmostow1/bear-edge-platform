@@ -45,14 +45,15 @@ The ecosystem contains:
 11. [`AUDIT_REPORT.md`](AUDIT_REPORT.md)
 12. [`CONNECTED_SYSTEM_STATE.json`](CONNECTED_SYSTEM_STATE.json)
 13. [`manifest.json`](manifest.json)
-14. [`SHA256SUMS.txt`](SHA256SUMS.txt)
+14. [`GIT_BLOB_SHAS.txt`](GIT_BLOB_SHAS.txt)
 
 ## Verification contract
 
 The upload is complete only when:
 
 - each archived path can be refetched from GitHub,
-- refetched content matches the local source bytes,
+- refetched content matches the intended archive content,
+- each committed content file has a recorded Git blob SHA,
 - the branch diff contains only `docs/canonical-betting-archive/2026-07-31/`,
 - no application-code path is changed,
 - no secret, OTP, credential, or raw account evidence is committed.
