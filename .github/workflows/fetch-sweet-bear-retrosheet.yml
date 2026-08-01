@@ -1,0 +1,57 @@
+name: Fetch Sweet Bear Retrosheet 2024-2025
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/fetch-sweet-bear-retrosheet.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  fetch-history:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Download official Retrosheet season CSV archives
+        run: |
+          set -euo pipefail
+          mkdir -p history-raw
+          curl --fail --location --retry 4 --retry-all-errors \
+            --user-agent 'SweetBearResearch/1.0' \
+            --output history-raw/2024csvs.zip \
+            https://www.retrosheet.org/downloads/2024/2024csvs.zip
+          curl --fail --location --retry 4 --retry-all-errors \
+            --user-agent 'SweetBearResearch/1.0' \
+            --output history-raw/2025csvs.zip \
+            https://www.retrosheet.org/downloads/2025/2025csvs.zip
+
+      - name: Verify ZIP integrity and required files
+        run: |
+          python - <<'PY'
+          import hashlib, json, re, zipfile
+          from pathlib import Path
+          required = ('allplayers','gameinfo','teamstats','batting','pitching','fielding','plays')
+          manifest = []
+          for year in (2024, 2025):
+              path = Path(f'history-raw/{year}csvs.zip')
+              with zipfile.ZipFile(path) as archive:
+                  assert archive.testzip() is None
+                  names = [name.rsplit('/', 1)[-1].lower() for name in archive.namelist()]
+                  for stem in required:
+                      assert any(re.fullmatch(rf'{year}{stem}\.csv', name) or name == f'{stem}.csv' for name in names), (year, stem, names)
+              digest = hashlib.sha256(path.read_bytes()).hexdigest()
+              manifest.append({'year': year, 'file': path.name, 'bytes': path.stat().st_size, 'sha256': digest})
+          Path('history-raw/source_manifest.json').write_text(json.dumps(manifest, indent=2, sort_keys=True) + '\n')
+          print(json.dumps(manifest, indent=2, sort_keys=True))
+          PY
+
+      - name: Upload immutable source archives
+        uses: actions/upload-artifact@v4
+        with:
+          name: sweet-bear-retrosheet-2024-2025-source
+          path: history-raw
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 7
