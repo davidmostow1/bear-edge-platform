@@ -1,0 +1,27 @@
+# Git blob SHA-1 inventory for canonical archive content
+# Captured after refetch from branch archive/canonical-betting-state-2026-07-31
+# manifest.json and this file are verification metadata and are excluded from self-referential hashing.
+
+30f3533b31ec9e12eaccebabf960564cfd07d9bd  docs/canonical-betting-archive/2026-07-31/AUDIT_REPORT.md
+3376ac4044bb11dcb01a8a8534e1757b1ebae22c  docs/canonical-betting-archive/2026-07-31/AUTHORITY_AND_CONTRADICTION_REGISTER.md
+2bccd30f1d1a7d67e6ef39cbea54f9eaf19b1197  docs/canonical-betting-archive/2026-07-31/CONNECTED_SYSTEM_STATE.json
+63fcf89674cbf963a14af5d10e563d2e91defef2  docs/canonical-betting-archive/2026-07-31/CURRENT_STATE.md
+18ba1874862187101fca5fe83059474f9161d765  docs/canonical-betting-archive/2026-07-31/DATA_LEDGER_AUDIT.md
+0661f37644469441b0be5e495aecf6ca1da9482e  docs/canonical-betting-archive/2026-07-31/GITHUB_REF_MAP.md
+00a6193d1175c9bb93ea4cd061897c33e3479564  docs/canonical-betting-archive/2026-07-31/MODEL_EVIDENCE_COMPLETENESS.md
+d6bfa52ebee2ab949f6067bcd11c6a0e230aabf9  docs/canonical-betting-archive/2026-07-31/OPEN_RISKS_AND_NEXT_ACTIONS.md
+8f2158bcc9e5e3a8cd88af72cc3de84b32db544f  docs/canonical-betting-archive/2026-07-31/PLATE_APPEARANCE_SHORTFALL_DIAGNOSIS.md
+47bdcebd7f334daba1e5e204809a71521be728be  docs/canonical-betting-archive/2026-07-31/PREDICTION_MACHINE_REGISTRY.md
+84739a2f8d3ba241282c8260563ec77194b4de90  docs/canonical-betting-archive/2026-07-31/README.md
+ae45a0e7974c383246e2cd830bb366be090b634b  docs/canonical-betting-archive/2026-07-31/SENSITIVE_DATA_EXCLUSIONS.md
+6c7940d72ddb325e1677906e6dff1a39b6bea25f  docs/canonical-betting-archive/2026-07-31/SOURCE_INVENTORY.md
+08f42fc78888ed93e3e47f03cd903048dbc6a01e  docs/canonical-betting-archive/2026-07-31/SYSTEM_MAP.md
+47aa7e2022c11d8151fb41387242178ec5a7146b  docs/canonical-betting-archive/2026-07-31/TRANSCRIPT_INDEX.md
+7257b309b93b4f0c75edf98ca424af6fde1452dc  docs/canonical-betting-archive/2026-07-31/VALIDATION_AND_PROMOTION.md
+aa80bf3d4a9f094638c6e38395faac69d502dc68  docs/canonical-betting-archive/2026-07-31/machines/kbo_live_poisson_legacy_models.md
+7042e130467037ace23bd8cf2852dc6bd4238856  docs/canonical-betting-archive/2026-07-31/machines/mlb_pitcher_strikeout_joint_outing_v1.md
+6827a1ce03ca45190211148e3a71ec3bab843e94  docs/canonical-betting-archive/2026-07-31/machines/mlb_starter_batter_outcomes_joint_outing_v1.md
+951c8c9a9f1a09ad801dd95662fc2f8ad716208f  docs/canonical-betting-archive/2026-07-31/machines/sweet_bear_vs_bear_edge_showdown.md
+7d20d7a9dd3acc5194a12e3f9ab928f3144606df  docs/canonical-betting-archive/2026-07-31/machines/sweetbear_edge_validation_substrate.md
+cb7d6d36e9ee193c58331db2ef8c788277c8d660  docs/canonical-betting-archive/2026-07-31/machines/unified_mlb_and_total_bases_lineage.md
+93305c831a221422effc8c834ce65b585d10b8f2  docs/canonical-betting-archive/2026-07-31/validate_archive.py
