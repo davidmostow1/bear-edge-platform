@@ -38,7 +38,11 @@ function resolveAutoUpdateLatestPath(latestPath) {
 
 function resolveAutoUpdateSnapshotPath(snapshotPath) {
   if (typeof snapshotPath === "string" && snapshotPath.trim()) {
-    return path.resolve(snapshotPath);
+    const resolved = path.resolve(snapshotPath);
+    if (snapshotPath.includes('..') || path.isAbsolute(snapshotPath)) {
+      throw new Error('Invalid snapshot path');
+    }
+    return resolved;
   }
 
   if (typeof process.env.BEAR_EDGE_AUTO_UPDATE_SNAPSHOT_PATH === "string" && process.env.BEAR_EDGE_AUTO_UPDATE_SNAPSHOT_PATH.trim()) {
