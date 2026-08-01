@@ -79,6 +79,9 @@ const els = {
   releaseReadinessBoard: document.querySelector("#releaseReadinessBoard"),
   releaseReadinessRefreshButton: document.querySelector("#releaseReadinessRefreshButton"),
   releaseReadinessTimestamp: document.querySelector("#releaseReadinessTimestamp"),
+  pitcherStrikeoutResearchBoard: document.querySelector("#pitcherStrikeoutResearchBoard"),
+  pitcherStrikeoutResearchRefreshButton: document.querySelector("#pitcherStrikeoutResearchRefreshButton"),
+  pitcherStrikeoutResearchTimestamp: document.querySelector("#pitcherStrikeoutResearchTimestamp"),
   oddsKeyForm: document.querySelector("#oddsKeyForm"),
   oddsApiKeyInput: document.querySelector("#oddsApiKeyInput"),
   oddsKeyStatus: document.querySelector("#oddsKeyStatus"),
@@ -2016,6 +2019,57 @@ async function loadReleaseReadiness() {
   } catch (error) {
     els.releaseReadinessBoard.innerHTML = `<p class="muted auto-update-empty">${escapeHtml(error.message)}</p>`;
     els.releaseReadinessTimestamp.textContent = "Release check failed";
+  }
+}
+
+function renderPitcherStrikeoutResearchReadiness(payload) {
+  const historical = payload?.historical ?? {};
+  const liveLineup = payload?.liveLineup ?? {};
+  const price = payload?.price ?? {};
+  const cohort = payload?.cohort ?? {};
+  const model = payload?.model ?? {};
+  const credit = payload?.credit ?? {};
+  const blockers = Array.isArray(payload?.blockers) ? payload.blockers : [];
+  const statusClass = payload?.status === "data_ready_research_only" ? "medium" : "high";
+
+  els.pitcherStrikeoutResearchTimestamp.textContent = formatDate(payload?.generatedAt);
+  els.pitcherStrikeoutResearchBoard.innerHTML = `
+    <div class="evidence-trust-boundary">
+      <span class="tag ${statusClass}">${escapeHtml(payload?.status ?? "blocked")}</span>
+      <strong>${escapeHtml(payload?.label ?? "LIVE DATA BLOCKED — ADAPTER TESTED WITH FIXTURES ONLY")}</strong>
+      <p>Permission remains <strong>${escapeHtml(payload?.permission ?? "PRICE_CHECK_ONLY")}</strong>; authorized stake is <strong>$${escapeHtml(payload?.authorizedStake ?? 0)}</strong>. Local tests and fixture adapters do not establish predictive validity.</p>
+    </div>
+    <div class="summary-grid">
+      <article><span>Historical</span><strong>${escapeHtml(historical.status ?? "missing")}</strong><small>${escapeHtml(historical.completeSeasons ?? 0)} of 5 Retrosheet seasons complete</small></article>
+      <article><span>Confirmed lineup</span><strong>${escapeHtml(liveLineup.status ?? "blocked")}</strong><small>SportsDataIO live access</small></article>
+      <article><span>Exact DK price</span><strong>${escapeHtml(price.status ?? "blocked")}</strong><small>Two-sided same-line evidence</small></article>
+      <article><span>Model</span><strong>${escapeHtml(model.status ?? "research_only")}</strong><small>${escapeHtml(model.modelId ?? "negative_binomial_pitcher_strikeouts_v1")}</small></article>
+      <article><span>Cohort</span><strong>${escapeHtml(cohort.observations ?? 0)} observations</strong><small>${escapeHtml(cohort.distinctEvents ?? 0)} distinct events / ${escapeHtml(cohort.missing ?? 0)} missing</small></article>
+      <article><span>Settlement</span><strong>${cohort.settlementCoverage === null || cohort.settlementCoverage === undefined ? "not computed (n=0)" : formatPercent(cohort.settlementCoverage)}</strong><small>${escapeHtml(cohort.settled ?? 0)} settled observations</small></article>
+      <article><span>Displayed allowance</span><strong>${escapeHtml(credit.reportedRemainingPercent ?? 98)}% reported</strong><small>Stop at ${escapeHtml(credit.stopAtPercent ?? 90)}%</small></article>
+      <article><span>Absolute credits</span><strong>${escapeHtml(credit.absoluteCredits ?? "unverified")}</strong><small>Not repository-enforced</small></article>
+    </div>
+    <div class="release-actions">
+      <h3>Current blockers</h3>
+      ${blockers.length > 0
+        ? blockers.map((blocker) => `<article><span class="tag high">blocked</span><div><strong>${escapeHtml(blocker)}</strong></div></article>`).join("")
+        : '<article><span class="tag medium">research only</span><div><strong>Data contract is complete; validation and wagering authority remain unchanged.</strong></div></article>'}
+    </div>
+  `;
+}
+
+async function loadPitcherStrikeoutResearchReadiness() {
+  els.pitcherStrikeoutResearchBoard.innerHTML = '<p class="muted auto-update-empty">Checking pitcher-strikeout data completeness...</p>';
+  try {
+    const response = await fetch("/api/research/pitcher-strikeouts/readiness");
+    const payload = await response.json();
+    if (!response.ok) {
+      throw new Error(payload.error ?? "Unable to load pitcher-strikeout research readiness.");
+    }
+    renderPitcherStrikeoutResearchReadiness(payload);
+  } catch (error) {
+    els.pitcherStrikeoutResearchBoard.innerHTML = `<p class="muted auto-update-empty">${escapeHtml(error.message)}</p>`;
+    els.pitcherStrikeoutResearchTimestamp.textContent = "Research readiness failed";
   }
 }
 
@@ -4715,6 +4769,7 @@ async function loadInitialDashboardPanels() {
     loadLiveDataHealth(),
     loadSystemAudit(),
     loadReleaseReadiness(),
+    loadPitcherStrikeoutResearchReadiness(),
     loadProviderSetup(),
     loadOddsKeyStatus(),
     loadSourceStatus("today")
@@ -5786,6 +5841,9 @@ els.systemAuditRefreshButton.addEventListener("click", () => {
 });
 els.releaseReadinessRefreshButton.addEventListener("click", () => {
   loadReleaseReadiness();
+});
+els.pitcherStrikeoutResearchRefreshButton.addEventListener("click", () => {
+  loadPitcherStrikeoutResearchReadiness();
 });
 els.providerSetupRefreshButton.addEventListener("click", () => {
   loadProviderSetup();

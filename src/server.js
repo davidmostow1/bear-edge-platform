@@ -47,6 +47,10 @@ const { fetchJson, fetchText } = require("./live/fixture-fetch.js");
 const { getSystemAudit } = require("./system-audit.js");
 const { getReleaseReadiness } = require("./release-readiness.js");
 const { getDataEdgeAudit } = require("./data-edge.js");
+const {
+  buildPitcherStrikeoutResearchReadiness,
+  readPitcherStrikeoutCohort
+} = require("./research/pitcher-strikeout-readiness.js");
 const { getOddsKeyStatus, saveOddsApiKey, validateOddsApiKey } = require("./config/odds-key-settings.js");
 const { getProviderSetupStatus } = require("./config/provider-requirements.js");
 const { saveProviderApiKey } = require("./config/provider-key-settings.js");
@@ -311,6 +315,24 @@ function createServer(options = {}) {
           syncHealth,
           operatorAuthStatus: options.operatorAuth?.getStatus(),
           statsigStatus: options.statsigControl?.getStatus()
+        });
+
+        return jsonResponse(response, 200, result);
+      }
+
+      if (request.method === "GET" && url.pathname === "/api/research/pitcher-strikeouts/readiness") {
+        const rootDir = options.settingsRootDir ?? PROJECT_ROOT;
+        const cohortState = Array.isArray(options.pitcherStrikeoutCohortRecords)
+          ? {
+              records: options.pitcherStrikeoutCohortRecords,
+              malformedLines: []
+            }
+          : readPitcherStrikeoutCohort(rootDir);
+        const result = buildPitcherStrikeoutResearchReadiness({
+          rootDir,
+          cohortRecords: cohortState.records,
+          malformedCohortLines: cohortState.malformedLines,
+          providerSetup: getProviderSetupStatus({ rootDir })
         });
 
         return jsonResponse(response, 200, result);

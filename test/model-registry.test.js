@@ -1504,6 +1504,7 @@ test("loadModelRegistry accepts retired models only with immutable report eviden
 
 test("tracked registry keeps all existing MLB Poisson models research-only", () => {
   const loaded = loadModelRegistry();
+  const poissonModels = loaded.models.filter((model) => model.modelId === "poisson_count_v1");
   const expectedMarketFamilies = [
     "batter_hits",
     "batter_runs_scored",
@@ -1512,11 +1513,11 @@ test("tracked registry keeps all existing MLB Poisson models research-only", () 
   ];
 
   assert.deepEqual(
-    loaded.models.map((model) => model.marketFamily).sort(),
+    poissonModels.map((model) => model.marketFamily).sort(),
     expectedMarketFamilies
   );
   assert.equal(loaded.policyDigest, contentDigest(loaded.promotionPolicy));
-  for (const model of loaded.models) {
+  for (const model of poissonModels) {
     assert.equal(model.modelId, "poisson_count_v1");
     assert.equal(model.modelVersion, "1.0.0");
     assert.equal(model.modelStatus, "research_only");
@@ -1535,6 +1536,19 @@ test("tracked registry keeps all existing MLB Poisson models research-only", () 
     assert.equal(model.calibrationReportDigest, null);
     assert.equal(Object.hasOwn(model, "promotedAt"), false);
   }
+
+  const pitcherStrikeoutCandidate = loaded.models.find(
+    (model) => model.modelId === "negative_binomial_pitcher_strikeouts_v1"
+  );
+  assert.equal(pitcherStrikeoutCandidate.marketFamily, "pitcher_strikeouts");
+  assert.equal(pitcherStrikeoutCandidate.modelVersion, "1.0.0");
+  assert.equal(pitcherStrikeoutCandidate.modelStatus, "research_only");
+  assert.equal(pitcherStrikeoutCandidate.trainingCutoff, null);
+  assert.equal(pitcherStrikeoutCandidate.calibrationReportId, null);
+  assert.match(
+    pitcherStrikeoutCandidate.calculationImplementation.implementationDigest,
+    /^[a-f0-9]{64}$/
+  );
 });
 
 test("portable package includes the model and operations assets", () => {

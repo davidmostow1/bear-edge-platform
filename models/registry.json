@@ -62,6 +62,42 @@
       "calibrationReportDigest": null
     },
     {
+      "modelId": "negative_binomial_pitcher_strikeouts_v1",
+      "modelVersion": "1.0.0",
+      "marketFamily": "pitcher_strikeouts",
+      "featureSet": [
+        "days_rest",
+        "line",
+        "opponent_lineup_strikeouts_per_plate_appearance",
+        "opponent_lineup_strikeouts_per_plate_appearance_vs_pitcher_hand",
+        "prior_starts",
+        "rolling_10_batters_faced",
+        "rolling_10_strikeouts_per_batter_faced",
+        "rolling_5_batters_faced",
+        "rolling_5_strikeouts_per_batter_faced",
+        "season_strikeouts_per_batter_faced",
+        "side"
+      ],
+      "dataSources": [
+        "licensed_historical_enrichment",
+        "retrosheet_historical_reconstruction",
+        "sportsdataio_fixture_only",
+        "the_odds_api_fixture_only"
+      ],
+      "trainingCutoff": null,
+      "calculationImplementation": {
+        "modules": [
+          "src/research/pitcher-strikeout-model.js"
+        ],
+        "probabilityExport": "predictNegativeBinomialProbability",
+        "version": "1.0.0",
+        "implementationDigest": "ce6a0aa05d26a356e0d55887decb9e8dfa25332d2a627b38379972eecdb51299"
+      },
+      "modelStatus": "research_only",
+      "calibrationReportId": null,
+      "calibrationReportDigest": null
+    },
+    {
       "modelId": "poisson_count_v1",
       "modelVersion": "1.0.0",
       "marketFamily": "batter_hits",

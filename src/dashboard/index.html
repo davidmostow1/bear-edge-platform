@@ -76,6 +76,7 @@
         <a href="#parlay-builder">Parlay Builder</a>
         <a href="#screenshotIntakePanel">Screenshots</a>
         <a href="#sources">Sources</a>
+        <a href="#pitcher-strikeout-research">Pitcher K Data</a>
         <a href="#release">Release</a>
         <a href="#ticket">Evaluate</a>
         <a href="#history">Log</a>
@@ -204,6 +205,23 @@
           </div>
         </div>
         <div id="releaseReadinessBoard" class="release-readiness-board"></div>
+      </section>
+
+      <section class="panel release-readiness-panel" id="pitcher-strikeout-research">
+        <div class="panel-title">
+          <div>
+            <p class="eyebrow">Preregistered research lane</p>
+            <h2>Pitcher Strikeout Data Completeness</h2>
+            <p class="panel-subtitle">Historical, confirmed-lineup, exact-price, cohort, and model evidence are shown separately. Missing evidence blocks predictions instead of being inferred.</p>
+          </div>
+          <div class="button-row">
+            <span id="pitcherStrikeoutResearchTimestamp" class="muted">Not checked yet</span>
+            <button id="pitcherStrikeoutResearchRefreshButton" type="button" class="secondary">Refresh Pitcher K Data</button>
+          </div>
+        </div>
+        <div id="pitcherStrikeoutResearchBoard" class="release-readiness-board">
+          <p class="muted">Loading pitcher-strikeout research readiness...</p>
+        </div>
       </section>
 
       <section class="panel odds-key-panel" id="odds">

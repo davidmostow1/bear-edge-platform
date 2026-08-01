@@ -757,11 +757,23 @@ test("HTTP API exposes release readiness checks", async () => {
       (entry) => entry.id === "model-calibration-registry"
     );
     assert.equal(payload.modelCalibration.registryValid, true);
-    assert.equal(payload.modelCalibration.registeredModelCount, 4);
+    assert.equal(payload.modelCalibration.registeredModelCount, 5);
     assert.equal(payload.modelCalibration.validatedModelCount, 0);
     assert.deepEqual(
       payload.modelCalibration.models.map((model) => model.marketFamily).sort(),
-      ["batter_hits", "batter_runs_scored", "batter_total_bases", "pitcher_strikeouts"]
+      [
+        "batter_hits",
+        "batter_runs_scored",
+        "batter_total_bases",
+        "pitcher_strikeouts",
+        "pitcher_strikeouts"
+      ]
+    );
+    assert.equal(
+      payload.modelCalibration.models.some(
+        (model) => model.modelId === "negative_binomial_pitcher_strikeouts_v1"
+      ),
+      true
     );
     assert.equal(payload.modelCalibration.models.every((model) => model.registryStatus === "research_only"), true);
     assert.equal(calibrationGate.status, "blocked");
