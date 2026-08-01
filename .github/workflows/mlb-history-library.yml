@@ -1,0 +1,36 @@
+name: Build MLB 2024-2025 History Library
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - "codex/sweet-bear-unified-mlb-machine-v2"
+    paths:
+      - "src/mlb/**"
+      - "src/cli/mlb-history-build.js"
+      - "test/mlb/**"
+      - ".github/workflows/mlb-history-library.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  verify-and-build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run test:mlb
+      - run: npm run mlb:history -- --seasons 2024,2025 --output-dir data/history/mlb --concurrency 8 --no-raw
+      - run: tar -czf sweet-bear-mlb-history-2024-2025.tar.gz data/history/mlb
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sweet-bear-mlb-history-2024-2025
+          path: sweet-bear-mlb-history-2024-2025.tar.gz
+          retention-days: 90
