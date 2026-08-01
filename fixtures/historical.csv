@@ -1,0 +1,4 @@
+timestamp,event_id,market_odds,model_prob,stake,result
+2024-01-01T12:00:00Z,evt1,2.5,0.48,10,1
+2024-01-02T12:00:00Z,evt2,1.8,0.60,10,0
+2024-01-03T12:00:00Z,evt3,3.0,0.40,10,0
