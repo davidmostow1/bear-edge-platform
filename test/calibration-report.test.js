@@ -11,6 +11,7 @@ const {
   chronologicalSplit
 } = require("../src/calibration/dataset.js");
 const {
+  bootstrapClusterMeanInterval,
   bootstrapMeanInterval,
   brierScore,
   expectedCalibrationError,
@@ -23,6 +24,9 @@ const {
   normalizeTwoWayNoVig
 } = require("../src/index.js");
 const { loadModelRegistry } = require("../src/calibration/model-registry.js");
+const {
+  resolveCalibrationReportById
+} = require("../src/calibration/model-evidence.js");
 const { buildCalibrationReport } = require("../src/calibration/report.js");
 
 const ROOT = path.resolve(__dirname, "..");
@@ -124,6 +128,90 @@ function approximatelyEqual(actual, expected, tolerance = 1e-12) {
   );
 }
 
+function clusterValuesByEvent(rows, values) {
+  const clusters = new Map();
+
+  rows.forEach((row, index) => {
+    const cluster = clusters.get(row.eventId) ?? [];
+    cluster.push(values[index]);
+    clusters.set(row.eventId, cluster);
+  });
+
+  return [...clusters.values()];
+}
+
+function calibrationClusterIntervals(rows, metrics, observed) {
+  const clusters = clusterValuesByEvent(rows, metrics);
+  let state = 271828 >>> 0;
+  const random = () => {
+    state ^= state << 13;
+    state ^= state >>> 17;
+    state ^= state << 5;
+    state >>>= 0;
+    return state / 0x1_0000_0000;
+  };
+  const eceValues = [];
+  const slopeValues = [];
+  const interceptValues = [];
+  let attempts = 0;
+
+  while (
+    (eceValues.length < 2000 || slopeValues.length < 2000)
+    && attempts < 20000
+  ) {
+    const sample = Array.from(
+      { length: clusters.length },
+      () => clusters[Math.floor(random() * clusters.length)]
+    ).flat();
+    if (eceValues.length < 2000) {
+      eceValues.push(expectedCalibrationError(sample, BUCKETS).value);
+    }
+    const fit = fitCalibrationLine(sample);
+    if (
+      slopeValues.length < 2000
+      && fit.converged
+      && Number.isFinite(fit.slope)
+      && Number.isFinite(fit.intercept)
+    ) {
+      slopeValues.push(fit.slope);
+      interceptValues.push(fit.intercept);
+    }
+    attempts += 1;
+  }
+
+  assert.equal(eceValues.length, 2000);
+  assert.equal(slopeValues.length, 2000);
+  assert.equal(interceptValues.length, 2000);
+
+  const interval = (values, center) => {
+    values.sort((left, right) => left - right);
+    const valueAt = (probability) => {
+      const position = (values.length - 1) * probability;
+      const lowerIndex = Math.floor(position);
+      const upperIndex = Math.ceil(position);
+      const fraction = position - lowerIndex;
+      return values[lowerIndex]
+        + fraction * (values[upperIndex] - values[lowerIndex]);
+    };
+    const result = { lower: valueAt(0.025), upper: valueAt(0.975) };
+    assert.ok(result.lower <= center);
+    assert.ok(result.upper >= center);
+    return result;
+  };
+
+  return {
+    expectedCalibrationError: interval(
+      eceValues,
+      observed.expectedCalibrationError
+    ),
+    calibrationSlope: interval(slopeValues, observed.calibrationSlope),
+    calibrationIntercept: interval(
+      interceptValues,
+      observed.calibrationIntercept
+    )
+  };
+}
+
 test("buildCalibrationReport is order-invariant, immutable, and content-addressed", () => {
   const rows = validRows();
   const snapshot = structuredClone(rows);
@@ -137,6 +225,11 @@ test("buildCalibrationReport is order-invariant, immutable, and content-addresse
   assert.equal(Object.isFrozen(first.evaluation.uncertainty.intervals), true);
   assert.equal(first.dataset.datasetDigest, manifest.datasetDigest);
   assert.equal(first.dataset.manifestDigest, contentDigest(manifest));
+  assert.equal(first.schemaVersion, "1.1.0");
+  assert.equal(
+    first.dataset.evidenceCutoffAt,
+    splitEvidenceCutoff(first, rows)
+  );
   assert.equal(first.reportDigest, contentDigest(unsigned(first)));
   assert.equal(
     first.reportId,
@@ -149,6 +242,15 @@ test("buildCalibrationReport is order-invariant, immutable, and content-addresse
     [30, 10, 10]
   );
 });
+
+function splitEvidenceCutoff(report, rows) {
+  const cutoff = Date.parse(report.dataset.splitCutoffs.evaluation);
+  return rows
+    .filter((row) => Date.parse(row.predictionAt) >= cutoff)
+    .flatMap((row) => [row.settledAt, row.closingPrice.capturedAt])
+    .sort()
+    .at(-1);
+}
 
 test("evaluation evidence uses exact metrics, buckets, baseline observations, and registered bootstrap", () => {
   const rows = validRows();
@@ -215,10 +317,40 @@ test("evaluation evidence uses exact metrics, buckets, baseline observations, an
   );
   approximatelyEqual(report.evaluation.baseline.brierScore, 0.25);
   approximatelyEqual(report.evaluation.baseline.logLoss, Math.log(2));
-  assert.equal(report.evaluation.uncertainty.method, "percentile_bootstrap");
+  assert.equal(
+    report.evaluation.uncertainty.method,
+    "event_cluster_percentile_bootstrap"
+  );
   assert.equal(report.evaluation.uncertainty.resamples, 2000);
   assert.equal(report.evaluation.uncertainty.confidenceLevel, 0.95);
   assert.equal(report.evaluation.uncertainty.seed, 271828);
+  assert.equal(report.evaluation.uncertainty.clusterUnit, "event_id");
+  assert.equal(report.evaluation.uncertainty.distinctEventCount, 10);
+  assert.equal(report.evaluation.distinctEventCount, 10);
+  assert.equal(
+    report.dataset.splitMethod,
+    "event_atomic_prediction_interval_blocks"
+  );
+  assert.equal(report.dataset.chronologicalBlockCount, 50);
+  assert.deepEqual(report.dataset.distinctEventCounts, {
+    training: 30,
+    calibration: 10,
+    evaluation: 10
+  });
+  assert.equal(
+    report.reportEvidence.splitMethod,
+    "event_atomic_prediction_interval_blocks"
+  );
+  assert.equal(report.reportEvidence.chronologicalBlockCount, 50);
+  assert.deepEqual(report.reportEvidence.distinctEventCounts, {
+    training: 30,
+    calibration: 10,
+    evaluation: 10
+  });
+  assert.equal(
+    report.reportId,
+    `calibration-${contentDigest(report.reportEvidence)}`
+  );
   assert.deepEqual(report.evaluation.uncertainty.successfulResamples, {
     expectedCalibrationError: 2000,
     calibrationSlope: 2000,
@@ -261,8 +393,158 @@ test("evaluation evidence uses exact metrics, buckets, baseline observations, an
   assert.ok(report.promotion.checks.every((check) => (
     check.evidencePath === "dataQuality"
     || check.evidencePath === "policy.registeredAt"
+    || check.evidencePath === "dataset.splitMethod"
     || check.evidencePath.startsWith("evaluation.")
   )));
+});
+
+test("evaluation uncertainty resamples complete event clusters", () => {
+  const rows = validRows();
+
+  for (let index = 40; index < rows.length; index += 2) {
+    rows[index + 1] = {
+      ...rows[index + 1],
+      eventId: rows[index].eventId,
+      eventStartAt: rows[index].eventStartAt
+    };
+  }
+
+  const split = chronologicalSplit(rows, {
+    training: 0.6,
+    calibration: 0.2,
+    evaluation: 0.2
+  });
+  const metricRows = split.evaluation.map((row) => ({
+    probability: row.predictedProbability,
+    outcome: row.outcome
+  }));
+  const brierLosses = metricRows.map((row) => brierScore([row]));
+  const logLosses = metricRows.map((row) => logLoss([row]));
+  const baselineRows = split.evaluation.map((row) => {
+    const normalized = normalizeTwoWayNoVig(
+      americanToImpliedProbability(row.price),
+      americanToImpliedProbability(row.oppositePrice)
+    );
+    return { probability: normalized.sideA, outcome: row.outcome };
+  });
+  const brierDegradation = metricRows.map((row, index) => (
+    brierScore([row]) - brierScore([baselineRows[index]])
+  ));
+  const logLossDegradation = metricRows.map((row, index) => (
+    logLoss([row]) - logLoss([baselineRows[index]])
+  ));
+  const closingLineValues = split.evaluation.map((row) => (
+    calculateClosingLineValue(row.price, row.closingPrice.price)
+  ));
+  const roiValues = split.evaluation.map((row) => {
+    if (row.outcome === 0) {
+      return -1;
+    }
+    return row.price > 0 ? row.price / 100 : 100 / Math.abs(row.price);
+  });
+  const expectedBrier = bootstrapClusterMeanInterval(
+    clusterValuesByEvent(split.evaluation, brierLosses),
+    { samples: 2000, confidence: 0.95, seed: 271828 }
+  );
+  const expectedLogLoss = bootstrapClusterMeanInterval(
+    clusterValuesByEvent(split.evaluation, logLosses),
+    { samples: 2000, confidence: 0.95, seed: 271828 }
+  );
+  const expectedBrierDegradation = bootstrapClusterMeanInterval(
+    clusterValuesByEvent(split.evaluation, brierDegradation),
+    { samples: 2000, confidence: 0.95, seed: 271828 }
+  );
+  const expectedLogLossDegradation = bootstrapClusterMeanInterval(
+    clusterValuesByEvent(split.evaluation, logLossDegradation),
+    { samples: 2000, confidence: 0.95, seed: 271828 }
+  );
+  const expectedClosingLineValue = bootstrapClusterMeanInterval(
+    clusterValuesByEvent(split.evaluation, closingLineValues),
+    { samples: 2000, confidence: 0.95, seed: 271828 }
+  );
+  const expectedRoi = bootstrapClusterMeanInterval(
+    clusterValuesByEvent(split.evaluation, roiValues),
+    { samples: 2000, confidence: 0.95, seed: 271828 }
+  );
+  const report = buildCalibrationReport(rows, OPTIONS);
+  const expectedCalibration = calibrationClusterIntervals(
+    split.evaluation,
+    metricRows,
+    {
+      expectedCalibrationError: report.evaluation.expectedCalibrationError,
+      calibrationSlope: report.evaluation.calibration.slope,
+      calibrationIntercept: report.evaluation.calibration.intercept
+    }
+  );
+
+  assert.equal(
+    report.evaluation.uncertainty.method,
+    "event_cluster_percentile_bootstrap"
+  );
+  assert.equal(report.evaluation.uncertainty.clusterUnit, "event_id");
+  assert.equal(report.evaluation.uncertainty.distinctEventCount, 5);
+  assert.equal(report.evaluation.distinctEventCount, 5);
+  assert.deepEqual(report.evaluation.uncertainty.intervals.brierScore, {
+    lower: expectedBrier.lower,
+    upper: expectedBrier.upper
+  });
+  assert.deepEqual(report.evaluation.uncertainty.intervals.logLoss, {
+    lower: expectedLogLoss.lower,
+    upper: expectedLogLoss.upper
+  });
+  assert.deepEqual(
+    report.evaluation.uncertainty.intervals.expectedCalibrationError,
+    expectedCalibration.expectedCalibrationError
+  );
+  assert.deepEqual(
+    report.evaluation.uncertainty.intervals.calibrationSlope,
+    expectedCalibration.calibrationSlope
+  );
+  assert.deepEqual(
+    report.evaluation.uncertainty.intervals.calibrationIntercept,
+    expectedCalibration.calibrationIntercept
+  );
+  assert.deepEqual(report.evaluation.baseline.brierScoreDegradationInterval, {
+    lower: expectedBrierDegradation.lower,
+    upper: expectedBrierDegradation.upper
+  });
+  assert.deepEqual(report.evaluation.baseline.logLossDegradationInterval, {
+    lower: expectedLogLossDegradation.lower,
+    upper: expectedLogLossDegradation.upper
+  });
+  assert.deepEqual(report.evaluation.closingLineValue, {
+    mean: expectedClosingLineValue.mean,
+    interval: {
+      lower: expectedClosingLineValue.lower,
+      upper: expectedClosingLineValue.upper
+    }
+  });
+  assert.deepEqual(report.evaluation.roi, {
+    mean: expectedRoi.mean,
+    interval: {
+      lower: expectedRoi.lower,
+      upper: expectedRoi.upper
+    }
+  });
+});
+
+test("evaluation uncertainty refuses multiple rows from only one event", () => {
+  const rows = validRows();
+  const event = rows[40];
+
+  for (let index = 40; index < rows.length; index += 1) {
+    rows[index] = {
+      ...rows[index],
+      eventId: event.eventId,
+      eventStartAt: event.eventStartAt,
+      participantId: `single-event-participant-${index}`
+    };
+  }
+
+  assert.throws(
+    () => buildCalibrationReport(rows, OPTIONS),
+    /at least two distinct events/i
+  );
 });
 
 test("generated evidence satisfies the strict Task 3 report contract", () => {
@@ -304,6 +586,62 @@ test("generated evidence satisfies the strict Task 3 report contract", () => {
   assert.match(
     loaded.models[0].calculationImplementation.implementationDigest,
     /^[a-f0-9]{64}$/
+  );
+  assert.equal(
+    resolveCalibrationReportById(report.reportId, {
+      registryPath,
+      reportsById: { [report.reportId]: report }
+    }),
+    report
+  );
+
+  const researchRegistry = {
+    ...tracked,
+    models: [{ ...shadow, modelStatus: "research_only" }]
+  };
+  fs.writeFileSync(
+    registryPath,
+    `${JSON.stringify(researchRegistry, null, 2)}\n`,
+    "utf8"
+  );
+  assert.equal(
+    resolveCalibrationReportById(report.reportId, {
+      registryPath,
+      reportsById: { [report.reportId]: report }
+    }),
+    report
+  );
+
+  const missingCutoff = /** @type {Record<string, any>} */ (
+    structuredClone(report)
+  );
+  delete missingCutoff.dataset.evidenceCutoffAt;
+  missingCutoff.reportEvidence.datasetEvidenceDigest = contentDigest(
+    missingCutoff.dataset
+  );
+  missingCutoff.reportId = `calibration-${contentDigest(missingCutoff.reportEvidence)}`;
+  const { reportDigest: ignoredDigest, ...missingCutoffUnsigned } = missingCutoff;
+  void ignoredDigest;
+  missingCutoff.reportDigest = contentDigest(missingCutoffUnsigned);
+  const missingCutoffRegistry = {
+    ...tracked,
+    models: [{
+      ...shadow,
+      calibrationReportId: missingCutoff.reportId,
+      calibrationReportDigest: missingCutoff.reportDigest
+    }]
+  };
+  fs.writeFileSync(
+    registryPath,
+    `${JSON.stringify(missingCutoffRegistry, null, 2)}\n`,
+    "utf8"
+  );
+  assert.throws(
+    () => loadModelRegistry({
+      registryPath,
+      reportsById: { [missingCutoff.reportId]: missingCutoff }
+    }),
+    /dataset\.evidenceCutoffAt/
   );
 });
 

@@ -3,9 +3,10 @@ const path = require("node:path");
 
 const { canonicalStringify } = require("./canonical-json.js");
 const {
-  AUDIT_RECORD_SCHEMA_VERSION,
+  isSupportedAuditRecordSchemaVersion,
   validateAuditRecord
 } = require("./record-contract.js");
+const { resolveModelEvidence } = require("../calibration/model-evidence.js");
 const { enqueueRecord } = require("../sync/outbox.js");
 
 const DEFAULT_AUTHORITATIVE_LEDGER_PATH = path.resolve(
@@ -80,6 +81,7 @@ async function readAuthoritativeLedger(options = {}) {
         ledgerPath,
         records: [],
         malformedLines: [],
+        legacyRecords: [],
         duplicateIds: [],
         digestConflicts: [],
         invalidRecords: []
@@ -91,6 +93,7 @@ async function readAuthoritativeLedger(options = {}) {
 
   const records = [];
   const malformedLines = [];
+  const legacyRecords = [];
   const duplicateIds = [];
   const digestConflicts = [];
   const invalidRecords = [];
@@ -116,7 +119,7 @@ async function readAuthoritativeLedger(options = {}) {
 
     records.push(record);
 
-    if (record?.schemaVersion === AUDIT_RECORD_SCHEMA_VERSION) {
+    if (isSupportedAuditRecordSchemaVersion(record?.schemaVersion)) {
       const validation = validateAuditRecord(record);
 
       if (!validation.valid) {
@@ -126,6 +129,12 @@ async function readAuthoritativeLedger(options = {}) {
           issues: validation.issues
         });
       }
+    } else {
+      legacyRecords.push({
+        lineNumber,
+        id: typeof record?.id === "string" ? record.id : null,
+        schemaVersion: record?.schemaVersion ?? null
+      });
     }
 
     if (typeof record?.id !== "string" || !record.id.trim()) {
@@ -165,6 +174,7 @@ async function readAuthoritativeLedger(options = {}) {
     ledgerPath,
     records,
     malformedLines,
+    legacyRecords,
     duplicateIds,
     digestConflicts,
     invalidRecords
@@ -177,6 +187,18 @@ async function appendAuthoritativeRecord(record, options = {}) {
 
   const persistence = await enqueueAppend(ledgerPath, async () => {
     const inspection = await readAuthoritativeLedger({ ledgerPath, fsImpl });
+    const integrityIssueCount = inspection.malformedLines.length
+      + inspection.duplicateIds.length
+      + inspection.digestConflicts.length
+      + inspection.invalidRecords.length;
+
+    if (integrityIssueCount > 0) {
+      throw new AuthoritativeLedgerError(
+        "LEDGER_INTEGRITY_BLOCKED",
+        `Authoritative ledger writes are blocked until ${integrityIssueCount} existing integrity issue(s) are resolved.`
+      );
+    }
+
     const sameId = inspection.records.filter((existing) => existing?.id === record?.id);
     const conflicting = sameId.find(
       (existing) => existing?.contentDigest !== record?.contentDigest
@@ -212,6 +234,29 @@ async function appendAuthoritativeRecord(record, options = {}) {
           .map((issue) => `${issue.path}: ${issue.message}`)
           .join("; ")}`
       );
+    }
+
+    if (record.recordType === "evaluation" && record.verdict === "BET") {
+      const resolveModelEvidenceImpl = options.resolveModelEvidenceImpl ?? resolveModelEvidence;
+      const modelEvidence = resolveModelEvidenceImpl({
+        modelId: record.model.modelId,
+        modelVersion: record.model.modelVersion,
+        marketFamily: record.market.marketFamily,
+        callerCalibrationStatus: record.model.modelStatus,
+        probabilitySource: "authoritative_record"
+      }, options.modelRegistryOptions);
+      const modelAuthorityMatches = modelEvidence?.validated === true
+        && modelEvidence.modelId === record.model.modelId
+        && modelEvidence.modelVersion === record.model.modelVersion
+        && modelEvidence.marketFamily === record.market.marketFamily
+        && modelEvidence.calibrationReportId === record.model.calibrationReportId;
+
+      if (!modelAuthorityMatches) {
+        throw new AuthoritativeLedgerError(
+          "LEDGER_MODEL_AUTHORITY_BLOCKED",
+          "A BET record requires an exact validated model-registry entry and calibration report."
+        );
+      }
     }
 
     try {

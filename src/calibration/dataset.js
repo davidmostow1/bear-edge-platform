@@ -30,6 +30,7 @@ const POLICY = Object.freeze({
   calibration: 0.2,
   evaluation: 0.2
 });
+const SPLIT_METHOD = "event_atomic_prediction_interval_blocks";
 
 /**
  * @param {unknown} value
@@ -627,7 +628,10 @@ function nearestBoundary(cumulativeCounts, target, minimumIndex, maximumIndex) {
  *   calibration: object[],
  *   evaluation: object[],
  *   cutoffs: { training: string, calibration: string, evaluation: string },
- *   actualFractions: { training: number, calibration: number, evaluation: number }
+ *   actualFractions: { training: number, calibration: number, evaluation: number },
+ *   splitMethod: string,
+ *   chronologicalBlockCount: number,
+ *   distinctEventCounts: { training: number, calibration: number, evaluation: number }
  * }}
  */
 function chronologicalSplit(rows, policy) {
@@ -644,20 +648,49 @@ function chronologicalSplit(rows, policy) {
   }
 
   const sortedRows = rows.map(cloneJson).sort(compareRows);
-  const groups = [];
+  const eventsById = new Map();
 
   for (const row of sortedRows) {
+    const event = eventsById.get(row.eventId) ?? {
+      eventId: row.eventId,
+      firstPredictionAt: row.predictionAt,
+      lastPredictionAt: row.predictionAt,
+      rows: []
+    };
+    event.lastPredictionAt = row.predictionAt;
+    event.rows.push(row);
+    eventsById.set(row.eventId, event);
+  }
+
+  const eventIntervals = [...eventsById.values()].sort((left, right) => (
+    compareStrings(left.firstPredictionAt, right.firstPredictionAt)
+    || compareStrings(left.lastPredictionAt, right.lastPredictionAt)
+    || compareStrings(left.eventId, right.eventId)
+  ));
+  const groups = [];
+
+  for (const event of eventIntervals) {
     const previous = groups[groups.length - 1];
-    if (previous && previous.predictionAt === row.predictionAt) {
-      previous.rows.push(row);
+    if (previous && event.firstPredictionAt <= previous.lastPredictionAt) {
+      previous.lastPredictionAt = (
+        event.lastPredictionAt > previous.lastPredictionAt
+          ? event.lastPredictionAt
+          : previous.lastPredictionAt
+      );
+      previous.rows.push(...event.rows);
+      previous.rows.sort(compareRows);
     } else {
-      groups.push({ predictionAt: row.predictionAt, rows: [row] });
+      groups.push({
+        firstPredictionAt: event.firstPredictionAt,
+        lastPredictionAt: event.lastPredictionAt,
+        rows: [...event.rows]
+      });
     }
   }
 
   if (groups.length < 3) {
     throw new TypeError(
-      "Chronological split requires at least three distinct prediction timestamps"
+      "Chronological split requires at least three distinct prediction timestamps in non-overlapping event time blocks"
     );
   }
 
@@ -703,6 +736,13 @@ function chronologicalSplit(rows, policy) {
       training: training.length / sortedRows.length,
       calibration: calibration.length / sortedRows.length,
       evaluation: evaluation.length / sortedRows.length
+    },
+    splitMethod: SPLIT_METHOD,
+    chronologicalBlockCount: groups.length,
+    distinctEventCounts: {
+      training: new Set(training.map((row) => row.eventId)).size,
+      calibration: new Set(calibration.map((row) => row.eventId)).size,
+      evaluation: new Set(evaluation.map((row) => row.eventId)).size
     }
   };
 }

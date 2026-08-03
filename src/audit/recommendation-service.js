@@ -7,6 +7,15 @@ const {
 const { canonicalStringify, contentDigest } = require("./canonical-json.js");
 const { createEvaluationRecord } = require("./record-contract.js");
 
+const MARKET_PERMISSION_BLOCKERS = new Set([
+  "FUTURE_MARKET_TIMESTAMP",
+  "INVALID_MARKET_TIMESTAMP",
+  "MARKET_DISAGREEMENT",
+  "MISSING_MARKET_COUNTERPART",
+  "MISSING_MARKET_TIMESTAMP",
+  "STALE_MARKET_PRICE"
+]);
+
 function finiteOrNull(value) {
   return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
@@ -74,14 +83,40 @@ function resolveModel(target) {
 }
 
 function resolvePermission(result, target, context) {
-  if (context.permission) {
+  if (context.permission && context.permission !== "VERIFIED_BETS_ALLOWED") {
     return context.permission;
   }
 
+  const executionBookmaker = String(result.executionBookmaker ?? "").trim().toLowerCase();
+  const offeredBookmaker = String(target.odds?.bookmaker?.key ?? "").trim().toLowerCase();
+  const priceTimestamp = target.odds?.marketContext?.offeredLastUpdate;
+  const priceTimestampMs = Date.parse(priceTimestamp ?? "");
+  const capturedAtMs = Date.parse(result.fetchedAt ?? "");
+  const maxMarketAgeMinutes = Number(
+    target.evaluation?.stakePolicy?.maxMarketAgeMinutes ??
+    target.ticketDraft?.livePolicy?.maxMarketAgeMinutes ??
+    10
+  );
+  const marketAgeMinutes = (capturedAtMs - priceTimestampMs) / 60000;
+  const riskFlags = [
+    ...(target.riskFlags ?? []),
+    ...(target.evaluation?.riskFlags ?? [])
+  ];
+  const hasBlockingRisk = riskFlags.some((flag) => MARKET_PERMISSION_BLOCKERS.has(flag.code));
   const verifiedPrice = result.sourceMode === "official_stats_plus_verified_odds" &&
     target.status === "priced" &&
-    target.odds?.bookmaker?.key &&
-    target.odds?.marketContext?.offeredLastUpdate;
+    executionBookmaker.length > 0 &&
+    offeredBookmaker === executionBookmaker &&
+    target.odds?.selectionMethod === "required_bookmaker_price" &&
+    finiteOrNull(target.odds?.marketOdds) !== null &&
+    finiteOrNull(target.odds?.oppositeOdds) !== null &&
+    Number.isFinite(priceTimestampMs) &&
+    Number.isFinite(capturedAtMs) &&
+    Number.isFinite(maxMarketAgeMinutes) &&
+    maxMarketAgeMinutes > 0 &&
+    marketAgeMinutes >= 0 &&
+    marketAgeMinutes <= maxMarketAgeMinutes &&
+    !hasBlockingRisk;
 
   return verifiedPrice ? "VERIFIED_BETS_ALLOWED" : "PRICE_CHECK_ONLY";
 }

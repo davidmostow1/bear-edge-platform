@@ -9,7 +9,7 @@ const { evaluateLiveTicket } = require("../src/live/evaluate-live-ticket.js");
 const { parseArgs: parseEvaluateLiveArgs } = require("../src/cli/evaluate-live.js");
 const { LiveDataCache } = require("../src/live/cache.js");
 const { fetchJson } = require("../src/live/fixture-fetch.js");
-const { evaluateLiveLeg } = require("../src/live/estimate-prop.js");
+const { estimateCountProbability, evaluateLiveLeg } = require("../src/live/estimate-prop.js");
 const { validateLiveTicket } = require("../src/validate-live-ticket.js");
 
 function freshMarketContext() {
@@ -50,6 +50,41 @@ test("validateLiveTicket accepts a 2-leg alt-prop parlay", () => {
   assert.equal(ticket.legs.length, 2);
   assert.equal(ticket.legs[0].modelProbabilityOverride, 0.58);
   assert.equal(ticket.legs[0].calibrationStatus, "research_only");
+});
+
+test("validateLiveTicket rejects integer count lines until push-aware modeling exists", () => {
+  assert.throws(
+    () => validateLiveTicket({
+      kind: "single",
+      bankroll: 1000,
+      legs: [
+        {
+          id: "integer-strikeout-line",
+          provider: "mlb",
+          marketType: "prop",
+          side: "under",
+          line: 5,
+          marketOdds: -110,
+          source: { playerId: 1, statGroup: "pitching", statKey: "strikeOuts" }
+        }
+      ]
+    }),
+    (error) => {
+      const issues = /** @type {{issues: Array<{path: string, message: string}>}} */ (error).issues;
+
+      assert.ok(issues.some((issue) => (
+        issue.path === "legs[0].line" && issue.message.includes("half-point")
+      )));
+      return true;
+    }
+  );
+});
+
+test("count probability refuses integer lines that contain a push outcome", () => {
+  assert.throws(
+    () => estimateCountProbability({ mean: 5.2, line: 5, side: "under" }),
+    /push-aware modeling/i
+  );
 });
 
 test("validateLiveTicket preserves and validates parlay-level staking controls", () => {
@@ -159,8 +194,8 @@ test("caller-supplied validated status cannot override a research-only registry 
     callerCalibrationStatus: "validated",
     probabilitySource: "caller_probability_override",
     registryStatus: "research_only",
-    policyVersion: "1.0.0",
-    policyDigest: "bb8f5bd702648894e8e21be04d6d08024645821d83c4bbacb40c872657830df7",
+    policyVersion: "1.2.0",
+    policyDigest: "ee24c6dc23dfa5cf9384d0bb595193b41903024e4e5959e54694800a2cb4226a",
     calibrationReportId: null,
     calibrationReportDigest: null,
     validated: false
@@ -943,6 +978,7 @@ test("live CLI evaluates stdin and persists an authoritative record", () => {
   const logPath = path.join(tempDir, "decision_log.jsonl");
   const env = {
     ...process.env,
+    NODE_ENV: "test",
     BEAR_EDGE_TEST_MODE: "1"
   };
   const command = spawnSync(
@@ -994,7 +1030,7 @@ test("live CLI evaluates stdin and persists an authoritative record", () => {
   assert.equal(output.logPath, logPath);
   assert.match(output.recordId, /^eval_/);
   assert.match(output.contentDigest, /^[a-f0-9]{64}$/);
-  assert.equal(persisted.schemaVersion, "2.0.0");
+  assert.equal(persisted.schemaVersion, "2.1.0");
   assert.equal(persisted.id, output.recordId);
 });
 
@@ -1010,6 +1046,7 @@ test("watch CLI can run a single evaluation iteration", () => {
   const logPath = path.join(tempDir, "decision_log.jsonl");
   const env = {
     ...process.env,
+    NODE_ENV: "test",
     BEAR_EDGE_TEST_MODE: "1"
   };
   const command = spawnSync(

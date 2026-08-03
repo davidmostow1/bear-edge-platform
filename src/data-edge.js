@@ -11,7 +11,9 @@ function findProvider(providerSetup, providerId) {
 }
 
 function compactWarnings(warnings) {
-  return Array.from(new Set(Array.isArray(warnings) ? warnings.map(safeErrorMessage) : [])).slice(0, 5);
+  return Array.from(new Set(
+    Array.isArray(warnings) ? warnings.map((warning) => safeErrorMessage(warning)) : []
+  )).slice(0, 5);
 }
 
 function classifyOddsReadiness({ oddsProvider, liveData, bestTargets }) {
@@ -40,13 +42,23 @@ function classifyOddsReadiness({ oddsProvider, liveData, bestTargets }) {
   return "price_check_only";
 }
 
-function betCallPermission({ oddsStatus, liveData, bestTargets }) {
+function resolveBetCallPermission({ oddsStatus, liveData, bestTargets }) {
   if (!liveData?.requirements?.officialScoreboards) {
     return "WAIT";
   }
 
   if (oddsStatus === "verified") {
-    return "VERIFIED_BETS_ALLOWED";
+    const candidates = [
+      ...(Array.isArray(bestTargets?.best) ? bestTargets.best : []),
+      ...(Array.isArray(bestTargets?.calibrationCandidates) ? bestTargets.calibrationCandidates : [])
+    ];
+    const qualifiedBet = candidates.some((candidate) =>
+      candidate?.status === "priced" &&
+      candidate?.modelEvidence?.validated === true &&
+      candidate?.evaluation?.verdict === "BET"
+    );
+
+    return qualifiedBet ? "VERIFIED_BETS_ALLOWED" : "WAIT";
   }
 
   if (Number(bestTargets?.summary?.candidates ?? 0) > 0 || (Array.isArray(bestTargets?.best) && bestTargets.best.length > 0)) {
@@ -213,7 +225,7 @@ async function getDataEdgeAudit(options = {}) {
     requiredBookmaker: options.bookmakers ?? "draftkings"
   });
   const permission = oddsEvidence.permission === "VERIFIED_BETS_ALLOWED"
-    ? betCallPermission({ oddsStatus, liveData, bestTargets })
+    ? resolveBetCallPermission({ oddsStatus, liveData, bestTargets })
     : oddsEvidence.permission;
 
   return {
@@ -286,5 +298,6 @@ async function getDataEdgeAudit(options = {}) {
 module.exports = {
   assessOddsEvidence,
   getDataEdgeAudit,
-  classifyOddsReadiness
+  classifyOddsReadiness,
+  resolveBetCallPermission
 };

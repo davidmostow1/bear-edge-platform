@@ -44,6 +44,131 @@ const SETTLEMENT_INPUT_SCHEMA = Object.freeze({
   }
 });
 
+const VERIFIED_SOURCE_INPUT_SCHEMA = Object.freeze({
+  type: "object",
+  additionalProperties: false,
+  required: [
+    "provider",
+    "sourceType",
+    "sourceLocator",
+    "capturedAt",
+    "sourceTime",
+    "digest",
+    "verificationStatus"
+  ],
+  properties: {
+    provider: { type: "string", minLength: 1 },
+    sourceType: { type: "string", minLength: 1 },
+    sourceLocator: { type: "string", minLength: 1 },
+    capturedAt: { type: "string", format: "date-time" },
+    sourceTime: { type: "string", format: "date-time" },
+    digest: { type: "string", pattern: "^[a-f0-9]{64}$" },
+    verificationStatus: { type: "string", minLength: 1 }
+  }
+});
+
+const NOTES_INPUT_SCHEMA = Object.freeze({
+  oneOf: [
+    { type: "string" },
+    { type: "array", items: { type: "string" } }
+  ]
+});
+
+const PREDICTION_OUTCOME_INPUT_SCHEMA = Object.freeze({
+  title: "Bear Edge Prediction Outcome Input",
+  type: "object",
+  additionalProperties: false,
+  required: [
+    "evaluationId",
+    "supersedesId",
+    "outcome",
+    "resolvedAt",
+    "eventResult",
+    "marketResult",
+    "source"
+  ],
+  properties: {
+    evaluationId: { type: "string", minLength: 1 },
+    supersedesId: {
+      oneOf: [
+        { type: "null" },
+        {
+          type: "string",
+          pattern: "^outcome_[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$"
+        }
+      ]
+    },
+    outcome: { type: "string", enum: ["win", "loss", "push", "void"] },
+    resolvedAt: { type: "string", format: "date-time" },
+    eventResult: {
+      type: "object",
+      additionalProperties: false,
+      required: ["status", "homeScore", "awayScore"],
+      properties: {
+        status: { const: "final" },
+        homeScore: { type: ["integer", "null"], minimum: 0, maximum: 2147483647 },
+        awayScore: { type: ["integer", "null"], minimum: 0, maximum: 2147483647 }
+      }
+    },
+    marketResult: {
+      type: "object",
+      additionalProperties: false,
+      required: ["observedValue", "unit"],
+      properties: {
+        observedValue: { type: ["number", "null"] },
+        unit: { type: "string", minLength: 1 }
+      }
+    },
+    source: VERIFIED_SOURCE_INPUT_SCHEMA,
+    notes: NOTES_INPUT_SCHEMA
+  }
+});
+
+const CLOSING_PRICE_INPUT_SCHEMA = Object.freeze({
+  title: "Bear Edge Closing Price Input",
+  type: "object",
+  additionalProperties: false,
+  required: ["evaluationId", "supersedesId", "price", "source"],
+  properties: {
+    evaluationId: { type: "string", minLength: 1 },
+    supersedesId: {
+      oneOf: [
+        { type: "null" },
+        {
+          type: "string",
+          pattern: "^close_[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$"
+        }
+      ]
+    },
+    price: {
+      type: "object",
+      additionalProperties: false,
+      required: ["sportsbook", "marketOdds", "oppositeOdds", "marketClosedAt", "isFinal"],
+      properties: {
+        sportsbook: { type: "string", minLength: 1 },
+        marketOdds: {
+          type: "integer",
+          anyOf: [
+            { minimum: -100000, maximum: -100 },
+            { minimum: 100, maximum: 100000 }
+          ]
+        },
+        oppositeOdds: {
+          type: "integer",
+          anyOf: [
+            { minimum: -100000, maximum: -100 },
+            { minimum: 100, maximum: 100000 }
+          ]
+        },
+        marketClosedAt: { type: "string", format: "date-time" },
+        isFinal: { const: true }
+      }
+    },
+    source: VERIFIED_SOURCE_INPUT_SCHEMA,
+    notes: NOTES_INPUT_SCHEMA
+  }
+});
+
 const AMENDMENT_INPUT_SCHEMA = Object.freeze({
   title: "Bear Edge Amendment Input",
   type: "object",
@@ -181,8 +306,10 @@ module.exports = {
   AUDIT_RECORD_SCHEMA,
   BET_DECISION_SCHEMA,
   BET_INPUT_SCHEMA,
+  CLOSING_PRICE_INPUT_SCHEMA,
   LIVE_DECISION_SCHEMA,
   LIVE_TICKET_SCHEMA,
+  PREDICTION_OUTCOME_INPUT_SCHEMA,
   RESEARCH_PACKET_SCHEMA,
   SETTLEMENT_INPUT_SCHEMA
 };

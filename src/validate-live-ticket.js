@@ -235,6 +235,14 @@ function validateLiveLeg(leg, index, issues) {
       ? undefined
       : readNumber(leg.oppositeOdds, `legs[${index}].oppositeOdds`, issues, { disallowZero: true });
 
+  if (line !== null && Number.isInteger(line)) {
+    pushIssue(
+      issues,
+      `legs[${index}].line`,
+      "Expected a half-point count line; integer lines require push-aware modeling."
+    );
+  }
+
   if (typeof leg.id !== "string" || !leg.id.trim()) {
     pushIssue(issues, `legs[${index}].id`, "Expected a non-empty string.");
   }

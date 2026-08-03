@@ -1,10 +1,11 @@
 {
   "schemaVersion": "1.0.0",
-  "policyVersion": "1.0.0",
-  "policyRegisteredAt": "2026-07-17T09:23:53.000Z",
-  "policyDigest": "bb8f5bd702648894e8e21be04d6d08024645821d83c4bbacb40c872657830df7",
+  "policyVersion": "1.2.0",
+  "policyRegisteredAt": "2026-07-23T03:13:15.000Z",
+  "policyDigest": "ee24c6dc23dfa5cf9384d0bb595193b41903024e4e5959e54694800a2cb4226a",
   "promotionPolicy": {
     "minimumSettledPredictions": 500,
+    "minimumDistinctEvents": 100,
     "minimumBucketObservations": 100,
     "minimumSettlementCoverage": 0.95,
     "maximumExpectedCalibrationError": 0.03,
@@ -26,7 +27,8 @@
       "method": "two_way_proportional_normalization",
       "methodVersion": "1.0.0"
     },
-    "requiredUncertaintyMethod": "percentile_bootstrap",
+    "requiredSplitMethod": "event_atomic_prediction_interval_blocks",
+    "requiredUncertaintyMethod": "event_cluster_percentile_bootstrap",
     "minimumBootstrapResamples": 2000,
     "minimumConfidenceLevel": 0.95
   },

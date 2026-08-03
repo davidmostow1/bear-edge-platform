@@ -4,7 +4,10 @@ const path = require("node:path");
 const { contentDigest } = require("../audit/canonical-json.js");
 
 const REGISTRY_SCHEMA_VERSION = "1.0.0";
-const REPORT_SCHEMA_VERSION = "1.0.0";
+const REPORT_SCHEMA_VERSIONS = new Set(["1.0.0", "1.1.0"]);
+const REQUIRED_SPLIT_METHOD = "event_atomic_prediction_interval_blocks";
+const REQUIRED_UNCERTAINTY_METHOD = "event_cluster_percentile_bootstrap";
+const REQUIRED_UNCERTAINTY_CLUSTER_UNIT = "event_id";
 const MODEL_STATUSES = Object.freeze([
   "research_only",
   "shadow",
@@ -25,6 +28,7 @@ const REGISTRY_FIELDS = new Set([
 ]);
 const POLICY_FIELDS = new Set([
   "minimumSettledPredictions",
+  "minimumDistinctEvents",
   "minimumBucketObservations",
   "minimumSettlementCoverage",
   "maximumExpectedCalibrationError",
@@ -35,9 +39,16 @@ const POLICY_FIELDS = new Set([
   "requireNonNegativeClosingLineValueInterval",
   "reliabilityBucketBoundaries",
   "requiredBaseline",
+  "requiredSplitMethod",
   "requiredUncertaintyMethod",
   "minimumBootstrapResamples",
   "minimumConfidenceLevel"
+]);
+const REPORT_POLICY_FIELDS = new Set([
+  "policyVersion",
+  "policyDigest",
+  "registeredAt",
+  "thresholds"
 ]);
 const REQUIRED_BASELINE_FIELDS = new Set([
   "baselineId",
@@ -81,6 +92,42 @@ const DATA_QUALITY_FINDING_FIELDS = new Set([
   "count",
   "disposition",
   "detail"
+]);
+const SPLIT_SUMMARY_FIELDS = new Set([
+  "predictionCount",
+  "settledCount",
+  "settlementCoverage",
+  "settledObservationSetDigest",
+  "brierScore",
+  "logLoss",
+  "expectedCalibrationError",
+  "calibration"
+]);
+const SPLIT_CALIBRATION_FIELDS = new Set([
+  "slope",
+  "intercept",
+  "converged",
+  "iterations",
+  "reliability"
+]);
+const REPORT_EVIDENCE_FIELDS = new Set([
+  "reportSchemaVersion",
+  "evaluationStartedAt",
+  "manifestDigest",
+  "datasetDigest",
+  "identityDigest",
+  "policyDigest",
+  "policyEvidenceDigest",
+  "datasetEvidenceDigest",
+  "promotionPolicy",
+  "splitCutoffs",
+  "splitMethod",
+  "chronologicalBlockCount",
+  "distinctEventCounts",
+  "trainingDigest",
+  "calibrationDigest",
+  "evaluationDigest",
+  "dataQualityDigest"
 ]);
 const DATA_QUALITY_DISPOSITIONS = new Set([
   "resolved",
@@ -209,10 +256,24 @@ function validatePromotionPolicy(policy) {
     }
   }
 
-  for (const field of ["minimumSettledPredictions", "minimumBucketObservations"]) {
+  for (const field of [
+    "minimumSettledPredictions",
+    "minimumDistinctEvents",
+    "minimumBucketObservations"
+  ]) {
     if (!finiteInteger(policy[field]) || policy[field] < 1) {
       throw new TypeError(`promotionPolicy.${field} must be a positive integer.`);
     }
+  }
+  if (policy.minimumDistinctEvents < 2) {
+    throw new TypeError(
+      "promotionPolicy.minimumDistinctEvents must be at least two."
+    );
+  }
+  if (policy.minimumDistinctEvents > policy.minimumSettledPredictions) {
+    throw new TypeError(
+      "promotionPolicy.minimumDistinctEvents cannot exceed minimumSettledPredictions."
+    );
   }
 
   if (
@@ -289,9 +350,14 @@ function validatePromotionPolicy(policy) {
 
   validateRequiredBaseline(policy.requiredBaseline);
 
-  if (!validIdentity(policy.requiredUncertaintyMethod)) {
+  if (policy.requiredSplitMethod !== REQUIRED_SPLIT_METHOD) {
     throw new TypeError(
-      "promotionPolicy.requiredUncertaintyMethod must be a non-empty trimmed string."
+      `promotionPolicy.requiredSplitMethod must be ${REQUIRED_SPLIT_METHOD}.`
+    );
+  }
+  if (policy.requiredUncertaintyMethod !== REQUIRED_UNCERTAINTY_METHOD) {
+    throw new TypeError(
+      `promotionPolicy.requiredUncertaintyMethod must be ${REQUIRED_UNCERTAINTY_METHOD}.`
     );
   }
   if (
@@ -487,6 +553,10 @@ function evaluatePromotion(report, policy) {
   const settledCount = finiteInteger(evaluation.settledCount)
     ? evaluation.settledCount
     : null;
+  const distinctEventCount = finiteInteger(evaluation.distinctEventCount)
+    ? evaluation.distinctEventCount
+    : null;
+  const splitMethod = source.dataset?.splitMethod;
   const reportedSettlementCoverage = nullableFinite(evaluation.settlementCoverage);
   const countsAreConsistent = (
     predictionCount !== null
@@ -518,6 +588,27 @@ function evaluatePromotion(report, policy) {
       operator: ">=",
       threshold: policy.minimumSettledPredictions,
       evidencePath: "evaluation.settledCount"
+    },
+    {
+      id: "minimumDistinctEvents",
+      passed: (
+        countsAreConsistent
+        && distinctEventCount !== null
+        && distinctEventCount >= policy.minimumDistinctEvents
+        && distinctEventCount <= settledCount
+      ),
+      actual: distinctEventCount,
+      operator: ">=",
+      threshold: policy.minimumDistinctEvents,
+      evidencePath: "evaluation.distinctEventCount"
+    },
+    {
+      id: "registeredSplitMethod",
+      passed: splitMethod === policy.requiredSplitMethod,
+      actual: validIdentity(splitMethod) ? splitMethod : null,
+      operator: "===",
+      threshold: policy.requiredSplitMethod,
+      evidencePath: "dataset.splitMethod"
     },
     {
       id: "minimumBucketObservations",
@@ -789,6 +880,21 @@ function validateUncertaintyEvidence(evaluation, policy) {
       "report.evaluation.uncertainty.method must match the registered policy."
     );
   }
+  if (uncertainty.clusterUnit !== REQUIRED_UNCERTAINTY_CLUSTER_UNIT) {
+    throw new TypeError(
+      `report.evaluation.uncertainty.clusterUnit must be ${REQUIRED_UNCERTAINTY_CLUSTER_UNIT}.`
+    );
+  }
+  assertCount(
+    uncertainty.distinctEventCount,
+    "report.evaluation.uncertainty.distinctEventCount",
+    { minimum: 1 }
+  );
+  if (uncertainty.distinctEventCount !== evaluation.distinctEventCount) {
+    throw new TypeError(
+      "report.evaluation.uncertainty.distinctEventCount must match evaluation.distinctEventCount."
+    );
+  }
   assertFiniteMetric(
     uncertainty.confidenceLevel,
     "report.evaluation.uncertainty.confidenceLevel",
@@ -833,9 +939,20 @@ function validateUncertaintyEvidence(evaluation, policy) {
   }
 }
 
-function validateDatasetEvidence(dataset, evaluationStartedAt, trainingCutoff) {
+function validateDatasetEvidence(
+  dataset,
+  reportSchemaVersion,
+  evaluationStartedAt,
+  trainingCutoff,
+  policy,
+  evaluationEvidence
+) {
   if (!isPlainObject(dataset)) {
     throw new TypeError("report.dataset is required and must be an object.");
+  }
+
+  if (reportSchemaVersion === "1.1.0") {
+    assertTimestamp(dataset.evidenceCutoffAt, "report.dataset.evidenceCutoffAt");
   }
 
   assertDigest(dataset.manifestDigest, "report.dataset.manifestDigest");
@@ -930,6 +1047,55 @@ function validateDatasetEvidence(dataset, evaluationStartedAt, trainingCutoff) {
     );
   }
 
+  if (dataset.splitMethod !== policy.requiredSplitMethod) {
+    throw new TypeError(
+      "report.dataset.splitMethod must match the registered policy."
+    );
+  }
+  assertCount(
+    dataset.chronologicalBlockCount,
+    "report.dataset.chronologicalBlockCount",
+    { minimum: 3 }
+  );
+  if (!isPlainObject(dataset.distinctEventCounts)) {
+    throw new TypeError(
+      "report.dataset.distinctEventCounts is required and must be an object."
+    );
+  }
+  const partitionNames = ["training", "calibration", "evaluation"];
+  if (
+    Object.keys(dataset.distinctEventCounts).length !== partitionNames.length
+    || partitionNames.some((name) => !hasOwn(dataset.distinctEventCounts, name))
+  ) {
+    throw new TypeError(
+      "report.dataset.distinctEventCounts must contain only training, calibration, and evaluation."
+    );
+  }
+  for (const name of partitionNames) {
+    assertCount(
+      dataset.distinctEventCounts[name],
+      `report.dataset.distinctEventCounts.${name}`,
+      { minimum: 1 }
+    );
+  }
+  const totalDistinctEvents = partitionNames.reduce(
+    (sum, name) => sum + dataset.distinctEventCounts[name],
+    0
+  );
+  if (dataset.chronologicalBlockCount > totalDistinctEvents) {
+    throw new TypeError(
+      "report.dataset.chronologicalBlockCount cannot exceed total partition distinct events."
+    );
+  }
+  if (
+    !isPlainObject(evaluationEvidence)
+    || dataset.distinctEventCounts.evaluation < evaluationEvidence.distinctEventCount
+  ) {
+    throw new TypeError(
+      "report.dataset.distinctEventCounts.evaluation cannot be lower than evaluation.distinctEventCount."
+    );
+  }
+
   if (dataset.chronological !== true) {
     throw new TypeError("report.dataset.chronological must be true.");
   }
@@ -942,17 +1108,18 @@ function validateReliability(
   reliability,
   settledCount,
   expectedCalibrationError,
-  registeredBoundaries
+  registeredBoundaries,
+  field = "report.evaluation.calibration.reliability"
 ) {
   assertArray(
     reliability,
-    "report.evaluation.calibration.reliability",
+    field,
     { nonEmpty: true }
   );
 
   if (!matchesReliabilityBoundaries(reliability, registeredBoundaries)) {
     throw new TypeError(
-      "report.evaluation.calibration.reliability must use the registered bucket boundaries."
+      `${field} must use the registered bucket boundaries.`
     );
   }
 
@@ -961,22 +1128,22 @@ function validateReliability(
   let totalWeightedGap = 0;
 
   reliability.forEach((bucket, index) => {
-    const field = `report.evaluation.calibration.reliability[${index}]`;
+    const bucketField = `${field}[${index}]`;
     if (!isPlainObject(bucket)) {
-      throw new TypeError(`${field} must be an object.`);
+      throw new TypeError(`${bucketField} must be an object.`);
     }
 
-    assertFiniteMetric(bucket.lower, `${field}.lower`, { minimum: 0, maximum: 1 });
-    assertFiniteMetric(bucket.upper, `${field}.upper`, { minimum: 0, maximum: 1 });
+    assertFiniteMetric(bucket.lower, `${bucketField}.lower`, { minimum: 0, maximum: 1 });
+    assertFiniteMetric(bucket.upper, `${bucketField}.upper`, { minimum: 0, maximum: 1 });
     if (bucket.lower >= bucket.upper || !approximatelyEqual(bucket.lower, previousUpper)) {
       throw new TypeError(
-        "report.evaluation.calibration.reliability buckets must be sorted, contiguous, and non-overlapping."
+        `${field} buckets must be sorted, contiguous, and non-overlapping.`
       );
     }
-    assertCount(bucket.count, `${field}.count`);
+    assertCount(bucket.count, `${bucketField}.count`);
     assertFiniteMetric(
       bucket.weightedAbsoluteGap,
-      `${field}.weightedAbsoluteGap`,
+      `${bucketField}.weightedAbsoluteGap`,
       { minimum: 0 }
     );
 
@@ -986,17 +1153,19 @@ function validateReliability(
         || bucket.observedRate !== null
         || bucket.weightedAbsoluteGap !== 0
       ) {
-        throw new TypeError(`${field} empty bucket statistics must be null, null, and zero.`);
+        throw new TypeError(
+          `${bucketField} empty bucket statistics must be null, null, and zero.`
+        );
       }
     } else {
       assertFiniteMetric(
         bucket.meanProbability,
-        `${field}.meanProbability`,
+        `${bucketField}.meanProbability`,
         { minimum: bucket.lower, maximum: bucket.upper }
       );
       assertFiniteMetric(
         bucket.observedRate,
-        `${field}.observedRate`,
+        `${bucketField}.observedRate`,
         { minimum: 0, maximum: 1 }
       );
       const recomputedGap = (
@@ -1005,7 +1174,7 @@ function validateReliability(
       );
       if (!approximatelyEqual(bucket.weightedAbsoluteGap, recomputedGap)) {
         throw new TypeError(
-          `${field}.weightedAbsoluteGap does not match count, meanProbability, and observedRate.`
+          `${bucketField}.weightedAbsoluteGap does not match count, meanProbability, and observedRate.`
         );
       }
     }
@@ -1017,17 +1186,18 @@ function validateReliability(
 
   if (!approximatelyEqual(previousUpper, 1)) {
     throw new TypeError(
-      "report.evaluation.calibration.reliability buckets must cover zero through one."
+      `${field} buckets must cover zero through one.`
     );
   }
   if (totalCount !== settledCount) {
     throw new TypeError(
-      "report.evaluation.calibration.reliability counts must equal evaluation.settledCount."
+      `${field} counts must equal settledCount.`
     );
   }
   if (!approximatelyEqual(totalWeightedGap, expectedCalibrationError)) {
+    const summaryField = field.replace(/\.calibration\.reliability$/, "");
     throw new TypeError(
-      "report.evaluation.expectedCalibrationError does not match reliability weighted gaps."
+      `${summaryField}.expectedCalibrationError does not match ${field} weighted gaps.`
     );
   }
 }
@@ -1053,6 +1223,101 @@ function validatePerformanceBreakdown(value, field) {
   });
 }
 
+function validateSplitSummaryEvidence(summary, field, policy) {
+  if (!isPlainObject(summary)) {
+    throw new TypeError(`${field} is required and must be an object.`);
+  }
+  assertSupportedFields(summary, SPLIT_SUMMARY_FIELDS, `${field} split summary`);
+  for (const requiredField of SPLIT_SUMMARY_FIELDS) {
+    if (!hasOwn(summary, requiredField)) {
+      throw new TypeError(`${field}.${requiredField} is required.`);
+    }
+  }
+
+  assertCount(summary.predictionCount, `${field}.predictionCount`, { minimum: 1 });
+  assertCount(summary.settledCount, `${field}.settledCount`);
+  if (summary.settledCount > summary.predictionCount) {
+    throw new TypeError(`${field}.settledCount cannot exceed predictionCount.`);
+  }
+  assertDigest(
+    summary.settledObservationSetDigest,
+    `${field}.settledObservationSetDigest`
+  );
+  assertFiniteMetric(
+    summary.settlementCoverage,
+    `${field}.settlementCoverage`,
+    { minimum: 0, maximum: 1 }
+  );
+  if (
+    !approximatelyEqual(
+      summary.settlementCoverage,
+      summary.settledCount / summary.predictionCount,
+      1e-12
+    )
+  ) {
+    throw new TypeError(
+      `${field}.settlementCoverage must equal settledCount divided by predictionCount.`
+    );
+  }
+
+  /** @type {Array<[string, { minimum: number, maximum?: number }]>} */
+  const metricFields = [
+    ["brierScore", { minimum: 0, maximum: 1 }],
+    ["logLoss", { minimum: 0 }],
+    ["expectedCalibrationError", { minimum: 0, maximum: 1 }]
+  ];
+  for (const [metric, options] of metricFields) {
+    if (summary.settledCount === 0) {
+      if (summary[metric] !== null) {
+        throw new TypeError(`${field}.${metric} must be null without settled rows.`);
+      }
+    } else {
+      assertFiniteMetric(summary[metric], `${field}.${metric}`, options);
+    }
+  }
+
+  if (!isPlainObject(summary.calibration)) {
+    throw new TypeError(`${field}.calibration is required and must be an object.`);
+  }
+  assertSupportedFields(
+    summary.calibration,
+    SPLIT_CALIBRATION_FIELDS,
+    `${field}.calibration`
+  );
+  for (const requiredField of SPLIT_CALIBRATION_FIELDS) {
+    if (!hasOwn(summary.calibration, requiredField)) {
+      throw new TypeError(`${field}.calibration.${requiredField} is required.`);
+    }
+  }
+  if (typeof summary.calibration.converged !== "boolean") {
+    throw new TypeError(`${field}.calibration.converged must be boolean.`);
+  }
+  assertCount(
+    summary.calibration.iterations,
+    `${field}.calibration.iterations`,
+    { minimum: summary.calibration.converged ? 1 : 0 }
+  );
+  if (summary.calibration.converged) {
+    assertFiniteMetric(summary.calibration.slope, `${field}.calibration.slope`);
+    assertFiniteMetric(summary.calibration.intercept, `${field}.calibration.intercept`);
+  } else if (
+    summary.calibration.slope !== null
+    || summary.calibration.intercept !== null
+  ) {
+    throw new TypeError(
+      `${field}.calibration slope and intercept must be null when the fit did not converge.`
+    );
+  }
+
+  validateReliability(
+    summary.calibration.reliability,
+    summary.settledCount,
+    summary.settledCount === 0 ? 0 : summary.expectedCalibrationError,
+    policy.reliabilityBucketBoundaries,
+    `${field}.calibration.reliability`
+  );
+}
+
 function validateEvaluationEvidence(evaluation, identity, policy) {
   if (!isPlainObject(evaluation)) {
     throw new TypeError("report.evaluation is required and must be an object.");
@@ -1060,6 +1325,11 @@ function validateEvaluationEvidence(evaluation, identity, policy) {
 
   assertCount(evaluation.predictionCount, "report.evaluation.predictionCount", { minimum: 1 });
   assertCount(evaluation.settledCount, "report.evaluation.settledCount");
+  assertCount(
+    evaluation.distinctEventCount,
+    "report.evaluation.distinctEventCount",
+    { minimum: 1 }
+  );
   assertDigest(
     evaluation.settledObservationSetDigest,
     "report.evaluation.settledObservationSetDigest"
@@ -1067,6 +1337,11 @@ function validateEvaluationEvidence(evaluation, identity, policy) {
   if (evaluation.settledCount > evaluation.predictionCount) {
     throw new TypeError(
       "report.evaluation.settledCount cannot exceed predictionCount."
+    );
+  }
+  if (evaluation.distinctEventCount > evaluation.settledCount) {
+    throw new TypeError(
+      "report.evaluation.distinctEventCount cannot exceed settledCount."
     );
   }
   assertFiniteMetric(
@@ -1252,11 +1527,86 @@ function validateReportStructure(report, model, registry) {
   assertTimestamp(report.evaluationStartedAt, "report.evaluationStartedAt");
   validateDatasetEvidence(
     report.dataset,
+    report.schemaVersion,
     report.evaluationStartedAt,
-    model.trainingCutoff
+    model.trainingCutoff,
+    registry.promotionPolicy,
+    report.evaluation
+  );
+  validateSplitSummaryEvidence(
+    report.training,
+    "report.training",
+    registry.promotionPolicy
+  );
+  validateSplitSummaryEvidence(
+    report.calibration,
+    "report.calibration",
+    registry.promotionPolicy
   );
   validateEvaluationEvidence(report.evaluation, report.identity, registry.promotionPolicy);
+  for (const partition of ["training", "calibration", "evaluation"]) {
+    if (
+      report.dataset.distinctEventCounts[partition]
+      > report[partition].predictionCount
+    ) {
+      throw new TypeError(
+        `report.dataset.distinctEventCounts.${partition} cannot exceed report.${partition}.predictionCount.`
+      );
+    }
+  }
   validateDataQualityEvidence(report.dataQuality);
+}
+
+function expectedReportEvidence(report, promotionPolicy) {
+  return {
+    reportSchemaVersion: report.schemaVersion,
+    evaluationStartedAt: report.evaluationStartedAt,
+    manifestDigest: report.dataset.manifestDigest,
+    datasetDigest: report.dataset.datasetDigest,
+    identityDigest: contentDigest(report.identity),
+    policyDigest: report.policy.policyDigest,
+    policyEvidenceDigest: contentDigest(report.policy),
+    datasetEvidenceDigest: contentDigest(report.dataset),
+    promotionPolicy,
+    splitCutoffs: { ...report.dataset.splitCutoffs },
+    splitMethod: report.dataset.splitMethod,
+    chronologicalBlockCount: report.dataset.chronologicalBlockCount,
+    distinctEventCounts: { ...report.dataset.distinctEventCounts },
+    trainingDigest: contentDigest(report.training),
+    calibrationDigest: contentDigest(report.calibration),
+    evaluationDigest: contentDigest(report.evaluation),
+    dataQualityDigest: contentDigest(report.dataQuality)
+  };
+}
+
+function validateReportEvidenceBinding(report, registry) {
+  if (!isPlainObject(report.reportEvidence)) {
+    throw new TypeError("report.reportEvidence is required and must be an object.");
+  }
+  assertSupportedFields(
+    report.reportEvidence,
+    REPORT_EVIDENCE_FIELDS,
+    "report evidence"
+  );
+  for (const requiredField of REPORT_EVIDENCE_FIELDS) {
+    if (!hasOwn(report.reportEvidence, requiredField)) {
+      throw new TypeError(`report.reportEvidence.${requiredField} is required.`);
+    }
+  }
+
+  const expected = expectedReportEvidence(report, registry.promotionPolicy);
+  if (contentDigest(report.reportEvidence) !== contentDigest(expected)) {
+    throw new TypeError(
+      "report.reportEvidence must match the report content and registered promotion policy."
+    );
+  }
+
+  const expectedReportId = `calibration-${contentDigest(expected)}`;
+  if (report.reportId !== expectedReportId) {
+    throw new TypeError(
+      `report.reportId must equal the content-addressed report evidence identifier ${expectedReportId}.`
+    );
+  }
 }
 
 function validateStoredPromotion(report, promotion) {
@@ -1278,9 +1628,9 @@ function verifyReportEvidence(model, report, registry) {
     );
   }
 
-  if (report.schemaVersion !== REPORT_SCHEMA_VERSION) {
+  if (!REPORT_SCHEMA_VERSIONS.has(report.schemaVersion)) {
     throw new TypeError(
-      `Calibration report schemaVersion must be ${REPORT_SCHEMA_VERSION}.`
+      `Calibration report schemaVersion must be one of: ${[...REPORT_SCHEMA_VERSIONS].join(", ")}.`
     );
   }
 
@@ -1323,6 +1673,12 @@ function verifyReportEvidence(model, report, registry) {
   if (!isPlainObject(report.policy)) {
     throw new TypeError("Calibration report policy evidence is required.");
   }
+  assertSupportedFields(report.policy, REPORT_POLICY_FIELDS, "report policy");
+  for (const requiredField of REPORT_POLICY_FIELDS) {
+    if (!hasOwn(report.policy, requiredField)) {
+      throw new TypeError(`report.policy.${requiredField} is required.`);
+    }
+  }
 
   if (report.policy.policyVersion !== registry.policyVersion) {
     throw new TypeError("Calibration report policyVersion does not match the registry policy.");
@@ -1333,8 +1689,17 @@ function verifyReportEvidence(model, report, registry) {
   if (report.policy.registeredAt !== registry.policyRegisteredAt) {
     throw new TypeError("Calibration report policy registration time does not match the registry policy.");
   }
+  if (
+    !isPlainObject(report.policy.thresholds)
+    || contentDigest(report.policy.thresholds) !== contentDigest(registry.promotionPolicy)
+  ) {
+    throw new TypeError(
+      "report.policy.thresholds must match the registered promotion policy."
+    );
+  }
 
   validateReportStructure(report, model, registry);
+  validateReportEvidenceBinding(report, registry);
   const promotion = evaluatePromotion(report, registry.promotionPolicy);
   validateStoredPromotion(report, promotion);
   return promotion;
@@ -1425,6 +1790,14 @@ function validateModelEntry(model, index, registry, reportsById, seenKeys) {
       `models[${index}].calibrationReportDigest`
     );
   }
+  if (
+    (model.calibrationReportId === null)
+    !== (model.calibrationReportDigest === null)
+  ) {
+    throw new TypeError(
+      `models[${index}] calibrationReportId and calibrationReportDigest must both be null or both be set.`
+    );
+  }
 
   const key = `${model.modelId}\u0000${model.modelVersion}\u0000${model.marketFamily}`;
   if (seenKeys.has(key)) {
@@ -1434,7 +1807,8 @@ function validateModelEntry(model, index, registry, reportsById, seenKeys) {
   }
   seenKeys.add(key);
 
-  if (NON_RESEARCH_STATUSES.has(model.modelStatus)) {
+  const hasRegisteredReport = model.calibrationReportId !== null;
+  if (NON_RESEARCH_STATUSES.has(model.modelStatus) || hasRegisteredReport) {
     if (!validIdentity(model.calibrationReportId)) {
       throw new TypeError(
         `models[${index}].calibrationReportId is required for ${model.modelStatus} models.`

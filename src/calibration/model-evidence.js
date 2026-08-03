@@ -194,6 +194,33 @@ function resolveModelEvidence(identity, options = {}) {
   }
 }
 
+function resolveCalibrationReportById(reportId, options = {}) {
+  const normalizedReportId = normalizedIdentity(reportId);
+  if (!normalizedReportId) {
+    return null;
+  }
+
+  const registryOptions = prepareModelRegistryOptions(options);
+  const registry = loadModelRegistry(registryOptions);
+  const registered = registry.models.find((model) => (
+    model.calibrationReportId === normalizedReportId
+  ));
+  if (
+    !registered
+    || !registered.calibrationReportId
+    || !registered.calibrationReportDigest
+  ) {
+    return null;
+  }
+
+  const reports = registryOptions.reportsById;
+  const report = reports instanceof Map
+    ? reports.get(normalizedReportId)
+    : reports[normalizedReportId];
+
+  return report ?? null;
+}
+
 function resolveLiveLegModelEvidence(leg, options = {}) {
   const usesCallerProbability = leg.modelProbabilityOverride !== undefined;
   const evidence = resolveModelEvidence({
@@ -236,6 +263,7 @@ module.exports = {
   loadRegisteredModels,
   prepareModelRegistryOptions,
   readCalibrationReports,
+  resolveCalibrationReportById,
   resolveCandidateModelEvidence,
   resolveLiveLegModelEvidence,
   resolveMarketFamily,

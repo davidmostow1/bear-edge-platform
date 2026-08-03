@@ -371,25 +371,10 @@ function percentile(sortedValues, probability) {
 }
 
 /**
- * @param {number[]} values
- * @param {{ samples?: number, confidence?: number, seed?: number }} [options]
- * @returns {{
- *   mean: number,
- *   lower: number,
- *   upper: number,
- *   samples: number,
- *   confidence: number
- * }}
+ * @param {{ samples?: number, confidence?: number, seed?: number }} options
+ * @returns {{ samples: number, confidence: number, seed: number }}
  */
-function bootstrapMeanInterval(values, options = {}) {
-  if (!Array.isArray(values) || values.length < 2) {
-    throw new TypeError("Bootstrap intervals require at least two values");
-  }
-  values.forEach((value, index) => {
-    if (typeof value !== "number" || !Number.isFinite(value)) {
-      throw new TypeError(`Bootstrap value ${index} must be finite`);
-    }
-  });
+function validateBootstrapOptions(options) {
   if (!options || typeof options !== "object" || Array.isArray(options)) {
     throw new TypeError("Bootstrap options must be an object");
   }
@@ -413,6 +398,57 @@ function bootstrapMeanInterval(values, options = {}) {
     throw new RangeError("Bootstrap seed must be a non-zero unsigned 32-bit integer");
   }
 
+  return { samples, confidence, seed };
+}
+
+/**
+ * @param {number[]} bootstrapMeans
+ * @param {number} mean
+ * @param {number} samples
+ * @param {number} confidence
+ * @returns {{
+ *   mean: number,
+ *   lower: number,
+ *   upper: number,
+ *   samples: number,
+ *   confidence: number
+ * }}
+ */
+function summarizeBootstrapMeans(bootstrapMeans, mean, samples, confidence) {
+  bootstrapMeans.sort((left, right) => left - right);
+  const tailProbability = (1 - confidence) / 2;
+
+  return {
+    mean,
+    lower: percentile(bootstrapMeans, tailProbability),
+    upper: percentile(bootstrapMeans, 1 - tailProbability),
+    samples,
+    confidence
+  };
+}
+
+/**
+ * @param {number[]} values
+ * @param {{ samples?: number, confidence?: number, seed?: number }} [options]
+ * @returns {{
+ *   mean: number,
+ *   lower: number,
+ *   upper: number,
+ *   samples: number,
+ *   confidence: number
+ * }}
+ */
+function bootstrapMeanInterval(values, options = {}) {
+  if (!Array.isArray(values) || values.length < 2) {
+    throw new TypeError("Bootstrap intervals require at least two values");
+  }
+  values.forEach((value, index) => {
+    if (typeof value !== "number" || !Number.isFinite(value)) {
+      throw new TypeError(`Bootstrap value ${index} must be finite`);
+    }
+  });
+  const { samples, confidence, seed } = validateBootstrapOptions(options);
+
   const random = createXorshift32(seed);
   const bootstrapMeans = [];
 
@@ -424,19 +460,83 @@ function bootstrapMeanInterval(values, options = {}) {
     bootstrapMeans.push(sum / values.length);
   }
 
-  bootstrapMeans.sort((left, right) => left - right);
-  const tailProbability = (1 - confidence) / 2;
-
-  return {
-    mean: values.reduce((sum, value) => sum + value, 0) / values.length,
-    lower: percentile(bootstrapMeans, tailProbability),
-    upper: percentile(bootstrapMeans, 1 - tailProbability),
+  return summarizeBootstrapMeans(
+    bootstrapMeans,
+    values.reduce((sum, value) => sum + value, 0) / values.length,
     samples,
     confidence
+  );
+}
+
+/**
+ * Resamples complete event clusters so correlated observations from one event
+ * remain together in each bootstrap replicate.
+ *
+ * @param {number[][]} clusters
+ * @param {{ samples?: number, confidence?: number, seed?: number }} [options]
+ * @returns {{
+ *   mean: number,
+ *   lower: number,
+ *   upper: number,
+ *   samples: number,
+ *   confidence: number,
+ *   clusterCount: number
+ * }}
+ */
+function bootstrapClusterMeanInterval(clusters, options = {}) {
+  if (!Array.isArray(clusters) || clusters.length < 2) {
+    throw new TypeError("Bootstrap intervals require at least two clusters");
+  }
+
+  clusters.forEach((cluster, clusterIndex) => {
+    if (!Array.isArray(cluster) || cluster.length === 0) {
+      throw new TypeError(`Bootstrap cluster ${clusterIndex} must not be empty`);
+    }
+    cluster.forEach((value, valueIndex) => {
+      if (typeof value !== "number" || !Number.isFinite(value)) {
+        throw new TypeError(
+          `Bootstrap cluster ${clusterIndex} value ${valueIndex} must be finite`
+        );
+      }
+    });
+  });
+
+  const { samples, confidence, seed } = validateBootstrapOptions(options);
+  const random = createXorshift32(seed);
+  const bootstrapMeans = [];
+  let observedSum = 0;
+  let observedCount = 0;
+
+  clusters.forEach((cluster) => {
+    observedSum += cluster.reduce((sum, value) => sum + value, 0);
+    observedCount += cluster.length;
+  });
+
+  for (let sampleIndex = 0; sampleIndex < samples; sampleIndex += 1) {
+    let sum = 0;
+    let count = 0;
+
+    for (let clusterIndex = 0; clusterIndex < clusters.length; clusterIndex += 1) {
+      const cluster = clusters[Math.floor(random() * clusters.length)];
+      sum += cluster.reduce((clusterSum, value) => clusterSum + value, 0);
+      count += cluster.length;
+    }
+    bootstrapMeans.push(sum / count);
+  }
+
+  return {
+    ...summarizeBootstrapMeans(
+      bootstrapMeans,
+      observedSum / observedCount,
+      samples,
+      confidence
+    ),
+    clusterCount: clusters.length
   };
 }
 
 module.exports = {
+  bootstrapClusterMeanInterval,
   bootstrapMeanInterval,
   brierScore,
   expectedCalibrationError,

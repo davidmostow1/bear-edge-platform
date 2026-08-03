@@ -110,6 +110,46 @@ const EVALUATION_CONTEXT = {
   createdAt: "2026-07-16T17:45:01.000Z"
 };
 
+function validBetInput() {
+  const input = structuredClone(VALID_EVALUATION_INPUT);
+  input.sources.push({
+    provider: "the_odds_api",
+    sourceType: "sportsbook_price",
+    sourceLocator: "https://api.the-odds-api.com/v4/sports/baseball_mlb/events/example/odds",
+    parserVersion: "odds_provider_adapter_v1",
+    capturedAt: "2026-07-16T17:45:00.000Z",
+    sourceTime: "2026-07-16T17:44:30.000Z",
+    digest: "c".repeat(64),
+    freshness: "fresh",
+    verificationStatus: "verified_provider_capture"
+  });
+  input.model = {
+    ...input.model,
+    modelId: "validated_pitcher_k",
+    modelVersion: "2.0.0",
+    probabilityMethod: "calibrated_logistic",
+    modelStatus: "validated",
+    calibrationReportId: "calibration-report-001",
+    sampleSize: 500
+  };
+  input.stake = {
+    ...input.stake,
+    recommendedStake: 10
+  };
+  input.decision = {
+    verdict: "BET",
+    permission: "VERIFIED_BETS_ALLOWED",
+    reasons: ["Every authorization gate passed with verified evidence."],
+    riskFlags: [],
+    gateResults: [{ gate: "authorization", passed: true, reasonCode: null }]
+  };
+  input.audit = {
+    ...input.audit,
+    evidenceCompleteness: "verified"
+  };
+  return input;
+}
+
 test("canonicalStringify sorts object keys recursively without reordering arrays", () => {
   const left = { z: 1, a: { y: 2, x: 3 }, rows: [{ b: 2, a: 1 }] };
   const right = { rows: [{ a: 1, b: 2 }], a: { x: 3, y: 2 }, z: 1 };
@@ -128,8 +168,8 @@ test("createEvaluationRecord emits stable identifiers and excludes digest from i
   const record = createEvaluationRecord(VALID_EVALUATION_INPUT, EVALUATION_CONTEXT);
   const { contentDigest: digest, ...digestInput } = record;
 
-  assert.equal(AUDIT_RECORD_SCHEMA_VERSION, "2.0.0");
-  assert.equal(record.schemaVersion, "2.0.0");
+  assert.equal(AUDIT_RECORD_SCHEMA_VERSION, "2.1.0");
+  assert.equal(record.schemaVersion, "2.1.0");
   assert.equal(record.id, "eval_11111111-1111-4111-8111-111111111111");
   assert.equal(record.clientEventId, "11111111-1111-4111-8111-111111111111");
   assert.equal(record.verdict, "WAIT");
@@ -149,6 +189,50 @@ test("validateAuditRecord rejects digest changes, unsupported verdicts, and rese
   assert.ok(validateAuditRecord(changed).issues.some((issue) => issue.path === "contentDigest"));
   assert.ok(validateAuditRecord(unsupported).issues.some((issue) => issue.path === "verdict"));
   assert.ok(validateAuditRecord(researchBet).issues.some((issue) => issue.path === "model.modelStatus"));
+});
+
+test("validateAuditRecord requires verified permission and calibration evidence for BET records", () => {
+  const valid = createEvaluationRecord(VALID_EVALUATION_INPUT, EVALUATION_CONTEXT);
+  const priceCheckBet = {
+    ...valid,
+    verdict: "BET",
+    model: {
+      ...valid.model,
+      modelStatus: "validated",
+      calibrationReportId: "calibration-report-001"
+    }
+  };
+  const reportlessBet = {
+    ...priceCheckBet,
+    permission: "VERIFIED_BETS_ALLOWED",
+    model: {
+      ...priceCheckBet.model,
+      calibrationReportId: null
+    }
+  };
+
+  assert.ok(validateAuditRecord(priceCheckBet).issues.some((issue) => issue.path === "permission"));
+  assert.ok(validateAuditRecord(reportlessBet).issues.some((issue) => issue.path === "model.calibrationReportId"));
+});
+
+test("a canonical BET requires complete price, provenance, gate, model, and stake evidence", () => {
+  const record = createEvaluationRecord(validBetInput(), EVALUATION_CONTEXT);
+  const sparseBet = {
+    ...record,
+    event: { ...record.event, eventId: null },
+    sources: [],
+    gateResults: [],
+    price: { ...record.price, sportsbook: null },
+    stake: { ...record.stake, recommendedStake: 0 }
+  };
+  const validation = validateAuditRecord(sparseBet);
+
+  assert.deepEqual(validateAuditRecord(record), { valid: true, issues: [] });
+  assert.ok(validation.issues.some((issue) => issue.path === "event.eventId"));
+  assert.ok(validation.issues.some((issue) => issue.path === "sources"));
+  assert.ok(validation.issues.some((issue) => issue.path === "gateResults"));
+  assert.ok(validation.issues.some((issue) => issue.path === "price.sportsbook"));
+  assert.ok(validation.issues.some((issue) => issue.path === "stake.recommendedStake"));
 });
 
 test("validateAuditRecord rejects missing groups, malformed UUIDs, invalid timestamps, and probability bounds", () => {
@@ -204,6 +288,48 @@ test("createSettlementAuditRecord emits canonical settlement fields and a verifi
   assert.deepEqual(validateAuditRecord(record), { valid: true, issues: [] });
 });
 
+test("settlement records require financial evidence for every final outcome", () => {
+  assert.throws(
+    () => createSettlementAuditRecord({
+      evaluationId: "eval_11111111-1111-4111-8111-111111111111",
+      outcome: "loss",
+      settledAt: "2026-07-17T02:30:00.000Z"
+    }),
+    /stake.*greater than zero|profit.*finite/i
+  );
+
+  assert.throws(
+    () => createSettlementAuditRecord({
+      evaluationId: "eval_11111111-1111-4111-8111-111111111111",
+      outcome: "win",
+      settledAt: "2026-07-17T02:30:00.000Z",
+      stake: 10,
+      profit: -10
+    }),
+    /win.*positive profit/i
+  );
+  assert.throws(
+    () => createSettlementAuditRecord({
+      evaluationId: "eval_11111111-1111-4111-8111-111111111111",
+      outcome: "loss",
+      settledAt: "2026-07-17T02:30:00.000Z",
+      stake: 10,
+      profit: 5
+    }),
+    /loss.*negative profit/i
+  );
+  assert.throws(
+    () => createSettlementAuditRecord({
+      evaluationId: "eval_11111111-1111-4111-8111-111111111111",
+      outcome: "pending",
+      settledAt: "2026-07-17T02:30:00.000Z",
+      stake: 10,
+      profit: 1
+    }),
+    /pending.*cannot include profit/i
+  );
+});
+
 test("createAmendmentRecord preserves references and patch content without mutating prior records", () => {
   const patch = { outcome: "push", profit: 0 };
   const record = createAmendmentRecord({
@@ -228,7 +354,7 @@ test("the public API and schema registry expose the canonical audit contract", (
   const publicApi = require("../src/index.js");
   const schemas = require("../src/schemas.js");
 
-  assert.equal(publicApi.AUDIT_RECORD_SCHEMA_VERSION, "2.0.0");
+  assert.equal(publicApi.AUDIT_RECORD_SCHEMA_VERSION, "2.1.0");
   assert.equal(publicApi.createEvaluationRecord, createEvaluationRecord);
   assert.equal(publicApi.createSettlementAuditRecord, createSettlementAuditRecord);
   assert.equal(publicApi.createAmendmentRecord, createAmendmentRecord);

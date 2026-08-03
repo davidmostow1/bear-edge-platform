@@ -145,6 +145,17 @@ test("an invalid amendment value fails drawdown authority closed", () => {
   assert.equal(snapshot.invalidReferenceCount, 1);
 });
 
+test("contradictory settlement economics fail drawdown authority closed", () => {
+  const snapshot = buildDrawdownSnapshot(cleanInspection([
+    evaluation("eval_1"),
+    settlement("settle_bad", "eval_1", "win", -100, "2026-07-01T10:00:00.000Z")
+  ]), { startingBankroll: 1000 });
+
+  assert.equal(snapshot.available, false);
+  assert.equal(snapshot.invalidReferenceCount, 1);
+  assert.equal(snapshot.gradedSettlementCount, 0);
+});
+
 test("an orphan settlement fails drawdown authority closed", () => {
   const snapshot = buildDrawdownSnapshot(cleanInspection([
     settlement("settle_orphan", "eval_missing", "loss", -100, "2026-07-01T10:00:00.000Z")

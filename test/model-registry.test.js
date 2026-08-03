@@ -19,6 +19,8 @@ const DATASET_DIGEST = "d".repeat(64);
 const SOURCE_DIGEST = "e".repeat(64);
 const MARKET_DATA_DIGEST = "f".repeat(64);
 const SETTLED_OBSERVATION_SET_DIGEST = "a".repeat(64);
+const TRAINING_OBSERVATION_SET_DIGEST = "b".repeat(64);
+const CALIBRATION_OBSERVATION_SET_DIGEST = "9".repeat(64);
 const SOURCE_CAPTURED_AT = "2026-06-30T11:00:00.000Z";
 const RELIABILITY_BUCKET_BOUNDARIES = Object.freeze([0, 0.2, 0.4, 0.6, 0.8, 1]);
 const REQUIRED_BASELINE = Object.freeze({
@@ -58,6 +60,7 @@ const MODEL_IMPLEMENTATION = Object.freeze({
 });
 const PROMOTION_POLICY = Object.freeze({
   minimumSettledPredictions: 500,
+  minimumDistinctEvents: 100,
   minimumBucketObservations: 100,
   minimumSettlementCoverage: 0.95,
   maximumExpectedCalibrationError: 0.03,
@@ -68,7 +71,8 @@ const PROMOTION_POLICY = Object.freeze({
   requireNonNegativeClosingLineValueInterval: true,
   reliabilityBucketBoundaries: RELIABILITY_BUCKET_BOUNDARIES,
   requiredBaseline: REQUIRED_BASELINE,
-  requiredUncertaintyMethod: "percentile_bootstrap",
+  requiredSplitMethod: "event_atomic_prediction_interval_blocks",
+  requiredUncertaintyMethod: "event_cluster_percentile_bootstrap",
   minimumBootstrapResamples: 2000,
   minimumConfidenceLevel: 0.95
 });
@@ -76,6 +80,7 @@ const POLICY_DIGEST = contentDigest(PROMOTION_POLICY);
 const BASE_EVALUATION = Object.freeze({
   predictionCount: 600,
   settledCount: 570,
+  distinctEventCount: 200,
   settledObservationSetDigest: SETTLED_OBSERVATION_SET_DIGEST,
   settlementCoverage: 0.95,
   expectedCalibrationError: 0.03,
@@ -114,10 +119,12 @@ const BASE_EVALUATION = Object.freeze({
     interval: Object.freeze({ lower: 0.01, upper: 0.03 })
   }),
   uncertainty: Object.freeze({
-    method: "percentile_bootstrap",
+    method: "event_cluster_percentile_bootstrap",
     confidenceLevel: 0.95,
     resamples: 2000,
     seed: 271828,
+    clusterUnit: "event_id",
+    distinctEventCount: 200,
     intervals: Object.freeze({
       brierScore: Object.freeze({ lower: 0.19, upper: 0.21 }),
       logLoss: Object.freeze({ lower: 0.58, upper: 0.62 }),
@@ -152,6 +159,35 @@ function completeReliability(reliability, expectedCalibrationError) {
       weightedAbsoluteGap: gapPerBucket
     };
   });
+}
+
+function splitSummary(predictionCount, settledObservationSetDigest) {
+  const expectedCalibrationError = 0.03;
+  const countPerBucket = predictionCount / (RELIABILITY_BUCKET_BOUNDARIES.length - 1);
+  const reliability = RELIABILITY_BUCKET_BOUNDARIES.slice(0, -1).map(
+    (lower, index) => ({
+      lower,
+      upper: RELIABILITY_BUCKET_BOUNDARIES[index + 1],
+      count: countPerBucket
+    })
+  );
+
+  return {
+    predictionCount,
+    settledCount: predictionCount,
+    settlementCoverage: 1,
+    settledObservationSetDigest,
+    brierScore: 0.2,
+    logLoss: 0.6,
+    expectedCalibrationError,
+    calibration: {
+      slope: 0.8,
+      intercept: 0.05,
+      converged: true,
+      iterations: 5,
+      reliability: completeReliability(reliability, expectedCalibrationError)
+    }
+  };
 }
 
 /**
@@ -190,9 +226,12 @@ function calibrationReport(overrides = {}) {
       policyVersion: "1.0.0",
       policyDigest: POLICY_DIGEST,
       registeredAt: POLICY_REGISTERED_AT,
+      thresholds: structuredClone(PROMOTION_POLICY),
       ...policyOverrides
     },
     evaluationStartedAt: EVALUATION_STARTED_AT,
+    training: splitSummary(300, TRAINING_OBSERVATION_SET_DIGEST),
+    calibration: splitSummary(100, CALIBRATION_OBSERVATION_SET_DIGEST),
     evaluation: {
       ...BASE_EVALUATION,
       ...evaluationOverrides,
@@ -267,15 +306,46 @@ function calibrationReport(overrides = {}) {
         calibration: "2026-06-15T12:00:00.000Z",
         evaluation: "2026-07-01T12:00:00.000Z"
       },
+      splitMethod: "event_atomic_prediction_interval_blocks",
+      chronologicalBlockCount: 200,
+      distinctEventCounts: {
+        training: 300,
+        calibration: 100,
+        evaluation: 200
+      },
       chronological: true,
       outOfSample: true,
       ...(topLevelOverrides.dataset ?? {})
     }
   };
-  const unsigned = {
+  const reportEvidence = {
+    reportSchemaVersion: reportWithoutPromotion.schemaVersion,
+    evaluationStartedAt: reportWithoutPromotion.evaluationStartedAt,
+    manifestDigest: reportWithoutPromotion.dataset.manifestDigest,
+    datasetDigest: reportWithoutPromotion.dataset.datasetDigest,
+    identityDigest: contentDigest(reportWithoutPromotion.identity),
+    policyDigest: reportWithoutPromotion.policy.policyDigest,
+    policyEvidenceDigest: contentDigest(reportWithoutPromotion.policy),
+    datasetEvidenceDigest: contentDigest(reportWithoutPromotion.dataset),
+    promotionPolicy: structuredClone(PROMOTION_POLICY),
+    splitCutoffs: { ...reportWithoutPromotion.dataset.splitCutoffs },
+    splitMethod: reportWithoutPromotion.dataset.splitMethod,
+    chronologicalBlockCount: reportWithoutPromotion.dataset.chronologicalBlockCount,
+    distinctEventCounts: { ...reportWithoutPromotion.dataset.distinctEventCounts },
+    trainingDigest: contentDigest(reportWithoutPromotion.training),
+    calibrationDigest: contentDigest(reportWithoutPromotion.calibration),
+    evaluationDigest: contentDigest(reportWithoutPromotion.evaluation),
+    dataQualityDigest: contentDigest(reportWithoutPromotion.dataQuality)
+  };
+  const reportWithEvidence = {
     ...reportWithoutPromotion,
+    reportId: `calibration-${contentDigest(reportEvidence)}`,
+    reportEvidence
+  };
+  const unsigned = {
+    ...reportWithEvidence,
     promotion: promotionOverride
-      ?? evaluatePromotion(reportWithoutPromotion, PROMOTION_POLICY)
+      ?? evaluatePromotion(reportWithEvidence, PROMOTION_POLICY)
   };
 
   return {
@@ -394,11 +464,16 @@ test("evaluatePromotion passes exact inclusive promotion boundaries", () => {
 
   assert.equal(result.passed, true);
   assert.equal(settledCountBoundary.passed, true);
-  assert.equal(result.checks.length, 10);
+  assert.equal(result.checks.length, 12);
   for (const check of result.checks) {
     assert.equal(check.passed, true, check.id);
   }
   assert.equal(checkById(settledCountBoundary, "minimumSettledPredictions").actual, 500);
+  assert.equal(checkById(result, "minimumDistinctEvents").actual, 200);
+  assert.equal(
+    checkById(result, "registeredSplitMethod").actual,
+    "event_atomic_prediction_interval_blocks"
+  );
   assert.equal(checkById(result, "minimumBucketObservations").actual, 100);
   assert.equal(checkById(result, "minimumSettlementCoverage").actual, 0.95);
   assert.equal(checkById(result, "maximumExpectedCalibrationError").actual, 0.03);
@@ -420,6 +495,24 @@ test("evaluatePromotion accepts the inclusive upper slope and negative intercept
   assert.equal(result.passed, true);
   assert.equal(checkById(result, "calibrationSlopeRange").passed, true);
   assert.equal(checkById(result, "maximumAbsoluteCalibrationIntercept").passed, true);
+});
+
+test("evaluatePromotion requires the registered minimum number of distinct events", () => {
+  const clusteredPolicy = {
+    ...PROMOTION_POLICY,
+    minimumDistinctEvents: 100,
+    requiredUncertaintyMethod: "event_cluster_percentile_bootstrap"
+  };
+  const atBoundary = evaluatePromotion(calibrationReport({
+    evaluation: { distinctEventCount: 100 }
+  }), clusteredPolicy);
+  const belowBoundary = evaluatePromotion(calibrationReport({
+    evaluation: { distinctEventCount: 99 }
+  }), clusteredPolicy);
+
+  assert.equal(checkById(atBoundary, "minimumDistinctEvents").passed, true);
+  assert.equal(checkById(atBoundary, "minimumDistinctEvents").actual, 100);
+  assert.equal(checkById(belowBoundary, "minimumDistinctEvents").passed, false);
 });
 
 const FAILING_PROMOTION_CASES = [
@@ -750,6 +843,27 @@ test("evaluatePromotion rejects malformed promotion policies", () => {
   assert.throws(
     () => evaluatePromotion(calibrationReport(), {
       ...PROMOTION_POLICY,
+      minimumDistinctEvents: 1
+    }),
+    /minimumDistinctEvents/
+  );
+  assert.throws(
+    () => evaluatePromotion(calibrationReport(), {
+      ...PROMOTION_POLICY,
+      requiredUncertaintyMethod: "percentile_bootstrap"
+    }),
+    /requiredUncertaintyMethod/
+  );
+  assert.throws(
+    () => evaluatePromotion(calibrationReport(), {
+      ...PROMOTION_POLICY,
+      requiredSplitMethod: "prediction_timestamp_blocks"
+    }),
+    /requiredSplitMethod/
+  );
+  assert.throws(
+    () => evaluatePromotion(calibrationReport(), {
+      ...PROMOTION_POLICY,
       requireNoMaterialBaselineDegradation: "yes"
     }),
     /requireNoMaterialBaselineDegradation/
@@ -992,7 +1106,7 @@ for (const modelStatus of ["shadow", "validated", "retired"]) {
   });
 }
 
-test("loadModelRegistry accepts a validated model only with passing immutable evidence", () => {
+test("loadModelRegistry accepts a validated model only with passing content-addressed evidence", () => {
   const report = calibrationReport();
   const validated = modelWithEvidence("validated", report);
   const registryPath = writeRegistry(registry([validated]));
@@ -1004,7 +1118,68 @@ test("loadModelRegistry accepts a validated model only with passing immutable ev
   assert.deepEqual(loaded.models, [validated]);
 });
 
+test("loadModelRegistry rejects resigned legacy split policy evidence", () => {
+  const draft = calibrationReport();
+  draft.policy.thresholds = {
+    ...PROMOTION_POLICY,
+    requiredSplitMethod: "prediction_timestamp_blocks"
+  };
+  const report = resignReport(draft);
+  const validated = modelWithEvidence("validated", report);
+
+  assert.throws(
+    () => loadModelRegistry({
+      registryPath: writeRegistry(registry([validated])),
+      reportsById: { [report.reportId]: report }
+    }),
+    /policy\.thresholds.*registered promotion policy/i
+  );
+});
+
+test("loadModelRegistry rejects resigned source-lineage relabeling", () => {
+  const draft = calibrationReport();
+  draft.dataset.sources[0].sourceIdentifier = "official_mlb_statsapi:fixture-002";
+  const report = resignReport(draft);
+  const validated = modelWithEvidence("validated", report);
+
+  assert.throws(
+    () => loadModelRegistry({
+      registryPath: writeRegistry(registry([validated])),
+      reportsById: { [report.reportId]: report }
+    }),
+    /report\.reportEvidence.*report content/i
+  );
+});
+
 const INCOMPLETE_REPORT_CASES = [
+  {
+    name: "registered policy thresholds",
+    pattern: /policy\.thresholds/,
+    mutate(report) {
+      delete report.policy.thresholds;
+    }
+  },
+  {
+    name: "training split summary",
+    pattern: /report\.training/,
+    mutate(report) {
+      delete report.training;
+    }
+  },
+  {
+    name: "calibration split summary",
+    pattern: /report\.calibration/,
+    mutate(report) {
+      delete report.calibration;
+    }
+  },
+  {
+    name: "content-addressed report evidence",
+    pattern: /report\.reportEvidence/,
+    mutate(report) {
+      delete report.reportEvidence;
+    }
+  },
   {
     name: "Brier score",
     pattern: /brierScore/,
@@ -1083,6 +1258,27 @@ const INCOMPLETE_REPORT_CASES = [
     }
   },
   {
+    name: "event-atomic split declaration",
+    pattern: /dataset\.splitMethod/,
+    mutate(report) {
+      delete report.dataset.splitMethod;
+    }
+  },
+  {
+    name: "partition event counts",
+    pattern: /dataset\.distinctEventCounts/,
+    mutate(report) {
+      delete report.dataset.distinctEventCounts;
+    }
+  },
+  {
+    name: "chronological block count",
+    pattern: /dataset\.chronologicalBlockCount/,
+    mutate(report) {
+      delete report.dataset.chronologicalBlockCount;
+    }
+  },
+  {
     name: "data-quality leakage inventory",
     pattern: /dataQuality\.leakageFindings/,
     mutate(report) {
@@ -1117,6 +1313,41 @@ for (const fixture of INCOMPLETE_REPORT_CASES) {
 
 const INCONSISTENT_REPORT_CASES = [
   {
+    name: "report evidence relabeled after report construction",
+    pattern: /report\.reportEvidence.*report content/i,
+    mutate(report) {
+      report.reportEvidence.splitMethod = "prediction_timestamp_blocks";
+    }
+  },
+  {
+    name: "report identifier not derived from report evidence",
+    pattern: /report\.reportId.*content-addressed/i,
+    mutate(report) {
+      report.reportId = `calibration-${"0".repeat(64)}`;
+    }
+  },
+  {
+    name: "training summary changed after report construction",
+    pattern: /report\.reportEvidence.*report content/i,
+    mutate(report) {
+      report.training.brierScore = 0.21;
+    }
+  },
+  {
+    name: "partition event count exceeding prediction count",
+    pattern: /distinctEventCounts\.training.*predictionCount/,
+    mutate(report) {
+      report.dataset.distinctEventCounts.training = 301;
+    }
+  },
+  {
+    name: "chronological block count exceeding distinct events",
+    pattern: /chronologicalBlockCount.*total partition distinct events/,
+    mutate(report) {
+      report.dataset.chronologicalBlockCount = 601;
+    }
+  },
+  {
     name: "closing-line mean outside its interval",
     pattern: /closingLineValue.*interval/,
     mutate(report) {
@@ -1142,6 +1373,20 @@ const INCONSISTENT_REPORT_CASES = [
     pattern: /splitCutoffs.*chronological/,
     mutate(report) {
       report.dataset.splitCutoffs.calibration = report.dataset.splitCutoffs.training;
+    }
+  },
+  {
+    name: "legacy timestamp-only split method",
+    pattern: /dataset\.splitMethod.*registered policy/,
+    mutate(report) {
+      report.dataset.splitMethod = "prediction_timestamp_blocks";
+    }
+  },
+  {
+    name: "evaluation event count inconsistent with split metadata",
+    pattern: /distinctEventCounts\.evaluation/,
+    mutate(report) {
+      report.dataset.distinctEventCounts.evaluation = 199;
     }
   },
   {
@@ -1267,7 +1512,7 @@ test("loadModelRegistry rejects missing and tuple-mismatched shadow reports", ()
     () => loadModelRegistry({
       registryPath: writeRegistry(registry([shadow]))
     }),
-    /report.*calibration-report-001.*required/i
+    /report.*calibration-[a-f0-9]{64}.*required/i
   );
 
   const wrongTupleReport = calibrationReport({
@@ -1299,7 +1544,7 @@ test("loadModelRegistry rejects validated models with missing or mismatched repo
 
   assert.throws(
     () => loadModelRegistry({ registryPath }),
-    /report.*calibration-report-001.*required/i
+    /report.*calibration-[a-f0-9]{64}.*required/i
   );
   assert.throws(
     () => loadModelRegistry({
@@ -1473,7 +1718,7 @@ test("loadModelRegistry rejects a report bound to different model provenance", (
   );
 });
 
-test("loadModelRegistry accepts retired models only with immutable report evidence", () => {
+test("loadModelRegistry accepts retired models only with content-addressed report evidence", () => {
   const report = calibrationReport({
     evaluation: {
       predictionCount: 499,

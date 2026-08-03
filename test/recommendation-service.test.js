@@ -173,6 +173,88 @@ test("persistDisplayedTargets never labels research-only output BET", async (t) 
   assert.equal(persisted.best[0].auditRecord.model.modelStatus, "research_only");
 });
 
+test("persistDisplayedTargets keeps stale verified prices in PRICE_CHECK_ONLY mode", async (t) => {
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "bear-edge-recommendations-"));
+  const ledgerPath = path.join(tempDir, "decision_log.jsonl");
+  t.after(() => fs.rm(tempDir, { recursive: true, force: true }));
+  const target = researchTarget({
+    status: "priced",
+    odds: {
+      bookmaker: { key: "draftkings" },
+      marketOdds: -110,
+      oppositeOdds: -110,
+      selectionMethod: "required_bookmaker_price",
+      marketContext: { offeredLastUpdate: FETCHED_AT }
+    },
+    evaluation: {
+      verdict: "WAIT",
+      reasons: ["The captured market price is stale."],
+      riskFlags: [{
+        code: "STALE_MARKET_PRICE",
+        severity: "high",
+        message: "The captured market price is older than the permitted freshness window."
+      }]
+    }
+  });
+  const result = researchResult({
+    sourceMode: "official_stats_plus_verified_odds",
+    executionBookmaker: "draftkings",
+    best: [target]
+  });
+
+  const persisted = await persistDisplayedTargets(result, {
+    ledgerPath,
+    requestId: "request_stale_price",
+    permission: "VERIFIED_BETS_ALLOWED"
+  });
+
+  assert.equal(persisted.best[0].auditRecord.permission, "PRICE_CHECK_ONLY");
+  assert.equal(
+    persisted.best[0].auditRecord.gateResults.find((gate) => gate.gate === "operational_permission").passed,
+    false
+  );
+});
+
+test("persistDisplayedTargets allows a fresh exact execution-book price", async (t) => {
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "bear-edge-recommendations-"));
+  const ledgerPath = path.join(tempDir, "decision_log.jsonl");
+  t.after(() => fs.rm(tempDir, { recursive: true, force: true }));
+  const target = researchTarget({
+    status: "priced",
+    odds: {
+      bookmaker: { key: "draftkings" },
+      marketOdds: -110,
+      oppositeOdds: -110,
+      selectionMethod: "required_bookmaker_price",
+      marketContext: { offeredLastUpdate: FETCHED_AT }
+    },
+    evaluation: {
+      verdict: "WAIT",
+      reasons: ["The model remains research-only."],
+      riskFlags: [],
+      stakePolicy: { maxMarketAgeMinutes: 10 }
+    },
+    riskFlags: []
+  });
+  const result = researchResult({
+    sourceMode: "official_stats_plus_verified_odds",
+    executionBookmaker: "draftkings",
+    best: [target]
+  });
+
+  const persisted = await persistDisplayedTargets(result, {
+    ledgerPath,
+    requestId: "request_fresh_execution_price"
+  });
+
+  assert.equal(persisted.best[0].auditRecord.permission, "VERIFIED_BETS_ALLOWED");
+  assert.equal(
+    persisted.best[0].auditRecord.gateResults.find((gate) => gate.gate === "operational_permission").passed,
+    true
+  );
+  assert.equal(persisted.best[0].auditRecord.verdict, "WAIT");
+});
+
 test("persistDisplayedTargets uses stable ids for the same capture and new ids for new captures", async (t) => {
   const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "bear-edge-recommendations-"));
   const ledgerPath = path.join(tempDir, "decision_log.jsonl");

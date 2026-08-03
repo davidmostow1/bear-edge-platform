@@ -1,7 +1,10 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 
-const { assessOddsEvidence } = require("../src/data-edge.js");
+const {
+  assessOddsEvidence,
+  resolveBetCallPermission
+} = require("../src/data-edge.js");
 const { summarizeLiveDataHealth } = require("../src/live/live-data-health.js");
 
 const NOW = new Date("2026-07-13T12:00:00.000Z");
@@ -107,6 +110,42 @@ test("assessOddsEvidence blocks a future-dated price", () => {
   assert.equal(result.permission, "PRICE_CHECK_ONLY");
   assert.ok(result.reasonCodes.includes("ODDS_TIMESTAMP_FUTURE"));
   assert.equal(result.freshPricedCandidates, 0);
+});
+
+test("bet-call permission waits when priced candidates use research-only models", () => {
+  const permission = resolveBetCallPermission({
+    oddsStatus: "verified",
+    liveData: { requirements: { officialScoreboards: true } },
+    bestTargets: {
+      status: "priced",
+      summary: { candidates: 1, pricedCandidates: 1 },
+      best: [{
+        status: "priced",
+        modelEvidence: { validated: false },
+        evaluation: { verdict: "WAIT" }
+      }]
+    }
+  });
+
+  assert.equal(permission, "WAIT");
+});
+
+test("bet-call permission requires a validated candidate-level BET decision", () => {
+  const permission = resolveBetCallPermission({
+    oddsStatus: "verified",
+    liveData: { requirements: { officialScoreboards: true } },
+    bestTargets: {
+      status: "priced",
+      summary: { candidates: 1, pricedCandidates: 1 },
+      best: [{
+        status: "priced",
+        modelEvidence: { validated: true },
+        evaluation: { verdict: "BET" }
+      }]
+    }
+  });
+
+  assert.equal(permission, "VERIFIED_BETS_ALLOWED");
 });
 
 test("live data health marks a future source-status timestamp as a clock error", () => {

@@ -11,7 +11,7 @@ const {
   detectLeakage
 } = require("./dataset.js");
 const {
-  bootstrapMeanInterval,
+  bootstrapClusterMeanInterval,
   brierScore,
   expectedCalibrationError,
   fitCalibrationLine,
@@ -25,9 +25,9 @@ const { calculateClosingLineValue } = require("../analytics.js");
 const {
   americanToImpliedProbability,
   normalizeTwoWayNoVig
-} = require("../index.js");
+} = require("../odds-math.js");
 
-const REPORT_SCHEMA_VERSION = "1.0.0";
+const REPORT_SCHEMA_VERSION = "1.1.0";
 const PACKAGE_ROOT = path.resolve(__dirname, "../..");
 const SPLIT_POLICY = Object.freeze({
   training: 0.6,
@@ -274,6 +274,19 @@ function settledRows(rows) {
   ));
 }
 
+function evidenceCutoffAt(rows) {
+  const timestamps = settledRows(rows).flatMap((row) => [
+    row.settledAt,
+    row.closingPrice.capturedAt
+  ]);
+
+  if (timestamps.length === 0) {
+    return null;
+  }
+
+  return timestamps.sort(compareStrings).at(-1);
+}
+
 function bucketDefinitions(boundaries) {
   return boundaries.slice(0, -1).map((lower, index) => ({
     lower,
@@ -361,8 +374,26 @@ function requireObservedInInterval(interval, observed, metricName) {
   return interval;
 }
 
-function bootstrapMean(values, settings, metricName) {
-  const result = bootstrapMeanInterval(values, {
+function clusterValuesByEvent(rows, values) {
+  if (rows.length !== values.length) {
+    throw new TypeError("Clustered bootstrap rows and values must have equal length.");
+  }
+
+  const clustersByEvent = new Map();
+  rows.forEach((row, index) => {
+    if (!validIdentity(row.eventId)) {
+      throw new TypeError(`Clustered bootstrap row ${index} requires eventId.`);
+    }
+    const cluster = clustersByEvent.get(row.eventId) ?? [];
+    cluster.push(values[index]);
+    clustersByEvent.set(row.eventId, cluster);
+  });
+
+  return [...clustersByEvent.values()];
+}
+
+function bootstrapMean(rows, values, settings, metricName) {
+  const result = bootstrapClusterMeanInterval(clusterValuesByEvent(rows, values), {
     samples: settings.resamples,
     confidence: settings.confidenceLevel,
     seed: settings.seed
@@ -412,7 +443,8 @@ function percentileInterval(values, confidenceLevel, observed, metricName) {
   }, observed, metricName);
 }
 
-function bootstrapCalibration(metrics, buckets, observed, settings) {
+function bootstrapCalibration(rows, metrics, buckets, observed, settings) {
+  const metricClusters = clusterValuesByEvent(rows, metrics);
   const random = createXorshift32(settings.seed);
   const eceValues = [];
   const slopeValues = [];
@@ -425,9 +457,9 @@ function bootstrapCalibration(metrics, buckets, observed, settings) {
     && attemptedResamples < maximumAttempts
   ) {
     const sample = Array.from(
-      { length: metrics.length },
-      () => metrics[Math.floor(random() * metrics.length)]
-    );
+      { length: metricClusters.length },
+      () => metricClusters[Math.floor(random() * metricClusters.length)]
+    ).flat();
     if (eceValues.length < settings.resamples) {
       eceValues.push(expectedCalibrationError(sample, buckets).value);
     }
@@ -536,6 +568,12 @@ function buildEvaluation(rows, buckets, policy, settings) {
   if (settled.length < 2) {
     throw new TypeError("Evaluation requires at least two settled observations.");
   }
+  const distinctEventCount = new Set(settled.map((row) => row.eventId)).size;
+  if (distinctEventCount < 2) {
+    throw new TypeError(
+      "Evaluation uncertainty requires at least two distinct events."
+    );
+  }
   settled.forEach((row) => {
     if (!isPlainObject(row.closingPrice) || row.closingPrice.isFinal !== true) {
       throw new TypeError(
@@ -574,25 +612,38 @@ function buildEvaluation(rows, buckets, policy, settings) {
   ));
   const roiValues = settled.map(unitProfit);
   const observationDigest = settledObservationSetDigest(settled);
-  const brierInterval = bootstrapMean(modelBrierLosses, settings, "brierScore");
-  const logLossInterval = bootstrapMean(modelLogLosses, settings, "logLoss");
-  const calibrationBootstrap = bootstrapCalibration(metrics, buckets, {
+  const brierInterval = bootstrapMean(
+    settled,
+    modelBrierLosses,
+    settings,
+    "brierScore"
+  );
+  const logLossInterval = bootstrapMean(
+    settled,
+    modelLogLosses,
+    settings,
+    "logLoss"
+  );
+  const calibrationBootstrap = bootstrapCalibration(settled, metrics, buckets, {
     expectedCalibrationError: summary.expectedCalibrationError,
     calibrationSlope: summary.calibration.slope,
     calibrationIntercept: summary.calibration.intercept
   }, settings);
   const closingLineValue = bootstrapMean(
+    settled,
     closingLineValues,
     settings,
     "closingLineValue"
   );
-  const roi = bootstrapMean(roiValues, settings, "roi");
+  const roi = bootstrapMean(settled, roiValues, settings, "roi");
   const brierComparison = bootstrapMean(
+    settled,
     brierDegradation,
     settings,
     "brierScoreDegradation"
   );
   const logLossComparison = bootstrapMean(
+    settled,
     logLossDegradation,
     settings,
     "logLossDegradation"
@@ -601,6 +652,7 @@ function buildEvaluation(rows, buckets, policy, settings) {
   return {
     predictionCount: summary.predictionCount,
     settledCount: summary.settledCount,
+    distinctEventCount,
     settledObservationSetDigest: observationDigest,
     settlementCoverage: summary.settlementCoverage,
     expectedCalibrationError: summary.expectedCalibrationError,
@@ -629,6 +681,8 @@ function buildEvaluation(rows, buckets, policy, settings) {
       confidenceLevel: settings.confidenceLevel,
       resamples: settings.resamples,
       seed: settings.seed,
+      clusterUnit: "event_id",
+      distinctEventCount,
       intervals: {
         brierScore: brierInterval.interval,
         logLoss: logLossInterval.interval,
@@ -723,12 +777,19 @@ function buildRowSelection(sortedRows, options) {
 
 function buildReportEvidence(reportParts, promotionPolicy) {
   return {
+    reportSchemaVersion: REPORT_SCHEMA_VERSION,
+    evaluationStartedAt: reportParts.dataset.splitCutoffs.evaluation,
     manifestDigest: reportParts.dataset.manifestDigest,
     datasetDigest: reportParts.dataset.datasetDigest,
     identityDigest: contentDigest(reportParts.identity),
     policyDigest: reportParts.policy.policyDigest,
+    policyEvidenceDigest: contentDigest(reportParts.policy),
+    datasetEvidenceDigest: contentDigest(reportParts.dataset),
     promotionPolicy,
     splitCutoffs: { ...reportParts.dataset.splitCutoffs },
+    splitMethod: reportParts.dataset.splitMethod,
+    chronologicalBlockCount: reportParts.dataset.chronologicalBlockCount,
+    distinctEventCounts: { ...reportParts.dataset.distinctEventCounts },
     trainingDigest: contentDigest(reportParts.training),
     calibrationDigest: contentDigest(reportParts.calibration),
     evaluationDigest: contentDigest(reportParts.evaluation),
@@ -737,7 +798,7 @@ function buildReportEvidence(reportParts, promotionPolicy) {
 }
 
 /**
- * Build immutable, order-invariant calibration evidence for a tracked model.
+ * Build deep-frozen, order-invariant calibration evidence for a tracked model.
  *
  * @param {unknown[]} rows
  * @param {{ marketFamily: string, modelId: string, modelVersion: string, registryPath?: string }} options
@@ -762,8 +823,13 @@ function buildCalibrationReport(rows, options) {
       `No tracked model matches ${options.modelId}@${options.modelVersion} ${options.marketFamily}.`
     );
   }
-  if (registry.promotionPolicy.requiredUncertaintyMethod !== "percentile_bootstrap") {
-    throw new TypeError("Calibration reports require the registered percentile_bootstrap method.");
+  if (
+    registry.promotionPolicy.requiredUncertaintyMethod
+    !== "event_cluster_percentile_bootstrap"
+  ) {
+    throw new TypeError(
+      "Calibration reports require the registered event_cluster_percentile_bootstrap method."
+    );
   }
 
   const sortedRows = structuredClone(rows).sort(compareRows);
@@ -809,6 +875,10 @@ function buildCalibrationReport(rows, options) {
     sourceDigests: lineage.sourceDigests,
     sources: lineage.sources,
     splitCutoffs: { ...split.cutoffs },
+    splitMethod: split.splitMethod,
+    chronologicalBlockCount: split.chronologicalBlockCount,
+    distinctEventCounts: { ...split.distinctEventCounts },
+    evidenceCutoffAt: evidenceCutoffAt(split.evaluation),
     chronological: true,
     outOfSample: true
   };

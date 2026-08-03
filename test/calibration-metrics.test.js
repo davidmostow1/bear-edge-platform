@@ -2,6 +2,7 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 
 const {
+  bootstrapClusterMeanInterval,
   bootstrapMeanInterval,
   brierScore,
   expectedCalibrationError,
@@ -204,5 +205,33 @@ test("bootstrapMeanInterval rejects invalid samples and options", () => {
   assert.throws(
     () => bootstrapMeanInterval([1, 2], { seed: 1.5 }),
     /seed/
+  );
+});
+
+test("bootstrapClusterMeanInterval resamples whole event clusters deterministically", () => {
+  const options = { samples: 8, confidence: 0.5, seed: 1 };
+  const clusters = [[1, 3], [8, 12]];
+  const expectedEqualClusterResult = bootstrapMeanInterval([2, 10], options);
+  const first = bootstrapClusterMeanInterval(clusters, options);
+  const repeated = bootstrapClusterMeanInterval(clusters, options);
+
+  assert.deepEqual(first, repeated);
+  assert.deepEqual(first, {
+    ...expectedEqualClusterResult,
+    clusterCount: 2
+  });
+
+  const unequalClusters = bootstrapClusterMeanInterval([[1, 3], [10]], options);
+  assert.equal(unequalClusters.mean, 14 / 3);
+  assert.equal(unequalClusters.clusterCount, 2);
+});
+
+test("bootstrapClusterMeanInterval rejects invalid clusters and options", () => {
+  assert.throws(() => bootstrapClusterMeanInterval([[1, 2]]), /at least two clusters/);
+  assert.throws(() => bootstrapClusterMeanInterval([[1], []]), /must not be empty/);
+  assert.throws(() => bootstrapClusterMeanInterval([[1], [Number.NaN]]), /finite/);
+  assert.throws(
+    () => bootstrapClusterMeanInterval([[1], [2]], { samples: 0 }),
+    /samples/
   );
 });

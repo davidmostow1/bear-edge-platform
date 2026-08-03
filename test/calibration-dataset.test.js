@@ -358,6 +358,58 @@ test("chronologicalSplit never separates rows with the same prediction time", ()
   );
 });
 
+test("chronologicalSplit keeps an event atomic without breaking time order", () => {
+  const rows = Array.from({ length: 10 }, (_, index) => chronologicalRow(index));
+  const sharedEvent = {
+    eventId: "event-shared-across-boundary",
+    eventStartAt: "2026-07-12T23:00:00.000Z",
+    settledAt: "2026-07-13T02:30:00.000Z",
+    closingPrice: {
+      price: -105,
+      oppositePrice: -115,
+      capturedAt: "2026-07-12T23:00:00.000Z",
+      marketClosedAt: "2026-07-12T22:59:00.000Z",
+      isFinal: true
+    }
+  };
+  rows[0] = { ...rows[0], ...sharedEvent };
+  rows[6] = { ...rows[6], ...sharedEvent };
+
+  const split = chronologicalSplit(rows, {
+    training: 0.6,
+    calibration: 0.2,
+    evaluation: 0.2
+  });
+  const partitions = {
+    training: split.training,
+    calibration: split.calibration,
+    evaluation: split.evaluation
+  };
+  const eventMemberships = new Map();
+
+  for (const [name, partition] of Object.entries(partitions)) {
+    for (const row of partition) {
+      const prior = eventMemberships.get(row.eventId);
+      assert.ok(prior === undefined || prior === name);
+      eventMemberships.set(row.eventId, name);
+    }
+  }
+
+  assert.deepEqual(
+    [split.training.length, split.calibration.length, split.evaluation.length],
+    [7, 1, 2]
+  );
+  assert.equal(split.splitMethod, "event_atomic_prediction_interval_blocks");
+  assert.equal(split.chronologicalBlockCount, 4);
+  assert.deepEqual(split.distinctEventCounts, {
+    training: 6,
+    calibration: 1,
+    evaluation: 2
+  });
+  assert.ok(split.training.at(-1).predictionAt < split.calibration[0].predictionAt);
+  assert.ok(split.calibration.at(-1).predictionAt < split.evaluation[0].predictionAt);
+});
+
 test("chronologicalSplit rejects altered policy fractions and unsafe rows", () => {
   const rows = Array.from({ length: 5 }, (_, index) => chronologicalRow(index));
 

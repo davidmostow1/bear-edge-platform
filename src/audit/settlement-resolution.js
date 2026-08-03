@@ -1,3 +1,5 @@
+const { getSettlementEconomicsIssue } = require("./settlement-economics.js");
+
 const SETTLEMENT_OUTCOMES = new Set(["pending", "win", "loss", "push", "void"]);
 const FINAL_SETTLEMENT_OUTCOMES = new Set(["win", "loss", "push", "void"]);
 const AMENDABLE_SETTLEMENT_FIELDS = new Set([
@@ -64,9 +66,10 @@ function resolveSettlements(records = []) {
       const evaluation = evaluationsWithSequence.get(record.evaluationId);
       const validIdentity = typeof record.id === "string" && record.id.length > 0 &&
         typeof record.evaluationId === "string" && record.evaluationId.length > 0;
+      const economicsIssue = getSettlementEconomicsIssue(record);
 
       if (!validIdentity || !SETTLEMENT_OUTCOMES.has(record.outcome) ||
-          !evaluation || evaluation.sequence >= sequence) {
+          !evaluation || evaluation.sequence >= sequence || economicsIssue) {
         invalidSettlementReferenceCount += 1;
         return;
       }
@@ -85,6 +88,13 @@ function resolveSettlements(records = []) {
     if (!settlement || settlement.sequence >= sequence ||
         settlement.evaluationId !== record.evaluationId ||
         !isValidAmendmentPatch(record.patch)) {
+      invalidAmendmentCount += 1;
+      return;
+    }
+
+    const amendedSettlement = { ...settlement, ...record.patch };
+
+    if (getSettlementEconomicsIssue(amendedSettlement)) {
       invalidAmendmentCount += 1;
       return;
     }
