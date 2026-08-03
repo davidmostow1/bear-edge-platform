@@ -1,0 +1,112 @@
+{
+  "schemaVersion": "1.1",
+  "phase": "END",
+  "runId": "prompt-mastery-20260730T103418383401Z-a509fd8c81674efcb0f251201f24bcea",
+  "impactId": "e3b57cb057e840f9bb02db0e0a6f405d",
+  "createdAt": "2026-07-30T10:34:18.383401Z",
+  "plugin": {
+    "name": "prompt-mastery",
+    "version": "0.1.0+codex.20260730065217"
+  },
+  "skills": [
+    "pilot-prompt-mastery"
+  ],
+  "repository": {
+    "path": "/Users/davidbearmostow/Documents/Codex/2026-06-17-documents-openai-developers-google-drive-google",
+    "branch": "codex/bear-edge-release-candidate",
+    "commit": "2ca03a24fc1af20a3c03086757cd1dfb85c43d1e"
+  },
+  "request": {
+    "sha256": "3ccc64eba8f6a63686a0ec92ca7d0a2ea2688bfb2b154f05f956f9327da5b1f0"
+  },
+  "action": "Created and verified the bounded Bear Edge Milestone 1 design, separation guard, audit trail, independent text-review checkpoints, and Codex pickup package without changing predictive or wagering authority.",
+  "beginReceipt": {
+    "path": "reports/plugin-runs/2026-07-30/prompt-mastery-e3b57cb057e840f9bb02db0e0a6f405d-begin.json",
+    "sha256": "7fedcba2978e7d31af12f473ab4394862cf4cad0411afde9514221ac1122b50e",
+    "runId": "prompt-mastery-20260730T095049369703Z-d75a7546e3e045599bbbd7757baf374a"
+  },
+  "evidenceArtifacts": [
+    {
+      "path": "docs/BEAR_EDGE_BOUNDED_REPAIR_PROGRAM_2026-07-30.md",
+      "sha256": "99765f0e0ffcc45e018a2a435d7b94aa1a4339695c08acf778c134e0a4f44bdb"
+    },
+    {
+      "path": "governance/system-boundaries.json",
+      "sha256": "58978495978e6294730036e1416bc791758c31428f5308ea8921fd80b5047b63"
+    },
+    {
+      "path": "governance/system-boundaries.js",
+      "sha256": "bb8bdc1e9481504587d5dfe7daf107cd863421b7d55b35b068de823b06cff1ec"
+    },
+    {
+      "path": "test/system-boundaries.test.js",
+      "sha256": "c0dd26ee6b53dadf5480159ce9513110629d0d99e3acf0df34697fa42b2789d5"
+    },
+    {
+      "path": "reports/repair-program/2026-07-30/AUDIT_TRAIL.md",
+      "sha256": "a783b63ca2218b8f4aa9af2239af2f2a0bb5e897ce1811d61de48a4a6a61c117"
+    },
+    {
+      "path": "data/reports/bear_edge_operator_doctor.json",
+      "sha256": "8564aa8cd74cfb9c9e8bc5c99223f9d739f5c339980ffd3c68d1d20b8c5538bc"
+    }
+  ],
+  "valueEvidence": [
+    {
+      "claimClass": "directly_observed",
+      "claim": "Bounded Milestone 1 exists, 183 focused tests passed, the doctor reran 718 full tests, and both reviewer venues returned text-only exact-state PASS acknowledgements."
+    }
+  ],
+  "impactGate": {
+    "ending": {
+      "helpingBear": {
+        "status": "SUPPORTED",
+        "basis": "Preserved separate bankroll, ledger, model, authorization, and evidence boundaries while leaving PRICE_CHECK_ONLY unchanged.",
+        "claimClass": "directly_observed",
+        "evidenceArtifacts": [
+          {
+            "path": "governance/system-boundaries.json",
+            "sha256": "58978495978e6294730036e1416bc791758c31428f5308ea8921fd80b5047b63"
+          }
+        ]
+      },
+      "helpingSystem": {
+        "status": "SUPPORTED",
+        "basis": "Added a fail-closed boundary audit to native verification and completed the final doctor with CHECKS_COMPLETE.",
+        "claimClass": "directly_observed",
+        "evidenceArtifacts": [
+          {
+            "path": "data/reports/bear_edge_operator_doctor.json",
+            "sha256": "8564aa8cd74cfb9c9e8bc5c99223f9d739f5c339980ffd3c68d1d20b8c5538bc"
+          }
+        ]
+      },
+      "helpingProject": {
+        "status": "SUPPORTED",
+        "basis": "Delivered the requested canonical spec, milestone checklist, audit trail, independent review records, and exact pickup commands.",
+        "claimClass": "directly_observed",
+        "evidenceArtifacts": [
+          {
+            "path": "reports/repair-program/2026-07-30/AUDIT_TRAIL.md",
+            "sha256": "a783b63ca2218b8f4aa9af2239af2f2a0bb5e897ce1811d61de48a4a6a61c117"
+          }
+        ]
+      },
+      "degradationCheck": {
+        "status": "PASSED",
+        "evidenceArtifacts": [
+          {
+            "path": "data/reports/bear_edge_operator_doctor.json",
+            "sha256": "8564aa8cd74cfb9c9e8bc5c99223f9d739f5c339980ffd3c68d1d20b8c5538bc"
+          }
+        ]
+      }
+    },
+    "completionEligible": true
+  },
+  "boundaries": {
+    "predictiveImprovement": "NOT_EVALUATED",
+    "wageringAuthority": "UNCHANGED",
+    "modelValidation": "NOT_ESTABLISHED"
+  }
+}
