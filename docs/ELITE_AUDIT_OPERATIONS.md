@@ -53,7 +53,7 @@ The default address is:
 http://127.0.0.1:3000/dashboard
 ```
 
-Localhost writes remain locally open by default. Set `BEAR_EDGE_REQUIRE_OPERATOR_TOKEN=1` and provide `BEAR_EDGE_OPERATOR_TOKEN` before launch when token protection is also required on localhost.
+Localhost and LAN launches both require operator authentication. Set `BEAR_EDGE_OPERATOR_TOKEN` before launch when command-line API calls need a stable token; otherwise the launcher generates a one-time bootstrap token for the browser session.
 
 ## Private-LAN Launch
 
@@ -63,7 +63,7 @@ Start the supported same-Wi-Fi mode:
 npm run launch:lan -- --no-open
 ```
 
-The launcher checks the Mac's private address, binds the server for LAN access, and requires bearer authorization for every unsafe HTTP method. Unless `BEAR_EDGE_OPERATOR_TOKEN` is configured, it generates a random 32-byte base64url token and prints a one-time URL containing `#operatorToken=...`.
+The launcher checks the Mac's private address, binds the server for LAN access, and requires bearer authorization for every unsafe HTTP method. The phone launcher never prints the configured long-lived credential: it suppresses that value for the child process, generates a process-scoped random 32-byte base64url bootstrap token, and prints the one-time URL containing `#operatorToken=...`.
 
 Open the complete bootstrap URL in the operator browser. The fragment is not sent to the server. Dashboard JavaScript stores the token in session storage, removes the fragment immediately, and adds `Authorization: Bearer <token>` to same-origin write requests. The server stores only a SHA-256 digest and compares candidate digests with a timing-safe comparison.
 
@@ -113,17 +113,33 @@ The CLI intentionally has no unlogged evaluation mode. An input file is not auto
 
 ## Settlement
 
-Settlement is an append-only write. Use the evaluation identifier from the decision log and only a genuine graded outcome:
+Settlement is financial wager history and is an append-only write. Use the evaluation identifier from the decision log and only a genuine graded outcome from an existing canonical `BET` evaluation:
 
 ```bash
 curl -fsS -X POST http://127.0.0.1:3000/api/settle \
+  -H "authorization: Bearer ${BEAR_EDGE_OPERATOR_TOKEN:?set BEAR_EDGE_OPERATOR_TOKEN before launch}" \
   -H 'content-type: application/json' \
-  --data '{"evaluationId":"eval_id_from_decision_log","outcome":"win","closingOdds":100}'
+  --data '{"evaluationId":"eval_id_from_decision_log","outcome":"win","closingOdds":100,"stake":10,"profit":10}'
 ```
 
 For calibration-grade win/loss evidence, include both closing sides and retained final closing-line evidence as documented in `docs/CALIBRATION_READINESS.md`. A source digest must identify the genuine retained artifact; it must not be derived from manually typed odds.
 
 On LAN, use the dashboard bootstrap session or add a protected bearer header. Never paste the raw token into documentation, tracked scripts, screenshots, or shared shell history.
+
+## Shadow Outcome And Closing Evidence
+
+Do not settle `WAIT` or `PASS` evaluations. Grade eligible pre-event research and shadow evaluations with two separate non-financial records:
+
+- `POST /api/prediction-outcomes` records the official final event and market result.
+- `POST /api/closing-prices` records the final two-sided price from the exact sportsbook evaluated.
+
+Both writes require the same operator authorization as every other unsafe route. The complete request contracts are exposed by `GET /schemas` as `predictionOutcomeInput` and `closingPriceInput`, and full payload examples are documented in `README.md`.
+
+The outcome source must be an official final result with a retained source locator, capture time, source time, and genuine source digest. The closing source must be a verified provider capture; it must identify the evaluated sportsbook, contain integer American odds for both sides, occur no later than market close, and describe a market that closed no later than event start. Neither record may contain stake, profit, or other financial settlement fields.
+
+Corrections never mutate prior evidence. Append a successor with `supersedesId` equal to the latest record of the same type for that evaluation. Initial records require `supersedesId: null`; skipped predecessors, cross-evaluation references, and branched histories are rejected.
+
+The calibration projection requires both latest valid records before it treats a shadow evaluation as settled. This creates statistical evidence only. It does not create a wager, change a verdict, or grant `VERIFIED_BETS_ALLOWED`.
 
 ## Supabase Audit Projection
 
@@ -150,6 +166,8 @@ curl -fsS -X POST http://127.0.0.1:3000/api/sync/run
 ```
 
 Without valid configuration, manual synchronization returns HTTP `503`. In LAN mode it also requires the operator bearer token. The worker projects immutable records; it does not mutate the authoritative local ledger.
+
+Migration `20260718010000_shadow_evidence_v21.sql` must be deployed before the worker can project `prediction_outcome` or `closing_price` records. After deployment, verify the migration ledger, table grants, forced RLS, owner policies, append-only triggers, correction lineage, and Supabase security and performance advisors before enabling synchronization. The local ledger remains authoritative if remote projection fails.
 
 ## Statsig Presentation And Shadow Controls
 
@@ -254,8 +272,8 @@ The package command reruns verification and writes a `.tgz` file under `dist/`. 
 
 ### Operator Authorization Modes And Failures
 
-- `local_open`: bearer authorization is not required for writes in the current localhost process.
-- `bearer_token`: all unsafe HTTP methods require a verified bearer token.
+- `local_open`: an explicitly embedded or test-only policy that does not require bearer authorization. The shipped server and desktop launchers do not use this mode.
+- `bearer_token`: every protected `/api/*` read and every unsafe HTTP method require a verified bearer token. Only static assets, health, schemas, and the safe operator-auth status endpoint remain public.
 - `missing_bearer_token`: no Authorization header was supplied; HTTP `401`.
 - `malformed_bearer_token`: the header is not exactly a Bearer token; HTTP `401`.
 - `invalid_bearer_token`: the supplied token digest does not match; HTTP `401`.
@@ -285,18 +303,18 @@ HTTP route failures use HTTP `400` for malformed or invalid operator input, `401
 
 ## Current Verified Local Snapshot
 
-The following is a dated operational snapshot, not a permanent guarantee. It was checked on July 17, 2026 in the current local checkout:
+The following is a dated operational snapshot, not a permanent guarantee. It was checked on July 18, 2026 in the current local checkout:
 
 - Local dashboard health: available at `http://127.0.0.1:3000`.
-- Release result: `shippable-with-warnings`, score 80, 19 pass, 3 warnings, 0 failures, and 4 informational evidence gates.
+- Release result: `blocked`, score 64, 18 pass, 3 warnings, 1 failure, and 4 informational evidence gates.
 - Betting permission: `PRICE_CHECK_ONLY`.
-- The Odds API: key configured; 500 credits used, 0 remaining, paid circuit open with `OUT_OF_USAGE_CREDITS`.
-- Decision Board: 40 research candidates, 0 priced candidates, and no authorized qualified BET output.
-- Authoritative ledger: valid, 27 evaluations, 0 malformed lines, 0 duplicate identifiers, 0 digest conflicts, and 0 invalid records.
+- The Odds API: key configured but current verified pricing unavailable; the last readiness evidence reports no usable credit and no priced candidates.
+- Decision Board: research candidates only, 0 priced candidates, and no authorized qualified BET output.
+- Authoritative ledger: 37 retained rows, including 20 canonical evaluations and 17 legacy rows; 0 malformed lines, 0 duplicate identifiers, 0 digest conflicts, and 0 schema-invalid canonical records. The legacy rows are an explicit release blocker until non-destructively archived or migrated.
 - Model registry: valid, 4 registered entries, 0 validated entries; all current entries are `research_only`.
-- Supabase: not configured; synchronization disabled; 10 local pending outbox records, 0 retryable failures, 0 terminal failures, and 0 integrity issues.
+- Supabase: not configured; synchronization disabled; 20 local pending outbox records, 0 retryable failures, 0 terminal failures, and 0 outbox integrity issues.
 - Statsig: not configured locally; `control_fallback`, fail closed, presentation/shadow authority only.
-- Localhost write boundary: `local_open` by design.
+- Localhost and private-LAN API boundary: bearer authentication required by both shipped launch paths. The token is bootstrapped in a URL fragment, moved to session storage, removed from the visible URL, and attached only to same-origin requests.
 - Private-LAN launcher smoke: generated token present only in URL fragment, unauthenticated write returned `401`, authenticated write returned `200`, token absent from logs, and an isolated authoritative record persisted without containing the token.
 - Desktop and phone-width browser checks: no horizontal overflow at 1440 by 900 or 390 by 844; Decision Board classifications and write controls remained readable.
 - A physically separate phone/device test was not available in the execution environment and remains `BLOCKED_EXTERNAL`. It is not recorded as passed.

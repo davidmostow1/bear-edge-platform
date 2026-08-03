@@ -27,10 +27,6 @@ function playerNeedles(name) {
     needles.add(parts.join(" "));
   }
 
-  if (lastName) {
-    needles.add(lastName);
-  }
-
   if (firstInitial && lastName) {
     needles.add(`${firstInitial} ${lastName}`);
     needles.add(`${firstInitial}. ${lastName}`);
@@ -59,29 +55,13 @@ function statNeedles(statKey) {
   return [normalizeText(statKey)];
 }
 
-function lineNeedles(candidate) {
-  const line = Number(candidate.line);
-
-  if (!Number.isFinite(line)) {
-    return [];
-  }
-
-  const values = new Set([String(line)]);
-
-  if (candidate.lean === "over") {
-    values.add(`${Math.floor(line) + 1}+`);
-  }
-
-  return Array.from(values);
-}
-
 function sideNeedles(side) {
   if (side === "over") {
-    return ["over", " o "];
+    return ["over"];
   }
 
   if (side === "under") {
-    return ["under", " u "];
+    return ["under"];
   }
 
   return [];
@@ -96,22 +76,51 @@ function americanOddsFromText(text) {
 }
 
 function firstOddsAfterPlayer(text, candidate) {
-  const normalized = normalizeMinus(text);
-  const lowered = normalized.toLowerCase();
-  const indexes = playerNeedles(candidate.player?.name ?? "")
-    .map((needle) => lowered.indexOf(needle.replace(/\./g, "")))
-    .filter((index) => index >= 0);
+  const lines = splitLines(text);
+  const names = playerNeedles(candidate.player?.name ?? "");
+  const playerLineIndex = lines.findIndex((line) => containsAnyPhrase(` ${normalizeText(line)} `, names));
 
-  if (indexes.length > 0) {
-    const sliced = normalized.slice(Math.min(...indexes));
-    return americanOddsFromText(sliced)[0] ?? null;
+  if (playerLineIndex >= 0) {
+    return americanOddsFromText(lines.slice(playerLineIndex).join("\n"))[0] ?? null;
   }
 
-  return americanOddsFromText(normalized)[0] ?? null;
+  return null;
 }
 
-function containsAny(haystack, needles) {
-  return needles.some((needle) => haystack.includes(needle));
+function containsPhrase(haystack, needle) {
+  const normalizedNeedle = normalizeText(needle);
+
+  return Boolean(normalizedNeedle) && haystack.includes(` ${normalizedNeedle} `);
+}
+
+function containsAnyPhrase(haystack, needles) {
+  return needles.some((needle) => containsPhrase(haystack, needle));
+}
+
+function escapeRegExp(value) {
+  return String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function containsExactNumber(haystack, value) {
+  const escaped = escapeRegExp(value);
+
+  return new RegExp(`(?:^|[^0-9.])${escaped}(?![0-9.])`).test(haystack);
+}
+
+function containsExactThreshold(haystack, value) {
+  const escaped = escapeRegExp(value);
+
+  return new RegExp(`(?:^|[^0-9.])${escaped}\\+(?![0-9+])`).test(haystack);
+}
+
+function hasAbbreviatedSide(haystack, side, line) {
+  const prefix = side === "over" ? "o" : side === "under" ? "u" : null;
+
+  if (!prefix) {
+    return false;
+  }
+
+  return new RegExp(`(?:^|\\s)${prefix}\\s*${escapeRegExp(line)}(?=\\s|$)`).test(haystack);
 }
 
 function buildWindows(lines) {
@@ -135,26 +144,31 @@ function buildWindows(lines) {
 function scoreWindow(candidate, window) {
   const names = playerNeedles(candidate.player?.name ?? "");
   const stats = statNeedles(candidate.statKey);
-  const lines = lineNeedles(candidate);
   const sides = sideNeedles(candidate.lean);
   const odds = americanOddsFromText(window.raw);
+  const line = Number(candidate.line);
 
-  if (odds.length === 0 || !containsAny(window.normalized, names)) {
+  if (odds.length === 0 || !Number.isFinite(line) || !containsAnyPhrase(window.normalized, names)) {
     return null;
   }
 
-  const hasStat = containsAny(window.normalized, stats);
-  const hasLine = containsAny(window.normalized, lines);
-  const hasSide = containsAny(window.normalized, sides);
+  const hasStat = containsAnyPhrase(window.normalized, stats);
+  const hasExactLine = containsExactNumber(window.normalized, String(line));
+  const hasAlternateThreshold = candidate.lean === "over"
+    && containsExactThreshold(window.normalized, String(Math.floor(line) + 1));
+  const hasLine = hasExactLine || hasAlternateThreshold;
+  const hasExplicitSide = containsAnyPhrase(window.normalized, sides)
+    || hasAbbreviatedSide(window.normalized, candidate.lean, String(line));
+  const hasSide = hasExplicitSide || hasAlternateThreshold;
   const marketOdds = firstOddsAfterPlayer(window.raw, candidate);
 
-  if (marketOdds === null || !hasLine || (!hasStat && !hasSide)) {
+  if (marketOdds === null || !hasStat || !hasLine || !hasSide) {
     return null;
   }
 
   let confidence = 0.58;
 
-  if (containsAny(window.normalized, [normalizeText(candidate.player?.name ?? "")])) {
+  if (containsAnyPhrase(window.normalized, [normalizeText(candidate.player?.name ?? "")])) {
     confidence += 0.15;
   }
 
@@ -178,7 +192,9 @@ function scoreWindow(candidate, window) {
       player: true,
       stat: hasStat,
       line: hasLine,
-      side: hasSide
+      side: hasSide,
+      sideExplicit: hasExplicitSide,
+      alternateThreshold: hasAlternateThreshold
     }
   };
 }

@@ -3,6 +3,7 @@
 const fs = require("node:fs/promises");
 const path = require("node:path");
 
+const { isBearEdgeTestModeEnabled } = require("../config/runtime-flags.js");
 const { evaluateLiveTicketAndLog } = require("../live/evaluate-live-ticket.js");
 const { fetchJson } = require("../live/fixture-fetch.js");
 const { LiveTicketValidationError, validateLiveTicket } = require("../validate-live-ticket.js");
@@ -13,10 +14,17 @@ function printUsage() {
   );
 }
 
+// The paid odds response cache has a two minute TTL. A poll interval shorter
+// than that out-runs its own cache and buys the same prices repeatedly, which
+// is the fastest way to burn a monthly credit allowance without noticing.
+// Default to just past the TTL; --interval-seconds can still go lower
+// deliberately.
+const DEFAULT_INTERVAL_SECONDS = 150;
+
 function parseArgs(argv) {
   const args = [...argv];
   let inputPath = null;
-  let intervalSeconds = 60;
+  let intervalSeconds = DEFAULT_INTERVAL_SECONDS;
   let iterations = Infinity;
   let logPath;
 
@@ -81,7 +89,7 @@ async function main(argv = process.argv.slice(2)) {
     const ticket = validateLiveTicket(rawInput);
     const result = await evaluateLiveTicketAndLog(ticket, {
       logPath: parsedArgs.logPath,
-      fetchJsonImpl: process.env.BEAR_EDGE_TEST_MODE ? fetchJson : undefined
+      fetchJsonImpl: isBearEdgeTestModeEnabled() ? fetchJson : undefined
     });
 
     process.stdout.write(`${JSON.stringify(result)}\n`);

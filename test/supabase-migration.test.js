@@ -16,8 +16,12 @@ const indexCleanupMigrationPath = path.resolve(
   __dirname,
   "../supabase/migrations/20260717080017_remove_duplicate_client_event_index_20260717.sql"
 );
+const shadowEvidenceMigrationPath = path.resolve(
+  __dirname,
+  "../supabase/migrations/20260718010000_shadow_evidence_v21.sql"
+);
 
-const deployedMigrationFiles = [
+const versionControlledMigrationFiles = [
   "20260711021059_auth_user_state.sql",
   "20260711023920_audit_journal.sql",
   "20260711024403_allow_auth_user_cascade.sql",
@@ -32,7 +36,8 @@ const deployedMigrationFiles = [
   "20260711215305_decision_journal_indexes_v10.sql",
   "20260717075523_align_audit_records_20260717.sql",
   "20260717075721_allow_service_projection_20260717.sql",
-  "20260717080017_remove_duplicate_client_event_index_20260717.sql"
+  "20260717080017_remove_duplicate_client_event_index_20260717.sql",
+  "20260718010000_shadow_evidence_v21.sql"
 ];
 
 function migrationSql() {
@@ -47,12 +52,16 @@ function indexCleanupMigrationSql() {
   return fs.readFileSync(indexCleanupMigrationPath, "utf8");
 }
 
-test("repository contains the complete deployed migration ledger", () => {
+function shadowEvidenceMigrationSql() {
+  return fs.readFileSync(shadowEvidenceMigrationPath, "utf8");
+}
+
+test("repository contains the complete version-controlled migration ledger", () => {
   const migrationFiles = fs.readdirSync(migrationDir)
     .filter((file) => file.endsWith(".sql"))
     .sort();
 
-  assert.deepEqual(migrationFiles, deployedMigrationFiles);
+  assert.deepEqual(migrationFiles, versionControlledMigrationFiles);
 });
 
 test("migration stops unless all projection tables are empty", () => {
@@ -169,4 +178,65 @@ test("advisor cleanup removes only the redundant client event index", () => {
   assert.doesNotMatch(sql, /drop index[\s\S]*decision_records_client_event_unique/i);
   assert.doesNotMatch(sql, /settlement_records_user_settled_idx/i);
   assert.match(sql, /commit;$/i);
+});
+
+test("shadow evidence migration creates non-financial outcome and exact-book closing projections", () => {
+  const sql = shadowEvidenceMigrationSql().trim();
+
+  assert.match(sql, /^begin;/i);
+  assert.match(sql, /create table public\.prediction_outcomes/i);
+  assert.match(sql, /create table public\.closing_prices/i);
+  assert.match(sql, /event_status text not null check \(event_status = 'final'\)/i);
+  assert.match(sql, /market_odds integer not null check \(market_odds <> 0 and abs\(market_odds\) between 100 and 100000\)/i);
+  assert.match(sql, /opposite_odds integer not null check \(opposite_odds <> 0 and abs\(opposite_odds\) between 100 and 100000\)/i);
+  assert.match(sql, /prediction_outcomes_owned_decision[\s\S]*decision_id, user_id[\s\S]*decision_records \(id, user_id\)/i);
+  assert.match(sql, /closing_prices_owned_decision[\s\S]*decision_id, user_id[\s\S]*decision_records \(id, user_id\)/i);
+  assert.match(sql, /prediction_outcomes_supersedes_owned[\s\S]*supersedes_client_event_id[\s\S]*prediction_outcomes/i);
+  assert.match(sql, /closing_prices_supersedes_owned[\s\S]*supersedes_client_event_id[\s\S]*closing_prices/i);
+  assert.doesNotMatch(sql, /\bstake\b/i);
+  assert.doesNotMatch(sql, /\bprofit\b/i);
+  assert.match(sql, /commit;$/i);
+});
+
+test("shadow evidence migration aligns source chronology with the canonical local contract", () => {
+  const sql = shadowEvidenceMigrationSql();
+
+  assert.match(sql, /prediction_outcomes_source_chronology[\s\S]*resolved_at <= source_time[\s\S]*source_time <= source_captured_at[\s\S]*source_captured_at <= created_at/i);
+  assert.match(sql, /closing_prices_source_chronology[\s\S]*source_time <= market_closed_at[\s\S]*market_closed_at <= source_captured_at[\s\S]*source_captured_at <= created_at/i);
+  assert.match(sql, /new\.resolved_at < event_start_at/i);
+  assert.match(sql, /new\.market_closed_at > event_start_at/i);
+  assert.match(sql, /lower\(new\.sportsbook\) is distinct from lower\(parent_sportsbook\)/i);
+});
+
+test("shadow evidence migration is append-only, owner-scoped, and explicit about Data API grants", () => {
+  const sql = shadowEvidenceMigrationSql();
+
+  for (const table of ["prediction_outcomes", "closing_prices"]) {
+    assert.match(sql, new RegExp(`alter table public\\.${table} enable row level security`, "i"));
+    assert.match(sql, new RegExp(`alter table public\\.${table} force row level security`, "i"));
+    assert.match(sql, new RegExp(`grant select, insert on table public\\.${table} to authenticated, service_role`, "i"));
+    assert.match(sql, new RegExp(`revoke update, delete, truncate on table public\\.${table} from authenticated, service_role`, "i"));
+    assert.match(sql, new RegExp(`${table}_select_own[\\s\\S]*auth\\.uid\\(\\)[\\s\\S]*user_id`, "i"));
+    assert.match(sql, new RegExp(`${table}_insert_own[\\s\\S]*auth\\.uid\\(\\)[\\s\\S]*user_id`, "i"));
+    assert.match(sql, new RegExp(`${table}_reject_mutation[\\s\\S]*private\\.reject_audit_mutation`, "i"));
+  }
+
+  assert.doesNotMatch(sql, /grant[\s\S]*to anon/i);
+});
+
+test("shadow evidence lineage trigger is private, claim-aware, serialized, and branch-safe", () => {
+  const sql = shadowEvidenceMigrationSql();
+
+  assert.match(sql, /create or replace function private\.enforce_shadow_evidence_lineage/i);
+  assert.match(sql, /security definer/i);
+  assert.match(sql, /set search_path = ''/i);
+  assert.match(sql, /new\.user_id <> \(select auth\.uid\(\)\)/i);
+  assert.match(sql, /select auth\.jwt\(\)->>'role'/i);
+  assert.match(sql, /is distinct from 'service_role'/i);
+  assert.match(sql, /pg_advisory_xact_lock/i);
+  assert.match(sql, /correction history cannot branch/i);
+  assert.match(sql, /correction must supersede the latest record/i);
+  assert.match(sql, /revoke all on function private\.enforce_shadow_evidence_lineage\(\) from public, anon, authenticated/i);
+  assert.doesNotMatch(sql, /user_metadata/i);
+  assert.doesNotMatch(sql, /raw_user_meta_data/i);
 });

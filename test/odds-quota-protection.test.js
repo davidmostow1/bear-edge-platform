@@ -86,6 +86,35 @@ test("duplicate paid odds requests reuse the short-lived cache", async () => {
   assert.equal(second.cache.hit, true);
 });
 
+test("an explicit best-target market refresh bypasses every paid odds cache", async () => {
+  let paidNetworkCalls = 0;
+  const fetchJsonImpl = async (url) => {
+    if (url.includes("api.the-odds-api.com/v4/sports/baseball_mlb")) {
+      paidNetworkCalls += 1;
+    }
+    return fixtureFetchJson(url);
+  };
+  const request = {
+    date: "2026-06-17",
+    days: 1,
+    limit: 3,
+    maxCandidates: 20,
+    oddsApiKey: "test-odds-key",
+    allowPaidOdds: true,
+    forceRefresh: true,
+    fetchJsonImpl
+  };
+
+  const first = await getBestMlbTargets(request);
+  const callsAfterFirstRefresh = paidNetworkCalls;
+  const second = await getBestMlbTargets(request);
+
+  assert.ok(callsAfterFirstRefresh > 0);
+  assert.equal(paidNetworkCalls, callsAfterFirstRefresh * 2);
+  assert.equal(first.oddsSources?.cache?.anyHit, false);
+  assert.equal(second.oddsSources?.cache?.anyHit, false);
+});
+
 test("paid response caches do not cross injected provider transports", async () => {
   const first = await fetchOddsApiMarkets({
     oddsApiKey: API_KEY,

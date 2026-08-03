@@ -6,10 +6,21 @@ const {
 const {
   AUDIT_RECORD_SCHEMA_VERSION,
   createAmendmentRecord,
+  createClosingPriceRecord,
   createEvaluationRecord,
+  createPredictionOutcomeRecord,
   createSettlementAuditRecord,
   validateAuditRecord
 } = require("./audit/record-contract.js");
+const {
+  EvidenceIntegrityError,
+  appendClosingPrice,
+  appendPredictionOutcome
+} = require("./audit/evidence-ledger.js");
+const {
+  buildEvidenceQueue,
+  getEvidenceQueue
+} = require("./audit/evidence-queue.js");
 const {
   appendAuthoritativeRecord
 } = require("./audit/authoritative-ledger.js");
@@ -40,6 +51,7 @@ const {
 } = require("./live/evaluate-live-ticket.js");
 const { LiveDataCache } = require("./live/cache.js");
 const { generateResearchCandidates } = require("./live/candidates.js");
+const { resolveOfficialMlbOutcomes } = require("./live/official-mlb-outcomes.js");
 const {
   fetchGamesForWindow,
   fetchMlbGamesForDate,
@@ -57,10 +69,18 @@ const {
 const {
   AMENDMENT_INPUT_SCHEMA,
   BET_DECISION_SCHEMA,
+  CLOSING_PRICE_INPUT_SCHEMA,
   LIVE_DECISION_SCHEMA,
+  PREDICTION_OUTCOME_INPUT_SCHEMA,
   RESEARCH_PACKET_SCHEMA,
   SETTLEMENT_INPUT_SCHEMA
 } = require("./schemas.js");
+const {
+  americanToDecimal,
+  americanToImpliedProbability,
+  getTwoWayNoVigProbabilities,
+  normalizeTwoWayNoVig
+} = require("./odds-math.js");
 
 /**
  * @typedef {object} ExpectedValueInput
@@ -196,64 +216,6 @@ function addRiskFlag(flags, code, severity, message) {
   if (!flags.some((flag) => flag.code === code)) {
     flags.push({ code, severity, message });
   }
-}
-
-function americanToDecimal(americanOdds) {
-  assertFiniteNumber(americanOdds, "americanOdds");
-
-  if (americanOdds === 0) {
-    throw new RangeError("americanOdds cannot be 0.");
-  }
-
-  if (americanOdds > 0) {
-    return 1 + americanOdds / 100;
-  }
-
-  return 1 + 100 / Math.abs(americanOdds);
-}
-
-function americanToImpliedProbability(americanOdds) {
-  assertFiniteNumber(americanOdds, "americanOdds");
-
-  if (americanOdds === 0) {
-    throw new RangeError("americanOdds cannot be 0.");
-  }
-
-  if (americanOdds > 0) {
-    return 100 / (americanOdds + 100);
-  }
-
-  return Math.abs(americanOdds) / (Math.abs(americanOdds) + 100);
-}
-
-function normalizeTwoWayNoVig(probabilityA, probabilityB) {
-  assertProbability(probabilityA, "probabilityA");
-  assertProbability(probabilityB, "probabilityB");
-
-  const total = probabilityA + probabilityB;
-
-  if (total <= 0) {
-    throw new RangeError("probabilityA and probabilityB cannot both be 0.");
-  }
-
-  return {
-    sideA: probabilityA / total,
-    sideB: probabilityB / total
-  };
-}
-
-function getTwoWayNoVigProbabilities(americanOddsA, americanOddsB) {
-  const impliedA = americanToImpliedProbability(americanOddsA);
-  const impliedB = americanToImpliedProbability(americanOddsB);
-  const normalized = normalizeTwoWayNoVig(impliedA, impliedB);
-
-  return {
-    impliedA,
-    impliedB,
-    marketVig: impliedA + impliedB - 1,
-    noVigA: normalized.sideA,
-    noVigB: normalized.sideB
-  };
 }
 
 function shrinkProbabilityTowardMarket(modelProbability, marketProbability, marketWeight = 0.35) {
@@ -747,11 +709,14 @@ module.exports = {
   AUDIT_RECORD_SCHEMA_VERSION,
   appendAmendment,
   appendAuthoritativeRecord,
+  appendClosingPrice,
   appendDecisionLog,
+  appendPredictionOutcome,
   appendSettlement,
   BET_DECISION_SCHEMA,
   BET_INPUT_SCHEMA,
   BetInputValidationError,
+  CLOSING_PRICE_INPUT_SCHEMA,
   createServer,
   DEFAULT_DECISION_LOG_TEMPLATE,
   DEFAULT_DECISION_LOG_PATH,
@@ -766,18 +731,22 @@ module.exports = {
   getTwoWayNoVigProbabilities,
   shrinkProbabilityTowardMarket,
   calculateExpectedValue,
+  buildEvidenceQueue,
   buildValidationGate,
   calculateClosingLineValue,
   calculateKellyFraction,
   applyStakeCaps,
   createDecisionLogTemplate,
   createAmendmentRecord,
+  createClosingPriceRecord,
   createEvaluationRecord,
+  createPredictionOutcomeRecord,
   createStraightEvaluationAuditRecord,
   createId,
   createSettlementAuditRecord,
   createSettlementRecord,
   evaluateBetDecision,
+  EvidenceIntegrityError,
   generateResearchCandidates,
   fetchGamesForWindow,
   fetchMlbGamesForDate,
@@ -785,10 +754,13 @@ module.exports = {
   evaluateLiveTicket,
   evaluateLiveTicketAndLog,
   getDecisionLogDashboard,
+  getEvidenceQueue,
   LiveTicketValidationError,
+  PREDICTION_OUTCOME_INPUT_SCHEMA,
   RESEARCH_PACKET_SCHEMA,
   readDecisionLogEntries,
   projectCalibrationLedger,
+  resolveOfficialMlbOutcomes,
   resolveDecisionLogPath,
   SETTLEMENT_INPUT_SCHEMA,
   describeCausalEvidence,

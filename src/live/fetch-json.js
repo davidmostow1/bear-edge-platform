@@ -1,14 +1,24 @@
 const { redactSecrets } = require("../config/secrets.js");
 
+const DEFAULT_FETCH_TIMEOUT_MS = 15000;
+
+/**
+ * @param {string | URL} url
+ * @param {RequestInit & {onResponse?: (response: Response) => void, timeoutMs?: number}} [options]
+ */
 async function fetchJson(url, options = {}) {
-  const { onResponse, ...fetchOptions } = options;
+  const { onResponse, timeoutMs, ...fetchOptions } = options;
+  const resolvedTimeoutMs = Number.isFinite(timeoutMs) && timeoutMs > 0
+    ? Math.ceil(timeoutMs)
+    : DEFAULT_FETCH_TIMEOUT_MS;
   const response = await fetch(url, {
     method: "GET",
     headers: {
       "accept": "application/json",
       "user-agent": "bear-edge-betting-engine/1.0"
     },
-    ...fetchOptions
+    ...fetchOptions,
+    signal: fetchOptions.signal ?? AbortSignal.timeout(resolvedTimeoutMs)
   });
 
   if (typeof onResponse === "function") {

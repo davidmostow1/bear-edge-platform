@@ -8,6 +8,12 @@ const {
 } = require("./audit/authoritative-ledger.js");
 const { persistDisplayedTargets } = require("./audit/recommendation-service.js");
 const {
+  EvidenceIntegrityError,
+  appendClosingPrice,
+  appendPredictionOutcome
+} = require("./audit/evidence-ledger.js");
+const { getEvidenceQueue } = require("./audit/evidence-queue.js");
+const {
   AuditIntegrityError,
   appendAmendment,
   appendSettlement,
@@ -20,10 +26,23 @@ const {
 } = require("./live/auto-update.js");
 const { generateResearchCandidates } = require("./live/candidates.js");
 const {
+  DEFAULT_EXECUTION_BOOKMAKER,
   DEFAULT_MLB_BOOKMAKERS,
   getBestMlbTargets
 } = require("./live/best-mlb-targets.js");
 const { matchCandidateOdds } = require("./live/candidate-odds-import.js");
+const {
+  addCalendarDays,
+  dateStringForInstant
+} = require("./live/date-window.js");
+const { normalizeDirectScreenCapture } = require("./live/direct-screen-capture.js");
+const {
+  persistDirectScreenCapture,
+  readLatestDirectScreenCapture
+} = require("./live/direct-screen-capture-store.js");
+const {
+  matchDirectScreenCaptureCandidates
+} = require("./live/direct-screen-candidate-match.js");
 const { fetchGamesForWindow } = require("./live/schedule.js");
 const { getLiveDataHealth } = require("./live/live-data-health.js");
 const { getSourceStatusDashboard } = require("./live/source-status.js");
@@ -43,7 +62,6 @@ const {
   quotaSnapshot,
   verifyOddsApiReadiness
 } = require("./live/odds-api.js");
-const { fetchJson, fetchText } = require("./live/fixture-fetch.js");
 const { getSystemAudit } = require("./system-audit.js");
 const { getReleaseReadiness } = require("./release-readiness.js");
 const { getDataEdgeAudit } = require("./data-edge.js");
@@ -68,8 +86,10 @@ const {
   AUDIT_RECORD_SCHEMA,
   BET_DECISION_SCHEMA,
   BET_INPUT_SCHEMA,
+  CLOSING_PRICE_INPUT_SCHEMA,
   LIVE_DECISION_SCHEMA,
   LIVE_TICKET_SCHEMA,
+  PREDICTION_OUTCOME_INPUT_SCHEMA,
   RESEARCH_PACKET_SCHEMA,
   SETTLEMENT_INPUT_SCHEMA
 } = require("./schemas.js");
@@ -77,6 +97,30 @@ const { BetInputValidationError, validateBetInput } = require("./validate-bet-in
 const { LiveTicketValidationError, validateLiveTicket } = require("./validate-live-ticket.js");
 
 const PROJECT_ROOT = path.resolve(__dirname, "..");
+// A 12 MiB screenshot expands to roughly 16 MiB when Base64-encoded in JSON.
+const DEFAULT_MAX_REQUEST_BODY_BYTES = 20 * 1024 * 1024;
+const SECURITY_HEADERS = Object.freeze({
+  "content-security-policy": [
+    "default-src 'self'",
+    "base-uri 'none'",
+    "connect-src 'self'",
+    "font-src 'self'",
+    "form-action 'self'",
+    "frame-ancestors 'none'",
+    "img-src 'self' data:",
+    "manifest-src 'self'",
+    "object-src 'none'",
+    "script-src 'self'",
+    "style-src 'self' 'unsafe-inline'",
+    "worker-src 'self'"
+  ].join("; "),
+  "cross-origin-opener-policy": "same-origin",
+  "cross-origin-resource-policy": "same-origin",
+  "permissions-policy": "camera=(), geolocation=(), microphone=(), payment=(), usb=()",
+  "referrer-policy": "no-referrer",
+  "x-content-type-options": "nosniff",
+  "x-frame-options": "DENY"
+});
 const OCR_PARSER_ALIASES = Object.freeze({
   draftkings: "draftkings",
   espn: "espn",
@@ -89,6 +133,8 @@ const OCR_PARSER_ALIASES = Object.freeze({
 
 function jsonResponse(response, statusCode, payload) {
   response.writeHead(statusCode, {
+    ...SECURITY_HEADERS,
+    "cache-control": "no-store",
     "content-type": "application/json; charset=utf-8"
   });
   response.end(`${JSON.stringify(payload)}\n`);
@@ -96,6 +142,8 @@ function jsonResponse(response, statusCode, payload) {
 
 function redirectResponse(response, location) {
   response.writeHead(302, {
+    ...SECURITY_HEADERS,
+    "cache-control": "no-store",
     location
   });
   response.end();
@@ -106,16 +154,50 @@ async function staticResponse(response, fileName, contentType) {
   const contents = await fs.readFile(filePath);
 
   response.writeHead(200, {
+    ...SECURITY_HEADERS,
+    "cache-control": "no-cache",
     "content-type": contentType
   });
   response.end(contents);
 }
 
-async function readJsonBody(request) {
+class RequestBodyTooLargeError extends Error {
+  constructor(maxBytes) {
+    super(`Request body exceeds the ${maxBytes}-byte limit.`);
+    this.name = "RequestBodyTooLargeError";
+    this.code = "REQUEST_BODY_TOO_LARGE";
+    this.maxBytes = maxBytes;
+  }
+}
+
+async function readJsonBody(request, options = {}) {
+  const maxBytes = Number.isInteger(options.maxBytes) && options.maxBytes > 0
+    ? options.maxBytes
+    : DEFAULT_MAX_REQUEST_BODY_BYTES;
+  const contentLength = Number(request.headers["content-length"]);
+
+  if (Number.isFinite(contentLength) && contentLength > maxBytes) {
+    request.resume();
+    throw new RequestBodyTooLargeError(maxBytes);
+  }
+
   const chunks = [];
+  let totalBytes = 0;
+  let tooLarge = false;
 
   for await (const chunk of request) {
-    chunks.push(chunk);
+    totalBytes += chunk.length;
+
+    if (totalBytes > maxBytes) {
+      tooLarge = true;
+      chunks.length = 0;
+    } else if (!tooLarge) {
+      chunks.push(chunk);
+    }
+  }
+
+  if (tooLarge) {
+    throw new RequestBodyTooLargeError(maxBytes);
   }
 
   return JSON.parse(Buffer.concat(chunks).toString("utf8"));
@@ -125,6 +207,78 @@ function isLoopbackAddress(address) {
   return address === "127.0.0.1"
     || address === "::1"
     || address === "::ffff:127.0.0.1";
+}
+
+function requiresOperatorAuthorization(request, url) {
+  const method = request.method ?? "GET";
+
+  if (!["GET", "HEAD", "OPTIONS"].includes(method)) {
+    return true;
+  }
+
+  if (method !== "GET") {
+    return false;
+  }
+
+  return url.pathname.startsWith("/api/") && url.pathname !== "/api/operator-auth";
+}
+
+function parseEvidenceQueueQuery(url) {
+  const supported = new Set(["status", "limit"]);
+  const unknown = [...url.searchParams.keys()].filter((name) => !supported.has(name));
+  const status = url.searchParams.get("status") ?? "unresolved";
+  const limitText = url.searchParams.get("limit") ?? "100";
+  const limit = Number(limitText);
+
+  if (unknown.length > 0) {
+    return {
+      error: `Unsupported evidence queue query parameter: ${unknown[0]}.`
+    };
+  }
+  if (!new Set(["unresolved", "complete", "all"]).has(status)) {
+    return {
+      error: "Evidence queue status must be unresolved, complete, or all."
+    };
+  }
+  if (!/^\d+$/.test(limitText) || !Number.isSafeInteger(limit) || limit < 1 || limit > 500) {
+    return {
+      error: "Evidence queue limit must be an integer from 1 through 500."
+    };
+  }
+
+  return { status, limit };
+}
+
+function directCaptureCandidateDate(capture, timeZone) {
+  const capturedAt = new Date(capture.capturedAt);
+  const localDate = dateStringForInstant(capturedAt, timeZone);
+
+  if (capture.event?.status !== "live") {
+    return localDate;
+  }
+
+  const hourPart = new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    hour: "2-digit",
+    hourCycle: "h23"
+  }).formatToParts(capturedAt).find((part) => part.type === "hour");
+  const localHour = Number(hourPart?.value);
+
+  return Number.isInteger(localHour) && localHour < 6
+    ? addCalendarDays(localDate, -1)
+    : localDate;
+}
+
+async function refreshedEvidenceQueueItem(evaluationId, options) {
+  const queue = await getEvidenceQueue({
+    logPath: options.logPath,
+    registryPath: options.registryPath,
+    status: "all",
+    limit: 1,
+    targetEvaluationId: evaluationId
+  });
+
+  return queue.items.find((item) => item.evaluationId === evaluationId) ?? null;
 }
 
 async function getSyncHealth(options = {}) {
@@ -160,17 +314,24 @@ async function getSyncHealth(options = {}) {
 }
 
 function createServer(options = {}) {
+  if (typeof options.operatorAuth?.authorizeRequest !== "function"
+    || typeof options.operatorAuth?.getStatus !== "function") {
+    throw new TypeError("createServer requires an explicit operatorAuth policy.");
+  }
+
+  const readRequestJsonBody = (request) => readJsonBody(request, {
+    maxBytes: options.maxRequestBodyBytes
+  });
+
   return http.createServer(async (request, response) => {
     try {
       const url = new URL(request.url ?? "/", "http://127.0.0.1");
-      const safeMethod = ["GET", "HEAD", "OPTIONS"].includes(request.method ?? "GET");
-
-      if (!safeMethod && options.operatorAuth) {
+      if (requiresOperatorAuthorization(request, url)) {
         const authorization = options.operatorAuth.authorizeRequest(request);
 
         if (!authorization.authorized) {
           return jsonResponse(response, authorization.statusCode, {
-            error: "Operator authorization is required for write operations.",
+            error: "Operator authorization is required for protected operations.",
             code: authorization.reason
           });
         }
@@ -209,16 +370,7 @@ function createServer(options = {}) {
       }
 
       if (request.method === "GET" && url.pathname === "/api/operator-auth") {
-        return jsonResponse(response, 200, options.operatorAuth?.getStatus() ?? {
-          provider: "bear_edge_operator_auth",
-          required: false,
-          lanMode: false,
-          mode: "local_open",
-          tokenSource: "not_required",
-          digestAlgorithm: null,
-          generatedEntropyBytes: null,
-          secretReturned: false
-        });
+        return jsonResponse(response, 200, options.operatorAuth.getStatus());
       }
 
       if (request.method === "GET" && url.pathname === "/api/statsig-control") {
@@ -239,7 +391,7 @@ function createServer(options = {}) {
       }
 
       if (request.method === "POST" && url.pathname === "/api/statsig-control/exposure") {
-        const input = await readJsonBody(request);
+        const input = await readRequestJsonBody(request);
         const gateName = String(input?.gateName ?? "");
 
         if (![PRESENTATION_GATE, SHADOW_GATE].includes(gateName)) {
@@ -274,7 +426,7 @@ function createServer(options = {}) {
           });
         }
         if (!isLoopbackAddress(request.socket.remoteAddress)
-          && !options.operatorAuth?.getStatus().required) {
+          && !options.operatorAuth.getStatus().required) {
           return jsonResponse(response, 403, {
             error: "Manual synchronization is restricted to the local machine."
           });
@@ -303,8 +455,8 @@ function createServer(options = {}) {
         const syncHealth = await getSyncHealth(options);
         const result = await getReleaseReadiness({
           rootDir: options.settingsRootDir ?? PROJECT_ROOT,
-          fetchJsonImpl: process.env.BEAR_EDGE_TEST_MODE ? fetchJson : options.fetchJsonImpl,
-          fetchTextImpl: process.env.BEAR_EDGE_TEST_MODE ? fetchText : options.fetchTextImpl,
+          fetchJsonImpl: options.fetchJsonImpl,
+          fetchTextImpl: options.fetchTextImpl,
           oddsApiKey: process.env.THE_ODDS_API_KEY ?? process.env.ODDS_API_KEY,
           autoUpdateStatus: typeof options.autoUpdateService?.getStatus === "function"
             ? options.autoUpdateService.getStatus()
@@ -330,9 +482,9 @@ function createServer(options = {}) {
           : readPitcherStrikeoutCohort(rootDir);
         const result = buildPitcherStrikeoutResearchReadiness({
           rootDir,
+          providerSetup: getProviderSetupStatus({ rootDir }),
           cohortRecords: cohortState.records,
-          malformedCohortLines: cohortState.malformedLines,
-          providerSetup: getProviderSetupStatus({ rootDir })
+          cohortMalformedLines: cohortState.malformedLines
         });
 
         return jsonResponse(response, 200, result);
@@ -349,8 +501,8 @@ function createServer(options = {}) {
           bankroll: Number(url.searchParams.get("bankroll") ?? 1000),
           bookmakers: url.searchParams.get("bookmakers") ?? "draftkings",
           regions: url.searchParams.get("regions") ?? "us",
-          fetchJsonImpl: process.env.BEAR_EDGE_TEST_MODE ? fetchJson : options.fetchJsonImpl,
-          fetchTextImpl: process.env.BEAR_EDGE_TEST_MODE ? fetchText : options.fetchTextImpl,
+          fetchJsonImpl: options.fetchJsonImpl,
+          fetchTextImpl: options.fetchTextImpl,
           oddsApiKey: process.env.THE_ODDS_API_KEY ?? process.env.ODDS_API_KEY,
           autoUpdateStatus: typeof options.autoUpdateService?.getStatus === "function"
             ? options.autoUpdateService.getStatus()
@@ -374,7 +526,7 @@ function createServer(options = {}) {
         if (oddsApiKey) {
           try {
             const catalog = await fetchOddsApiSports({
-              fetchJsonImpl: process.env.BEAR_EDGE_TEST_MODE ? fetchJson : options.fetchJsonImpl,
+              fetchJsonImpl: options.fetchJsonImpl,
               oddsApiKey
             });
             quotaRefresh = {
@@ -404,13 +556,13 @@ function createServer(options = {}) {
       }
 
       if (request.method === "POST" && url.pathname === "/api/provider-requirements/key") {
-        const body = await readJsonBody(request);
+        const body = await readRequestJsonBody(request);
 
         try {
           const result = await saveProviderApiKey(body, {
             rootDir: options.settingsRootDir ?? PROJECT_ROOT,
             envPath: options.envPath,
-            fetchJsonImpl: process.env.BEAR_EDGE_TEST_MODE ? fetchJson : options.fetchJsonImpl
+            fetchJsonImpl: options.fetchJsonImpl
           });
 
           if (body.providerId === "the-odds-api" && typeof options.autoUpdateService?.setOddsApiKey === "function") {
@@ -444,7 +596,7 @@ function createServer(options = {}) {
         }
 
         const verification = await verifyOddsApiReadiness({
-          fetchJsonImpl: process.env.BEAR_EDGE_TEST_MODE ? fetchJson : options.fetchJsonImpl,
+          fetchJsonImpl: options.fetchJsonImpl,
           oddsApiKey
         });
 
@@ -455,7 +607,7 @@ function createServer(options = {}) {
       }
 
       if (request.method === "POST" && url.pathname === "/api/settings/odds-key") {
-        const body = await readJsonBody(request);
+        const body = await readRequestJsonBody(request);
         let oddsApiKey;
 
         try {
@@ -474,7 +626,7 @@ function createServer(options = {}) {
 
         try {
           verification = await verifyOddsApiReadiness({
-            fetchJsonImpl: process.env.BEAR_EDGE_TEST_MODE ? fetchJson : options.fetchJsonImpl,
+            fetchJsonImpl: options.fetchJsonImpl,
             oddsApiKey
           });
         } catch (error) {
@@ -517,9 +669,11 @@ function createServer(options = {}) {
           amendmentInput: AMENDMENT_INPUT_SCHEMA,
           auditRecord: AUDIT_RECORD_SCHEMA,
           betInput: BET_INPUT_SCHEMA,
+          closingPriceInput: CLOSING_PRICE_INPUT_SCHEMA,
           betDecision: BET_DECISION_SCHEMA,
           liveTicket: LIVE_TICKET_SCHEMA,
           liveDecision: LIVE_DECISION_SCHEMA,
+          predictionOutcomeInput: PREDICTION_OUTCOME_INPUT_SCHEMA,
           researchPacket: RESEARCH_PACKET_SCHEMA,
           settlementInput: SETTLEMENT_INPUT_SCHEMA
         });
@@ -533,13 +687,32 @@ function createServer(options = {}) {
         return jsonResponse(response, 200, result);
       }
 
+      if (request.method === "GET" && url.pathname === "/api/evidence-queue") {
+        const query = parseEvidenceQueueQuery(url);
+        if (query.error) {
+          return jsonResponse(response, 400, {
+            error: query.error,
+            code: "INVALID_EVIDENCE_QUEUE_QUERY"
+          });
+        }
+
+        const result = await getEvidenceQueue({
+          logPath: options.logPath,
+          registryPath: options.registryPath,
+          status: query.status,
+          limit: query.limit
+        });
+
+        return jsonResponse(response, 200, result);
+      }
+
       if (request.method === "GET" && url.pathname === "/api/games") {
         const sportsParam = url.searchParams.get("sports");
         const result = await fetchGamesForWindow({
           date: url.searchParams.get("date") ?? "today",
           days: Number(url.searchParams.get("days") ?? 2),
           sports: sportsParam ? sportsParam.split(",").map((sport) => sport.trim()).filter(Boolean) : undefined,
-          fetchJsonImpl: process.env.BEAR_EDGE_TEST_MODE ? fetchJson : options.fetchJsonImpl
+          fetchJsonImpl: options.fetchJsonImpl
         });
 
         return jsonResponse(response, 200, result);
@@ -552,10 +725,73 @@ function createServer(options = {}) {
           days: Number(url.searchParams.get("days") ?? 2),
           sports: sportsParam ? sportsParam.split(",").map((sport) => sport.trim()).filter(Boolean) : undefined,
           maxCandidates: Number(url.searchParams.get("maxCandidates") ?? 20),
-          fetchJsonImpl: process.env.BEAR_EDGE_TEST_MODE ? fetchJson : options.fetchJsonImpl
+          fetchJsonImpl: options.fetchJsonImpl
         });
 
         return jsonResponse(response, 200, result);
+      }
+
+      if (request.method === "GET" && url.pathname === "/api/direct-screen-captures/latest") {
+        const readCapture = options.readLatestDirectScreenCaptureImpl
+          ?? readLatestDirectScreenCapture;
+        let result;
+
+        try {
+          result = await readCapture({
+            ledgerPath: options.directScreenCaptureLedgerPath,
+            artifactDir: options.directScreenCaptureArtifactDir
+          });
+        } catch {
+          return jsonResponse(response, 500, {
+            error: "Direct screen capture read failed.",
+            code: "DIRECT_SCREEN_CAPTURE_READ_FAILED"
+          });
+        }
+        let matching = null;
+
+        if (result.latest) {
+          const generateCandidates = options.generateResearchCandidatesImpl ?? generateResearchCandidates;
+
+          try {
+            const candidatePayload = await generateCandidates({
+              date: directCaptureCandidateDate(
+                result.latest,
+                process.env.BEAR_EDGE_TIME_ZONE ?? "America/New_York"
+              ),
+              days: 1,
+              sports: [result.latest.event.sport],
+              maxCandidates: 20,
+              fetchJsonImpl: options.fetchJsonImpl
+            });
+
+            matching = matchDirectScreenCaptureCandidates({
+              capture: result.latest,
+              candidates: candidatePayload.candidates,
+              now: options.directScreenCaptureNow
+            });
+          } catch (error) {
+            matching = {
+              captureId: result.latest.captureId,
+              summary: {
+                candidates: 0,
+                matches: 0,
+                waitEvidence: 0,
+                unmatched: 0
+              },
+              matches: [],
+              waitEvidence: [],
+              unmatched: [],
+              warnings: [
+                `The retained screenshot is available, but current research candidates could not be generated: ${safeErrorMessage(error)}`
+              ]
+            };
+          }
+        }
+
+        return jsonResponse(response, 200, {
+          ...result,
+          matching
+        });
       }
 
       if (request.method === "GET" && url.pathname === "/api/best-mlb-targets") {
@@ -579,11 +815,12 @@ function createServer(options = {}) {
           maxOddsCreditsPerRefresh: Number(url.searchParams.get("maxOddsCreditsPerRefresh") ?? 12),
           bankroll,
           bookmakers: url.searchParams.get("bookmakers") ?? DEFAULT_MLB_BOOKMAKERS,
-          requiredBookmaker: url.searchParams.get("requiredBookmaker") ?? undefined,
+          requiredBookmaker: url.searchParams.get("requiredBookmaker") ?? DEFAULT_EXECUTION_BOOKMAKER,
           regions: url.searchParams.get("regions") ?? "us",
-          fetchJsonImpl: process.env.BEAR_EDGE_TEST_MODE ? fetchJson : options.fetchJsonImpl,
+          fetchJsonImpl: options.fetchJsonImpl,
           oddsApiKey: process.env.THE_ODDS_API_KEY ?? process.env.ODDS_API_KEY,
           allowPaidOdds: paidRefreshRequested,
+          forceRefresh: paidRefreshRequested,
           portfolioSnapshot,
           drawdownSnapshot
         });
@@ -616,8 +853,8 @@ function createServer(options = {}) {
           days: Number(url.searchParams.get("days") ?? 2),
           sports: sportsParam ? sportsParam.split(",").map((sport) => sport.trim()).filter(Boolean) : undefined,
           maxProps: Number(url.searchParams.get("maxProps") ?? 200),
-          fetchJsonImpl: process.env.BEAR_EDGE_TEST_MODE ? fetchJson : options.fetchJsonImpl,
-          fetchTextImpl: process.env.BEAR_EDGE_TEST_MODE ? fetchText : options.fetchTextImpl
+          fetchJsonImpl: options.fetchJsonImpl,
+          fetchTextImpl: options.fetchTextImpl
         });
 
         return jsonResponse(response, 200, result);
@@ -628,8 +865,8 @@ function createServer(options = {}) {
           date: url.searchParams.get("date") ?? "today",
           days: Number(url.searchParams.get("days") ?? 2),
           maxRosterTeams: Number(url.searchParams.get("maxRosterTeams") ?? 6),
-          fetchJsonImpl: process.env.BEAR_EDGE_TEST_MODE ? fetchJson : options.fetchJsonImpl,
-          fetchTextImpl: process.env.BEAR_EDGE_TEST_MODE ? fetchText : options.fetchTextImpl,
+          fetchJsonImpl: options.fetchJsonImpl,
+          fetchTextImpl: options.fetchTextImpl,
           oddsApiKey: process.env.THE_ODDS_API_KEY ?? process.env.ODDS_API_KEY
         });
 
@@ -641,8 +878,8 @@ function createServer(options = {}) {
           date: url.searchParams.get("date") ?? "today",
           days: Number(url.searchParams.get("days") ?? 2),
           maxRosterTeams: Number(url.searchParams.get("maxRosterTeams") ?? 6),
-          fetchJsonImpl: process.env.BEAR_EDGE_TEST_MODE ? fetchJson : options.fetchJsonImpl,
-          fetchTextImpl: process.env.BEAR_EDGE_TEST_MODE ? fetchText : options.fetchTextImpl,
+          fetchJsonImpl: options.fetchJsonImpl,
+          fetchTextImpl: options.fetchTextImpl,
           oddsApiKey: process.env.THE_ODDS_API_KEY ?? process.env.ODDS_API_KEY,
           autoUpdateStatus: typeof options.autoUpdateService?.getStatus === "function"
             ? options.autoUpdateService.getStatus()
@@ -655,7 +892,7 @@ function createServer(options = {}) {
 
       if (request.method === "GET" && url.pathname === "/api/odds/sports") {
         const result = await fetchOddsApiSports({
-          fetchJsonImpl: process.env.BEAR_EDGE_TEST_MODE ? fetchJson : options.fetchJsonImpl,
+          fetchJsonImpl: options.fetchJsonImpl,
           oddsApiKey: process.env.THE_ODDS_API_KEY ?? process.env.ODDS_API_KEY
         });
 
@@ -669,7 +906,7 @@ function createServer(options = {}) {
           bookmakers: url.searchParams.get("bookmakers") ?? "draftkings",
           regions: url.searchParams.get("regions") ?? "us",
           oddsFormat: url.searchParams.get("oddsFormat") ?? "american",
-          fetchJsonImpl: process.env.BEAR_EDGE_TEST_MODE ? fetchJson : options.fetchJsonImpl,
+          fetchJsonImpl: options.fetchJsonImpl,
           oddsApiKey: process.env.THE_ODDS_API_KEY ?? process.env.ODDS_API_KEY
         });
 
@@ -723,7 +960,7 @@ function createServer(options = {}) {
       }
 
       if (request.method === "POST" && url.pathname === "/api/settle") {
-        const body = await readJsonBody(request);
+        const body = await readRequestJsonBody(request);
         const result = await appendSettlement(body, {
           logPath: options.logPath
         });
@@ -737,8 +974,30 @@ function createServer(options = {}) {
         });
       }
 
+      if (request.method === "POST" && url.pathname === "/api/prediction-outcomes") {
+        const body = await readRequestJsonBody(request);
+        const result = await appendPredictionOutcome(body, {
+          logPath: options.logPath,
+          outboxPath: options.outboxPath
+        });
+        const queueItem = await refreshedEvidenceQueueItem(body.evaluationId, options);
+
+        return jsonResponse(response, 200, { ...result, queueItem });
+      }
+
+      if (request.method === "POST" && url.pathname === "/api/closing-prices") {
+        const body = await readRequestJsonBody(request);
+        const result = await appendClosingPrice(body, {
+          logPath: options.logPath,
+          outboxPath: options.outboxPath
+        });
+        const queueItem = await refreshedEvidenceQueueItem(body.evaluationId, options);
+
+        return jsonResponse(response, 200, { ...result, queueItem });
+      }
+
       if (request.method === "POST" && url.pathname === "/api/amend") {
-        const body = await readJsonBody(request);
+        const body = await readRequestJsonBody(request);
         const result = await appendAmendment(body, {
           logPath: options.logPath
         });
@@ -753,56 +1012,139 @@ function createServer(options = {}) {
       }
 
       if (request.method === "POST" && url.pathname === "/api/statmuse-snapshot") {
-        const body = await readJsonBody(request);
+        const body = await readRequestJsonBody(request);
         const result = parseStatMuseSnapshot(body);
 
         return jsonResponse(response, 200, result);
       }
 
       if (request.method === "POST" && url.pathname === "/api/espn-snapshot") {
-        const body = await readJsonBody(request);
+        const body = await readRequestJsonBody(request);
         const result = parseEspnSnapshot(body);
 
         return jsonResponse(response, 200, result);
       }
 
       if (request.method === "POST" && url.pathname === "/api/snapshot-confirmation") {
-        const body = await readJsonBody(request);
+        const body = await readRequestJsonBody(request);
         const result = createManualSnapshotConfirmation(body);
 
         return jsonResponse(response, 200, result);
       }
 
       if (request.method === "POST" && url.pathname === "/api/draftkings-snapshot") {
-        const body = await readJsonBody(request);
+        const body = await readRequestJsonBody(request);
         const result = parseDraftKingsSnapshot(body);
 
         return jsonResponse(response, 200, result);
       }
 
       if (request.method === "POST" && url.pathname === "/api/dk-predictions-board-snapshot") {
-        const body = await readJsonBody(request);
+        const body = await readRequestJsonBody(request);
         const result = parseDkPredictionsBoardSnapshot(body);
 
         return jsonResponse(response, 200, result);
       }
 
+      if (request.method === "POST" && url.pathname === "/api/direct-screen-captures") {
+        const body = await readRequestJsonBody(request);
+        let normalized;
+
+        try {
+          normalized = normalizeDirectScreenCapture(body, {
+            now: options.directScreenCaptureNow
+          });
+        } catch (error) {
+          return jsonResponse(response, 400, {
+            error: safeErrorMessage(error),
+            code: "DIRECT_SCREEN_CAPTURE_INVALID"
+          });
+        }
+
+        const persistCapture = options.persistDirectScreenCaptureImpl
+          ?? persistDirectScreenCapture;
+        let persistence;
+
+        try {
+          persistence = await persistCapture(
+            normalized.capture,
+            normalized.image,
+            {
+              ledgerPath: options.directScreenCaptureLedgerPath,
+              artifactDir: options.directScreenCaptureArtifactDir
+            }
+          );
+        } catch {
+          return jsonResponse(response, 500, {
+            error: "Direct screen capture persistence failed.",
+            code: "DIRECT_SCREEN_CAPTURE_PERSIST_FAILED"
+          });
+        }
+        const generateCandidates = options.generateResearchCandidatesImpl ?? generateResearchCandidates;
+        let matching;
+
+        try {
+          const candidatePayload = await generateCandidates({
+            date: directCaptureCandidateDate(
+              normalized.capture,
+              process.env.BEAR_EDGE_TIME_ZONE ?? "America/New_York"
+            ),
+            days: 1,
+            sports: [normalized.capture.event.sport],
+            maxCandidates: 20,
+            fetchJsonImpl: options.fetchJsonImpl
+          });
+
+          matching = matchDirectScreenCaptureCandidates({
+            capture: persistence.record,
+            candidates: candidatePayload.candidates,
+            now: options.directScreenCaptureNow
+          });
+        } catch (error) {
+          matching = {
+            captureId: persistence.record.captureId,
+            summary: {
+              candidates: 0,
+              matches: 0,
+              waitEvidence: 0,
+              unmatched: 0
+            },
+            matches: [],
+            waitEvidence: [],
+            unmatched: [],
+            warnings: [
+              `The screenshot was retained, but current research candidates could not be generated: ${safeErrorMessage(error)}`
+            ]
+          };
+        }
+
+        return jsonResponse(response, 200, {
+          capture: persistence.record,
+          persistence: {
+            idempotent: persistence.idempotent,
+            persistedAt: persistence.persistedAt,
+            screenshotArtifact: persistence.record.evidence.screenshotArtifact
+          },
+          matching
+        });
+      }
+
       if (request.method === "POST" && url.pathname === "/api/simulate-card") {
-        const body = await readJsonBody(request);
+        const body = await readRequestJsonBody(request);
         const result = simulateBetCard(body);
 
         return jsonResponse(response, 200, result);
       }
 
       if (request.method === "POST" && url.pathname === "/api/worldcup-goalscorer-snapshot") {
-        const body = await readJsonBody(request);
+        const body = await readRequestJsonBody(request);
         const result = parseWorldCupGoalscorerSnapshot(body);
 
         return jsonResponse(response, 200, result);
       }
 
       if (request.method === "POST" && url.pathname === "/api/recording-props-compare") {
-        const body = await readJsonBody(request);
+        const body = await readRequestJsonBody(request);
 
         const result = await compareRecordingPropsWithCurrentBoard(
           {
@@ -811,7 +1153,7 @@ function createServer(options = {}) {
             bankroll: Number(body.bankroll ?? 1000)
           },
           {
-            fetchJsonImpl: process.env.BEAR_EDGE_TEST_MODE ? fetchJson : options.fetchJsonImpl
+            fetchJsonImpl: options.fetchJsonImpl
           }
         );
 
@@ -819,7 +1161,7 @@ function createServer(options = {}) {
       }
 
       if (request.method === "POST" && url.pathname === "/api/ocr-snapshot") {
-        const body = await readJsonBody(request);
+        const body = await readRequestJsonBody(request);
         const requestedParser = String(body.parser ?? "").toLowerCase();
         const parser = OCR_PARSER_ALIASES[requestedParser];
 
@@ -873,15 +1215,22 @@ function createServer(options = {}) {
       }
 
       if (request.method === "POST" && url.pathname === "/api/candidate-odds-import") {
-        const body = await readJsonBody(request);
+        const body = await readRequestJsonBody(request);
         const result = matchCandidateOdds(body);
 
         return jsonResponse(response, 200, result);
       }
 
       if (request.method === "POST" && url.pathname === "/evaluate") {
-        const body = await readJsonBody(request);
-        const { writeLog = true, logPath, ...inputBody } = body;
+        const body = await readRequestJsonBody(request);
+        const { writeLog = true, ...inputBody } = body;
+
+        if (Object.prototype.hasOwnProperty.call(body, "logPath")) {
+          return jsonResponse(response, 400, {
+            error: "The authoritative ledger path is controlled by server configuration.",
+            code: "SERVER_CONTROLLED_LEDGER_PATH"
+          });
+        }
 
         if (writeLog === false) {
           return jsonResponse(response, 400, {
@@ -907,7 +1256,7 @@ function createServer(options = {}) {
           sourceLocator: "/evaluate"
         });
         const persistence = await appendAuthoritativeRecord(auditRecord, {
-          logPath: logPath ?? options.logPath
+          logPath: options.logPath
         });
 
         return jsonResponse(response, 200, {
@@ -926,8 +1275,15 @@ function createServer(options = {}) {
       }
 
       if (request.method === "POST" && url.pathname === "/evaluate/live") {
-        const body = await readJsonBody(request);
-        const { writeLog = true, logPath, ...ticketBody } = body;
+        const body = await readRequestJsonBody(request);
+        const { writeLog = true, ...ticketBody } = body;
+
+        if (Object.prototype.hasOwnProperty.call(body, "logPath")) {
+          return jsonResponse(response, 400, {
+            error: "The authoritative ledger path is controlled by server configuration.",
+            code: "SERVER_CONTROLLED_LEDGER_PATH"
+          });
+        }
 
         if (writeLog === false) {
           return jsonResponse(response, 400, {
@@ -937,7 +1293,7 @@ function createServer(options = {}) {
 
         const ticket = validateLiveTicket(ticketBody);
         const result = await evaluateLiveTicketAndLog(ticket, {
-          logPath: logPath ?? options.logPath,
+          logPath: options.logPath,
           auditContext: {
             origin: {
               channel: "http_api",
@@ -948,7 +1304,7 @@ function createServer(options = {}) {
                 : null
             }
           },
-          fetchJsonImpl: process.env.BEAR_EDGE_TEST_MODE ? fetchJson : options.fetchJsonImpl
+          fetchJsonImpl: options.fetchJsonImpl
         });
 
         return jsonResponse(response, 200, result);
@@ -958,7 +1314,15 @@ function createServer(options = {}) {
         error: "Not found."
       });
     } catch (error) {
-      if (error instanceof AuditIntegrityError) {
+      if (error instanceof RequestBodyTooLargeError) {
+        return jsonResponse(response, 413, {
+          error: error.message,
+          code: error.code,
+          maxBytes: error.maxBytes
+        });
+      }
+
+      if (error instanceof AuditIntegrityError || error instanceof EvidenceIntegrityError) {
         return jsonResponse(response, 400, {
           error: error.message
         });

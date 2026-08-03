@@ -8,12 +8,20 @@ const {
   renderReleaseReadinessMarkdown
 } = require("../src/release-readiness.js");
 const { loadEnvFiles } = require("../src/config/env.js");
+const { createOperatorAuth } = require("../src/config/operator-auth.js");
 
 async function main() {
   const rootDir = path.resolve(__dirname, "..");
   const outDir = path.join(rootDir, "data", "reports");
   loadEnvFiles({ rootDir });
-  const report = await getReleaseReadiness({ rootDir });
+  const operatorAuth = createOperatorAuth({
+    requireToken: true,
+    token: process.env.BEAR_EDGE_OPERATOR_TOKEN
+  });
+  const report = await getReleaseReadiness({
+    rootDir,
+    operatorAuthStatus: operatorAuth.getStatus()
+  });
   const jsonPath = path.join(outDir, "release_readiness.json");
   const markdownPath = path.join(outDir, "release_readiness.md");
 

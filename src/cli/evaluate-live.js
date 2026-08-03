@@ -3,6 +3,7 @@
 const fs = require("node:fs/promises");
 const path = require("node:path");
 
+const { isBearEdgeTestModeEnabled } = require("../config/runtime-flags.js");
 const { evaluateLiveTicketAndLog } = require("../live/evaluate-live-ticket.js");
 const { fetchJson } = require("../live/fixture-fetch.js");
 const { LiveTicketValidationError, validateLiveTicket } = require("../validate-live-ticket.js");
@@ -103,7 +104,7 @@ async function main(argv = process.argv.slice(2)) {
         requestId: null
       }
     },
-    fetchJsonImpl: process.env.BEAR_EDGE_TEST_MODE ? fetchJson : undefined
+    fetchJsonImpl: isBearEdgeTestModeEnabled() ? fetchJson : undefined
   });
 
   process.stdout.write(

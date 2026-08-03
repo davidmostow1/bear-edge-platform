@@ -32,6 +32,22 @@ function requireCanonicalRecord(record, recordType, label) {
   return record;
 }
 
+function supersedesClientEventId(record, prefix) {
+  if (record.supersedesId === null) {
+    return null;
+  }
+
+  const expectedPrefix = `${prefix}_`;
+  if (typeof record.supersedesId !== "string" || !record.supersedesId.startsWith(expectedPrefix)) {
+    throw new TypeError(`Superseded ${prefix} record id has an invalid prefix.`);
+  }
+
+  return requireUuid(
+    record.supersedesId.slice(expectedPrefix.length),
+    `Superseded ${prefix} client event id`
+  );
+}
+
 function nullableInteger(value, label) {
   if (value === null || value === undefined) {
     return null;
@@ -350,8 +366,80 @@ function mapAmendmentRecord(
   };
 }
 
+function mapPredictionOutcomeRecord(record, ownerUserId, remoteDecisionId) {
+  const outcome = requireCanonicalRecord(
+    record,
+    "prediction_outcome",
+    "Canonical prediction outcome record"
+  );
+  requireUuid(ownerUserId, "Owner user id");
+  requireUuid(remoteDecisionId, "Remote decision id");
+
+  return {
+    user_id: ownerUserId,
+    decision_id: remoteDecisionId,
+    client_event_id: outcome.clientEventId,
+    supersedes_client_event_id: supersedesClientEventId(outcome, "outcome"),
+    schema_version: outcome.schemaVersion,
+    content_digest: outcome.contentDigest,
+    authority: outcome.authority,
+    outcome: outcome.outcome,
+    resolved_at: outcome.resolvedAt,
+    event_status: outcome.eventResult.status,
+    home_score: nullableInteger(outcome.eventResult.homeScore, "Home score"),
+    away_score: nullableInteger(outcome.eventResult.awayScore, "Away score"),
+    observed_value: outcome.marketResult.observedValue,
+    observed_unit: outcome.marketResult.unit,
+    source_provider: outcome.source.provider,
+    source_type: outcome.source.sourceType,
+    source_locator: outcome.source.sourceLocator,
+    source_captured_at: outcome.source.capturedAt,
+    source_time: outcome.source.sourceTime,
+    source_digest: outcome.source.digest,
+    verification_status: outcome.source.verificationStatus,
+    record_snapshot: clone(outcome),
+    created_at: outcome.createdAt
+  };
+}
+
+function mapClosingPriceRecord(record, ownerUserId, remoteDecisionId) {
+  const closingPrice = requireCanonicalRecord(
+    record,
+    "closing_price",
+    "Canonical closing price record"
+  );
+  requireUuid(ownerUserId, "Owner user id");
+  requireUuid(remoteDecisionId, "Remote decision id");
+
+  return {
+    user_id: ownerUserId,
+    decision_id: remoteDecisionId,
+    client_event_id: closingPrice.clientEventId,
+    supersedes_client_event_id: supersedesClientEventId(closingPrice, "close"),
+    schema_version: closingPrice.schemaVersion,
+    content_digest: closingPrice.contentDigest,
+    authority: closingPrice.authority,
+    sportsbook: closingPrice.price.sportsbook,
+    market_odds: nullableInteger(closingPrice.price.marketOdds, "Closing market odds"),
+    opposite_odds: nullableInteger(closingPrice.price.oppositeOdds, "Closing opposite odds"),
+    market_closed_at: closingPrice.price.marketClosedAt,
+    is_final: closingPrice.price.isFinal,
+    source_provider: closingPrice.source.provider,
+    source_type: closingPrice.source.sourceType,
+    source_locator: closingPrice.source.sourceLocator,
+    source_captured_at: closingPrice.source.capturedAt,
+    source_time: closingPrice.source.sourceTime,
+    source_digest: closingPrice.source.digest,
+    verification_status: closingPrice.source.verificationStatus,
+    record_snapshot: clone(closingPrice),
+    created_at: closingPrice.createdAt
+  };
+}
+
 module.exports = {
   mapAmendmentRecord,
+  mapClosingPriceRecord,
   mapDecisionRecord,
+  mapPredictionOutcomeRecord,
   mapSettlementRecord
 };

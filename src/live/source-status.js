@@ -1,6 +1,7 @@
 const { fetchJson } = require("./fetch-json.js");
+const { fetchText } = require("./fetch-text.js");
 const { safeErrorMessage } = require("../config/secrets.js");
-const { formatDate } = require("./schedule.js");
+const { resolveDateWindow } = require("./date-window.js");
 
 const AUTO_REFRESH_MS = 60 * 1000;
 const ESPN_SPORTS = Object.freeze([
@@ -19,59 +20,14 @@ const STAT_NEWS_SEARCH_URL =
 const STATMUSE_HOME_URL = "https://www.statmuse.com/";
 const STATMUSE_SCORES_URL = "https://www.statmuse.com/scores";
 const STATMUSE_QUERY_SPORTS = Object.freeze(["mlb", "nba", "nhl", "nfl", "wnba"]);
-function pad2(value) {
-  return String(value).padStart(2, "0");
-}
-
-function addDays(date, days) {
-  const nextDate = new Date(date);
-  nextDate.setDate(nextDate.getDate() + days);
-  return nextDate;
-}
-
-function parseDate(value) {
-  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
-
-  if (!match) {
-    throw new Error("Date must use YYYY-MM-DD format.");
-  }
-
-  const [, year, month, day] = match;
-  return new Date(Number(year), Number(month) - 1, Number(day));
-}
-
-function resolveStartDate(value) {
-  if (!value || value === "today") {
-    return new Date();
-  }
-
-  if (value === "tomorrow") {
-    return addDays(new Date(), 1);
-  }
-
-  return parseDate(value);
-}
-
-function formatEspnDate(date) {
-  return `${date.getFullYear()}${pad2(date.getMonth() + 1)}${pad2(date.getDate())}`;
-}
 
 async function defaultFetchText(url) {
-  const response = await fetch(url, {
+  return fetchText(url, {
     headers: {
       accept: "application/json,text/html;q=0.9,*/*;q=0.8",
       "user-agent": "bear-edge-betting-engine/1.0"
     }
   });
-  const text = await response.text();
-
-  return {
-    ok: response.ok,
-    status: response.status,
-    statusText: response.statusText,
-    contentType: response.headers.get("content-type") ?? "",
-    text
-  };
 }
 
 function sourceRecord({ provider, status, sourceType, fetchedAt, sources = [], summary = {}, warnings = [], error = null }) {
@@ -127,7 +83,7 @@ async function fetchEspnStatus(options = {}) {
   let eventCount = 0;
 
   for (const date of dates) {
-    const espnDate = formatEspnDate(new Date(`${date}T00:00:00`));
+    const espnDate = date.replaceAll("-", "");
 
     for (const sport of ESPN_SPORTS) {
       const sourceUrl = `https://site.api.espn.com/apis/site/v2/sports/${sport.path}/scoreboard?dates=${espnDate}`;
@@ -552,9 +508,13 @@ async function fetchTennisStatus(options = {}) {
 }
 
 async function getSourceStatusDashboard(options = {}) {
-  const startDate = resolveStartDate(options.date);
   const days = Number.isInteger(options.days) && options.days > 0 ? Math.min(options.days, 7) : 2;
-  const dates = Array.from({ length: days }, (_, index) => formatDate(addDays(startDate, index)));
+  const dates = resolveDateWindow({
+    date: options.date,
+    days,
+    now: options.now,
+    timeZone: options.timeZone
+  });
   const fetchedAt = new Date().toISOString();
   const providers = await Promise.all([
     fetchEspnStatus({ ...options, dates }),

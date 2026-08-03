@@ -8,7 +8,9 @@ const {
 } = require("./outbox.js");
 const {
   mapAmendmentRecord,
+  mapClosingPriceRecord,
   mapDecisionRecord,
+  mapPredictionOutcomeRecord,
   mapSettlementRecord
 } = require("./supabase-mapper.js");
 
@@ -226,6 +228,31 @@ function createSyncWorker(options = {}) {
       return {
         table: "settlement_records",
         row: mapSettlementRecord(record, ownerUserId, remoteDecisionId, evaluation)
+      };
+    }
+
+    if (record.recordType === "prediction_outcome" || record.recordType === "closing_price") {
+      const table = record.recordType === "prediction_outcome"
+        ? "prediction_outcomes"
+        : "closing_prices";
+
+      if (record.supersedesId !== null) {
+        const superseded = findLocalRecord(records, record.supersedesId, record.recordType);
+        if (superseded.evaluationId !== record.evaluationId) {
+          throw new SyncWorkerFailure(
+            "terminal_failure",
+            "LOCAL_REFERENCE_INVALID",
+            "Shadow evidence corrections must reference the same evaluation"
+          );
+        }
+        await findRemoteDependency(table, superseded);
+      }
+
+      return {
+        table,
+        row: record.recordType === "prediction_outcome"
+          ? mapPredictionOutcomeRecord(record, ownerUserId, remoteDecisionId)
+          : mapClosingPriceRecord(record, ownerUserId, remoteDecisionId)
       };
     }
 

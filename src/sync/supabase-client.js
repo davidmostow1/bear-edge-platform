@@ -6,7 +6,9 @@ const {
 const ALLOWED_TABLES = new Set([
   "decision_records",
   "settlement_records",
-  "record_amendments"
+  "record_amendments",
+  "prediction_outcomes",
+  "closing_prices"
 ]);
 const DIGEST_PATTERN = /^[a-f0-9]{64}$/;
 

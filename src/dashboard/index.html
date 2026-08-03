@@ -71,10 +71,12 @@
 
       <nav class="quick-nav" aria-label="Dashboard sections">
         <a href="#operator">Operator</a>
+        <a href="#shadow-evidence">Shadow Evidence</a>
         <a href="#best-targets">Decision Board</a>
         <a href="#candidates">Props</a>
         <a href="#parlay-builder">Parlay Builder</a>
         <a href="#screenshotIntakePanel">Screenshots</a>
+        <a href="#directScreenCapturePanel">Direct Capture</a>
         <a href="#sources">Sources</a>
         <a href="#pitcher-strikeout-research">Pitcher K Data</a>
         <a href="#release">Release</a>
@@ -123,6 +125,33 @@
         <div id="decisionQualityBoard" class="data-quality-board"></div>
       </section>
 
+      <section class="panel evidence-queue-panel" id="shadow-evidence">
+        <div class="panel-title">
+          <div>
+            <p class="eyebrow">Prospective proof ledger</p>
+            <h2>Shadow Evidence Queue</h2>
+            <p class="panel-subtitle">Record official outcomes and verified closing prices without creating wagers or changing historical recommendations.</p>
+          </div>
+          <div class="button-row">
+            <select id="evidenceQueueFilter" aria-label="Shadow evidence filter">
+              <option value="unresolved">Unresolved</option>
+              <option value="complete">Complete</option>
+              <option value="all">All records</option>
+            </select>
+            <button id="evidenceQueueRefreshButton" type="button" class="secondary">Refresh Evidence</button>
+          </div>
+        </div>
+        <div class="evidence-trust-boundary">
+          <strong>Verification boundary</strong>
+          <p>Official outcomes require a retained official result artifact. Closing prices require exact-book, two-sided, timestamped provider evidence. A sportsbook screen, screenshot, public aggregator, or browser extension remains unverified and cannot satisfy this queue. Time fields use this device's local timezone and are stored as UTC.</p>
+        </div>
+        <p id="evidenceQueueStatus" class="form-status" role="status"></p>
+        <span id="evidenceQueueTimestamp" class="muted">Not checked yet</span>
+        <div id="evidenceQueueBoard" class="evidence-queue-board">
+          <p class="muted">Loading shadow evidence...</p>
+        </div>
+      </section>
+
       <section id="screenshotIntakePanel" class="panel screenshot-intake-panel">
         <div class="panel-title">
           <div>
@@ -149,6 +178,28 @@
         </div>
         <p id="screenshotIntakeStatus" class="form-status" role="status"></p>
         <div id="screenshotIntakeResult" class="snapshot-result"></div>
+      </section>
+
+      <section id="directScreenCapturePanel" class="panel direct-screen-capture-panel">
+        <div class="panel-title">
+          <div>
+            <p class="eyebrow">Retained browser evidence</p>
+            <h2>Direct Screen Capture</h2>
+            <p class="panel-subtitle">The latest logged-in DraftKings Predictions screenshot, visible page state, exact market rows, and server-computed evidence hashes.</p>
+          </div>
+          <div class="button-row">
+            <span id="directScreenCaptureTimestamp" class="muted">Not checked yet</span>
+            <button id="directScreenCaptureRefreshButton" type="button" class="secondary">Refresh Capture</button>
+          </div>
+        </div>
+        <div class="evidence-trust-boundary">
+          <strong>Captured unverified</strong>
+          <p>Real retained screen evidence only. Permission remains <strong>PRICE_CHECK_ONLY</strong> with <strong>$0 authorized</strong>. Hidden or locked prices are never inferred, and this panel cannot submit a wager.</p>
+        </div>
+        <p id="directScreenCaptureStatus" class="form-status" role="status"></p>
+        <div id="directScreenCaptureResult" class="direct-screen-capture-result">
+          <p class="muted">No retained browser capture loaded yet.</p>
+        </div>
       </section>
 
       <section class="panel auto-update-panel">

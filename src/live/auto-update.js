@@ -6,6 +6,7 @@ const { getDecisionLogDashboard } = require("../analytics.js");
 const { safeErrorMessage } = require("../config/secrets.js");
 const { generateResearchCandidates } = require("./candidates.js");
 const { fetchGamesForWindow } = require("./schedule.js");
+const { resolveOfficialMlbOutcomes } = require("./official-mlb-outcomes.js");
 const { AUTO_REFRESH_MS, getSourceStatusDashboard } = require("./source-status.js");
 
 const DEFAULT_AUTO_UPDATE_LOG_PATH = path.resolve(process.cwd(), "data/logs/auto_update_log.jsonl");
@@ -183,6 +184,7 @@ function createAutoUpdateService(options = {}) {
   const days = Number.isInteger(options.days) && options.days > 0 ? Math.min(options.days, 7) : 2;
   const maxRosterTeams = Number.isInteger(options.maxRosterTeams) ? options.maxRosterTeams : 6;
   const maxCandidates = Number.isInteger(options.maxCandidates) && options.maxCandidates > 0 ? options.maxCandidates : 20;
+  const resolveOfficialOutcomesImpl = options.resolveOfficialOutcomesImpl ?? resolveOfficialMlbOutcomes;
   const state = {
     enabled: true,
     intervalMs,
@@ -274,7 +276,7 @@ function createAutoUpdateService(options = {}) {
         fetchTextImpl: options.fetchTextImpl,
         oddsApiKey: options.oddsApiKey
       });
-      const [games, candidates, decisionLog] = await Promise.all([
+      const [games, candidates, outcomes] = await Promise.all([
         fetchGamesForWindow({
           date: "today",
           days,
@@ -286,10 +288,15 @@ function createAutoUpdateService(options = {}) {
           maxCandidates,
           fetchJsonImpl: options.fetchJsonImpl
         }),
-        getDecisionLogDashboard({
-          logPath: options.logPath
+        resolveOfficialOutcomesImpl({
+          logPath: options.logPath,
+          outboxPath: options.outboxPath,
+          fetchJsonImpl: options.fetchJsonImpl
         })
       ]);
+      const decisionLog = await getDecisionLogDashboard({
+        logPath: options.logPath
+      });
 
       state.runCount += 1;
       const endpoints = {
@@ -297,6 +304,7 @@ function createAutoUpdateService(options = {}) {
         games: `/api/games?date=today&days=${days}`,
         candidates: `/api/candidates?date=today&days=${days}`,
         decisionLog: "/api/decision-log",
+        evidenceQueue: "/api/evidence-queue",
         snapshot: "/api/auto-update/snapshot"
       };
       state.lastResult = {
@@ -321,12 +329,13 @@ function createAutoUpdateService(options = {}) {
           skippedCount: candidates.skipped.length,
           notes: candidates.notes
         },
+        outcomes,
         decisionLog: compactDecisionLogSummary(decisionLog),
         endpoints,
         snapshot: {
           path: state.snapshotPath,
           updatedAt: null,
-          includes: ["sourceStatus", "games", "candidates", "decisionLog"]
+          includes: ["sourceStatus", "games", "candidates", "outcomes", "decisionLog"]
         }
       };
 
@@ -337,6 +346,7 @@ function createAutoUpdateService(options = {}) {
         sourceStatus,
         games,
         candidates,
+        outcomes,
         decisionLog: compactDecisionLogSummary(decisionLog),
         endpoints
       };

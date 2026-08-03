@@ -1,4 +1,6 @@
 const { fetchGamesForWindow } = require("./schedule.js");
+const { resolveDateWindow } = require("./date-window.js");
+const { fetchText } = require("./fetch-text.js");
 
 const COVERS_MLB_PROPS_URL = "https://www.covers.com/sport/baseball/mlb/player-props";
 const HARD_ROCK_MLB_URL = "https://www.hardrock.bet/sportsbook/baseball/mlb/";
@@ -82,59 +84,13 @@ const WORLD_CUP_MARKET_FAMILIES = Object.freeze([
   }
 ]);
 
-function pad2(value) {
-  return String(value).padStart(2, "0");
-}
-
-function addDays(date, days) {
-  const nextDate = new Date(date);
-  nextDate.setDate(nextDate.getDate() + days);
-  return nextDate;
-}
-
-function parseDate(value) {
-  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
-
-  if (!match) {
-    throw new Error("Date must use YYYY-MM-DD format.");
-  }
-
-  const [, year, month, day] = match;
-  return new Date(Number(year), Number(month) - 1, Number(day));
-}
-
-function formatDate(date) {
-  return `${date.getFullYear()}-${pad2(date.getMonth() + 1)}-${pad2(date.getDate())}`;
-}
-
-function resolveStartDate(value) {
-  if (!value || value === "today") {
-    return new Date();
-  }
-
-  if (value === "tomorrow") {
-    return addDays(new Date(), 1);
-  }
-
-  return parseDate(value);
-}
-
 async function defaultFetchText(url) {
-  const response = await fetch(url, {
+  return fetchText(url, {
     headers: {
       accept: "text/html,application/json;q=0.9,*/*;q=0.8",
       "user-agent": "Mozilla/5.0 bear-edge-betting-engine/1.0"
     }
   });
-  const text = await response.text();
-
-  return {
-    ok: response.ok,
-    status: response.status,
-    statusText: response.statusText,
-    contentType: response.headers.get("content-type") ?? "",
-    text
-  };
 }
 
 function htmlDecode(value) {
@@ -281,14 +237,14 @@ function classifyEdgeTier(evPercent) {
   }
 
   if (evPercent >= 15) {
-    return "bet_candidate";
+    return "source_signal";
   }
 
   if (evPercent >= 12) {
-    return "lean";
+    return "source_lean";
   }
 
-  return "pass";
+  return "source_pass";
 }
 
 function parseCoversMlbProps(html, options = {}) {
@@ -342,6 +298,7 @@ function parseCoversMlbProps(html, options = {}) {
       prediction,
       projection,
       difference: diff,
+      sourceEvPercent: ev,
       evPercent: ev,
       rating,
       marketId,
@@ -350,7 +307,11 @@ function parseCoversMlbProps(html, options = {}) {
       draftKingsPrice,
       bestVsDraftKings: compareBestToDraftKings(bestPrice, draftKingsPrice),
       edgeTier: classifyEdgeTier(ev),
-      status: "priced_online"
+      permission: "PRICE_CHECK_ONLY",
+      evidenceStatus: "unverified_public_snapshot",
+      priceCapturedAt: options.capturedAt ?? null,
+      priceSourceTime: null,
+      status: "unverified_public_price"
     });
   }
 
@@ -480,6 +441,7 @@ async function fetchCoversMlbProps(options = {}) {
   const fetchTextImpl = options.fetchTextImpl ?? defaultFetchText;
   const response = await fetchTextImpl(COVERS_MLB_PROPS_URL);
   const text = typeof response === "string" ? response : response.text;
+  const capturedAt = new Date().toISOString();
 
   if (response.ok === false) {
     throw new Error(`${response.status} ${response.statusText ?? ""}`.trim());
@@ -492,16 +454,21 @@ async function fetchCoversMlbProps(options = {}) {
       sourceType: "public MLB props page",
       sourceUrl: COVERS_MLB_PROPS_URL,
       status: typeof response === "string" ? 200 : response.status,
-      contentType: typeof response === "string" ? "text/html" : response.contentType
+      contentType: typeof response === "string" ? "text/html" : response.contentType,
+      capturedAt
     },
-    opportunities: parseCoversMlbProps(text, options)
+    opportunities: parseCoversMlbProps(text, { ...options, capturedAt })
   };
 }
 
 async function fetchOnlineOpportunities(options = {}) {
-  const startDate = resolveStartDate(options.date);
   const days = Number.isInteger(options.days) && options.days > 0 ? Math.min(options.days, 7) : 2;
-  const dates = Array.from({ length: days }, (_, index) => formatDate(addDays(startDate, index)));
+  const dates = resolveDateWindow({
+    date: options.date,
+    days,
+    now: options.now,
+    timeZone: options.timeZone
+  });
   const requestedSports = Array.isArray(options.sports) && options.sports.length > 0
     ? options.sports
     : ["mlb", "worldcup"];
@@ -536,7 +503,7 @@ async function fetchOnlineOpportunities(options = {}) {
     opportunities.push(...buildMarketFamilyOpportunities(gameWindow.games, sport));
   }
 
-  const pricedOpportunities = opportunities.filter((entry) => entry.status === "priced_online");
+  const unverifiedPublicPrices = opportunities.filter((entry) => entry.status === "unverified_public_price");
   const oddsNeededOpportunities = opportunities.filter((entry) => entry.status === "odds_needed");
 
   return {
@@ -551,13 +518,14 @@ async function fetchOnlineOpportunities(options = {}) {
       mlbGames: gameWindow.games.filter((game) => game.sport === "mlb").length,
       worldCupGames: gameWindow.games.filter((game) => game.sport === "worldcup").length,
       opportunities: opportunities.length,
-      pricedOpportunities: pricedOpportunities.length,
+      unverifiedPublicPrices: unverifiedPublicPrices.length,
+      pricedOpportunities: unverifiedPublicPrices.length,
       oddsNeededOpportunities: oddsNeededOpportunities.length,
       sources: sourceRecords.length
     },
     warnings: [
       ...warnings,
-      "Only rows with status priced_online include current visible odds. Market-family rows identify possible bet types but still require a verified sportsbook price."
+      "Rows with status unverified_public_price are research snapshots only. Their third-party projection/EV and visible prices are not verified sportsbook authorization."
     ]
   };
 }

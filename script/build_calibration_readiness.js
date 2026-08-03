@@ -18,12 +18,14 @@ const DEFAULTS = Object.freeze({
   ledger: resolveAuthoritativeLedgerPath(),
   json: path.resolve(process.cwd(), "data/reports/calibration_readiness.json"),
   jsonl: path.resolve(process.cwd(), "data/calibration/calibration_dataset.jsonl"),
+  probabilityJsonl: path.resolve(process.cwd(), "data/calibration/shadow_probability_dataset.jsonl"),
   markdown: path.resolve(process.cwd(), "data/reports/calibration_readiness.md")
 });
 const FLAG_TO_KEY = Object.freeze({
   "--ledger": "ledger",
   "--json": "json",
   "--jsonl": "jsonl",
+  "--probability-jsonl": "probabilityJsonl",
   "--markdown": "markdown"
 });
 
@@ -72,13 +74,17 @@ async function main(argv = process.argv.slice(2)) {
   const jsonLines = projection.rows.length === 0
     ? ""
     : `${projection.rows.map((row) => canonicalStringify(row)).join("\n")}\n`;
+  const probabilityJsonLines = projection.probabilityRows.length === 0
+    ? ""
+    : `${projection.probabilityRows.map((row) => canonicalStringify(row)).join("\n")}\n`;
 
   await writeFile(paths.json, `${JSON.stringify(report, null, 2)}\n`);
   await writeFile(paths.jsonl, jsonLines);
+  await writeFile(paths.probabilityJsonl, probabilityJsonLines);
   await writeFile(paths.markdown, renderCalibrationReadinessMarkdown(report));
 
   process.stdout.write(
-    `Calibration readiness: ${readiness.status}; eligible ${projection.rows.length}; settled ${projection.summary.settledPredictionCount}\n`
+    `Calibration readiness: ${readiness.status}; eligible ${projection.rows.length}; settled ${projection.summary.settledPredictionCount}; outcome-only ${projection.probabilityRows.length}; results ${projection.summary.probabilitySettledPredictionCount}\n`
   );
   return report;
 }

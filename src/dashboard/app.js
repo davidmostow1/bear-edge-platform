@@ -7,7 +7,7 @@ function bootstrapOperatorToken() {
   const params = new URLSearchParams(fragment);
 
   if (!params.has("operatorToken")) {
-    return;
+    return false;
   }
 
   const operatorToken = params.get("operatorToken");
@@ -19,19 +19,23 @@ function bootstrapOperatorToken() {
   const section = params.get("section");
   const cleanedUrl = `${window.location.pathname}${window.location.search}${section ? `#${encodeURIComponent(section)}` : ""}`;
   window.history.replaceState(null, "", cleanedUrl);
+  return Boolean(operatorToken);
 }
 
 bootstrapOperatorToken();
+window.addEventListener("hashchange", () => {
+  if (bootstrapOperatorToken()) {
+    window.location.reload();
+  }
+});
 
 const nativeFetch = window.fetch.bind(window);
 
 window.fetch = (input, init = {}) => {
-  const requestMethod = String(init.method ?? (input instanceof Request ? input.method : "GET")).toUpperCase();
-  const safeMethod = ["GET", "HEAD", "OPTIONS"].includes(requestMethod);
   const requestUrl = new URL(input instanceof Request ? input.url : String(input), window.location.href);
   const operatorToken = window.sessionStorage.getItem(OPERATOR_TOKEN_STORAGE_KEY);
 
-  if (safeMethod || requestUrl.origin !== window.location.origin || !operatorToken) {
+  if (requestUrl.origin !== window.location.origin || !operatorToken) {
     return nativeFetch(input, init);
   }
 
@@ -54,12 +58,21 @@ const els = {
   operatorStatusBoard: document.querySelector("#operatorStatusBoard"),
   summaryCards: document.querySelector("#summaryCards"),
   decisionQualityBoard: document.querySelector("#decisionQualityBoard"),
+  evidenceQueueFilter: document.querySelector("#evidenceQueueFilter"),
+  evidenceQueueRefreshButton: document.querySelector("#evidenceQueueRefreshButton"),
+  evidenceQueueStatus: document.querySelector("#evidenceQueueStatus"),
+  evidenceQueueTimestamp: document.querySelector("#evidenceQueueTimestamp"),
+  evidenceQueueBoard: document.querySelector("#evidenceQueueBoard"),
   screenshotIntakePanel: document.querySelector("#screenshotIntakePanel"),
   screenshotDropZone: document.querySelector("#screenshotDropZone"),
   screenshotImageInput: document.querySelector("#screenshotImageInput"),
   screenshotParserSelect: document.querySelector("#screenshotParserSelect"),
   screenshotIntakeStatus: document.querySelector("#screenshotIntakeStatus"),
   screenshotIntakeResult: document.querySelector("#screenshotIntakeResult"),
+  directScreenCaptureStatus: document.querySelector("#directScreenCaptureStatus"),
+  directScreenCaptureTimestamp: document.querySelector("#directScreenCaptureTimestamp"),
+  directScreenCaptureRefreshButton: document.querySelector("#directScreenCaptureRefreshButton"),
+  directScreenCaptureResult: document.querySelector("#directScreenCaptureResult"),
   ticketForm: document.querySelector("#ticketForm"),
   ticketInput: document.querySelector("#ticketInput"),
   ticketPreflightBoard: document.querySelector("#ticketPreflightBoard"),
@@ -325,6 +338,7 @@ window.__bearEdgeParlayLegs = [];
 window.__bearEdgeLoadedSummary = null;
 window.__bearEdgeSourceStatus = null;
 window.__bearEdgeAutoUpdate = null;
+window.__bearEdgeEvidenceQueue = null;
 
 const storageKeys = Object.freeze({
   bankroll: "bearEdge.bankroll",
@@ -439,6 +453,19 @@ function escapeHtml(value) {
     .replaceAll(">", "&gt;")
     .replaceAll('"', "&quot;")
     .replaceAll("'", "&#039;");
+}
+
+function safeExternalUrl(value) {
+  if (typeof value !== "string" || value.trim() === "") {
+    return null;
+  }
+
+  try {
+    const parsed = new URL(value);
+    return parsed.protocol === "http:" || parsed.protocol === "https:" ? parsed.href : null;
+  } catch {
+    return null;
+  }
 }
 
 function formatPercent(value) {
@@ -1130,7 +1157,7 @@ function renderSourceSummary(summary) {
     ${
       summary.bySport
         ? `<p class="sources">By sport: ${Object.entries(summary.bySport)
-            .map(([sport, count]) => `${sport.toUpperCase()} ${count}`)
+            .map(([sport, count]) => `${escapeHtml(String(sport).toUpperCase())} ${escapeHtml(count)}`)
             .join(", ")}</p>`
         : ""
     }
@@ -1138,11 +1165,12 @@ function renderSourceSummary(summary) {
       Array.isArray(summary.articles) && summary.articles.length > 0
         ? `<ul class="source-links">${summary.articles
             .slice(0, 3)
-            .map((article) =>
-              article.url
-                ? `<li><a href="${escapeHtml(article.url)}" target="_blank" rel="noreferrer">${escapeHtml(article.title ?? article.url)}</a></li>`
-                : `<li>${escapeHtml(article.title ?? "Untitled")}</li>`
-            )
+            .map((article) => {
+              const articleUrl = safeExternalUrl(article.url);
+              return articleUrl
+                ? `<li><a href="${escapeHtml(articleUrl)}" target="_blank" rel="noopener noreferrer">${escapeHtml(article.title ?? article.url)}</a></li>`
+                : `<li>${escapeHtml(article.title ?? "Untitled")}</li>`;
+            })
             .join("")}</ul>`
         : ""
     }
@@ -1180,12 +1208,15 @@ function renderSourceStatus(payload) {
             sources.length > 0
               ? `<ul class="source-links">${sources
                   .slice(0, 4)
-                  .map(
-                    (source) =>
-                      `<li><a href="${escapeHtml(source.sourceUrl)}" target="_blank" rel="noreferrer">${escapeHtml(source.name ?? "source")}</a>${
-                        typeof source.count === "number" ? ` <span class="muted">(${source.count})</span>` : ""
-                      }${source.status ? ` <span class="muted">HTTP ${escapeHtml(source.status)}</span>` : ""}</li>`
-                  )
+                  .map((source) => {
+                    const sourceUrl = safeExternalUrl(source.sourceUrl);
+                    const sourceLabel = sourceUrl
+                      ? `<a href="${escapeHtml(sourceUrl)}" target="_blank" rel="noopener noreferrer">${escapeHtml(source.name ?? "source")}</a>`
+                      : `<span>${escapeHtml(source.name ?? "source")}</span>`;
+                    return `<li>${sourceLabel}${
+                      typeof source.count === "number" ? ` <span class="muted">(${escapeHtml(source.count)})</span>` : ""
+                    }${source.status ? ` <span class="muted">HTTP ${escapeHtml(source.status)}</span>` : ""}</li>`;
+                  })
                   .join("")}</ul>`
               : ""
           }
@@ -1229,15 +1260,11 @@ function renderBookPrices(prices) {
 }
 
 function edgeTierClass(edgeTier) {
-  if (edgeTier === "bet_candidate") {
-    return "ok";
-  }
-
-  if (edgeTier === "lean") {
+  if (edgeTier === "source_signal" || edgeTier === "source_lean") {
     return "medium";
   }
 
-  if (edgeTier === "pass") {
+  if (edgeTier === "source_pass") {
     return "high";
   }
 
@@ -1245,19 +1272,19 @@ function edgeTierClass(edgeTier) {
 }
 
 function edgeTierLabel(edgeTier) {
-  if (edgeTier === "bet_candidate") {
-    return "bet candidate";
+  if (edgeTier === "source_signal") {
+    return "source signal only";
   }
 
-  if (edgeTier === "lean") {
-    return "lean";
+  if (edgeTier === "source_lean") {
+    return "source lean only";
   }
 
-  if (edgeTier === "pass") {
-    return "pass";
+  if (edgeTier === "source_pass") {
+    return "source pass";
   }
 
-  return "priced";
+  return "unverified source";
 }
 
 function renderOnlineOpportunities(payload) {
@@ -1265,9 +1292,9 @@ function renderOnlineOpportunities(payload) {
   const sources = Array.isArray(payload?.sources) ? payload.sources : [];
   const warnings = Array.isArray(payload?.warnings) ? payload.warnings : [];
   const summary = payload?.summary ?? {};
-  const priced = opportunities
-    .filter((entry) => entry.status === "priced_online")
-    .sort((left, right) => (right.evPercent ?? -Infinity) - (left.evPercent ?? -Infinity))
+  const publicPrices = opportunities
+    .filter((entry) => entry.status === "unverified_public_price")
+    .sort((left, right) => (right.sourceEvPercent ?? -Infinity) - (left.sourceEvPercent ?? -Infinity))
     .slice(0, 24);
   const marketFamilies = opportunities.filter((entry) => entry.status === "odds_needed").slice(0, 18);
 
@@ -1278,7 +1305,7 @@ function renderOnlineOpportunities(payload) {
         ["Games", summary.games ?? 0],
         ["MLB", summary.mlbGames ?? 0],
         ["World Cup", summary.worldCupGames ?? 0],
-        ["Priced", summary.pricedOpportunities ?? 0],
+        ["Public Prices", summary.unverifiedPublicPrices ?? summary.pricedOpportunities ?? 0],
         ["Need Odds", summary.oddsNeededOpportunities ?? 0],
         ["Sources", summary.sources ?? 0]
       ]
@@ -1288,14 +1315,16 @@ function renderOnlineOpportunities(payload) {
     ${
       sources.length > 0
         ? `<div class="online-source-strip">${sources
-            .map(
-              (source) => `
-                <a href="${escapeHtml(source.sourceUrl)}" target="_blank" rel="noreferrer">
-                  <strong>${escapeHtml(source.provider)}</strong>
-                  <span>${escapeHtml(source.sport?.toUpperCase() ?? "")} / ${escapeHtml(source.sourceType)}</span>
-                </a>
-              `
-            )
+            .map((source) => {
+              const sourceUrl = safeExternalUrl(source.sourceUrl);
+              const content = `
+                <strong>${escapeHtml(source.provider)}</strong>
+                <span>${escapeHtml(source.sport?.toUpperCase() ?? "")} / ${escapeHtml(source.sourceType)}</span>
+              `;
+              return sourceUrl
+                ? `<a href="${escapeHtml(sourceUrl)}" target="_blank" rel="noopener noreferrer">${content}</a>`
+                : `<div>${content}</div>`;
+            })
             .join("")}</div>`
         : ""
     }
@@ -1307,13 +1336,13 @@ function renderOnlineOpportunities(payload) {
     <section class="online-section">
       <div class="panel-title comparison-subtitle">
         <div>
-          <h3>Visible Online Prices</h3>
-          <p class="panel-subtitle">These rows came from a public odds/projection page and include book prices.</p>
+          <h3>Unverified Public Price Snapshots</h3>
+          <p class="panel-subtitle">Publisher projections and listed prices are research context only; Bear Edge permission remains PRICE_CHECK_ONLY.</p>
         </div>
       </div>
       ${
-        priced.length > 0
-          ? `<div class="online-card-grid">${priced
+        publicPrices.length > 0
+          ? `<div class="online-card-grid">${publicPrices
               .map(
                 (entry) => `
                   <article class="online-card priced">
@@ -1328,20 +1357,21 @@ function renderOnlineOpportunities(payload) {
                       <div><span>Prediction</span><strong>${escapeHtml(entry.prediction ?? "-")}</strong></div>
                       <div><span>Projection</span><strong>${typeof entry.projection === "number" ? entry.projection.toFixed(2) : "-"}</strong></div>
                       <div><span>Diff</span><strong>${typeof entry.difference === "number" ? entry.difference.toFixed(2) : "-"}</strong></div>
-                      <div><span>EV</span><strong>${typeof entry.evPercent === "number" ? `${entry.evPercent.toFixed(2)}%` : "-"}</strong></div>
-                      <div><span>Best</span><strong>${formatOdds(entry.bestPrice?.americanOdds)}</strong></div>
-                      <div><span>Book</span><strong>${escapeHtml(entry.bestPrice?.sportsbook ?? "-")}</strong></div>
-                      <div><span>Best Imp.</span><strong>${formatPercent(entry.bestPrice?.impliedProbability)}</strong></div>
+                      <div><span>Source EV</span><strong>${typeof entry.sourceEvPercent === "number" ? `${entry.sourceEvPercent.toFixed(2)}%` : "-"}</strong></div>
+                      <div><span>Highest Listed</span><strong>${formatOdds(entry.bestPrice?.americanOdds)}</strong></div>
+                      <div><span>Listed Book</span><strong>${escapeHtml(entry.bestPrice?.sportsbook ?? "-")}</strong></div>
+                      <div><span>Listed Implied</span><strong>${formatPercent(entry.bestPrice?.impliedProbability)}</strong></div>
                       <div><span>$100 Profit</span><strong>${formatMoney(entry.bestPrice?.payoutOn100Stake?.profit)}</strong></div>
-                      <div><span>DraftKings</span><strong>${formatOdds(entry.draftKingsPrice?.americanOdds)}</strong></div>
-                      <div><span>DK Gap</span><strong>${formatSignedMoney(entry.bestVsDraftKings?.profitOn100Delta)}</strong></div>
+                      <div><span>DK Listed</span><strong>${formatOdds(entry.draftKingsPrice?.americanOdds)}</strong></div>
+                      <div><span>Listed Gap</span><strong>${formatSignedMoney(entry.bestVsDraftKings?.profitOn100Delta)}</strong></div>
+                      <div><span>Permission</span><strong>${escapeHtml(entry.permission ?? "PRICE_CHECK_ONLY")}</strong></div>
                     </div>
                     ${renderBookPrices(entry.bookPrices)}
                   </article>
                 `
               )
               .join("")}</div>`
-          : '<p class="muted">No visible priced opportunities came back from the online props source.</p>'
+          : '<p class="muted">No unverified public price snapshots came back from the online props source.</p>'
       }
     </section>
     <section class="online-section">
@@ -2110,6 +2140,7 @@ function renderOddsKeyStatus(payload) {
       : [];
   const sports = verification?.catalog?.sports ?? verification?.sports;
   const marketProbe = verification?.marketProbe ?? null;
+  const docsUrl = safeExternalUrl(payload?.docsUrl);
   const configuredText = payload?.configured ? `Configured via ${payload.envKey ?? payload.writableEnvKey ?? "environment"}` : "Missing";
 
   els.oddsKeyStatusBoard.innerHTML = `
@@ -2117,7 +2148,7 @@ function renderOddsKeyStatus(payload) {
       <article>
         <h3>Provider</h3>
         <p>${escapeHtml(payload?.provider ?? "The Odds API")}</p>
-        <p class="sources">${payload?.docsUrl ? `<a href="${escapeHtml(payload.docsUrl)}" target="_blank" rel="noreferrer">Provider docs</a>` : "Provider docs unavailable"}</p>
+        <p class="sources">${docsUrl ? `<a href="${escapeHtml(docsUrl)}" target="_blank" rel="noopener noreferrer">Provider docs</a>` : "Provider docs unavailable"}</p>
       </article>
       <article>
         <h3>Key Status</h3>
@@ -2315,9 +2346,11 @@ function renderProviderSetup(payload) {
               return `${key.name}: ${state}`;
             })
             .join(" / ");
+          const signupUrl = safeExternalUrl(provider.signupUrl);
+          const providerDocsUrl = safeExternalUrl(provider.docsUrl);
           const links = [
-            provider.signupUrl ? `<a href="${escapeHtml(provider.signupUrl)}" target="_blank" rel="noreferrer">Get key</a>` : "",
-            provider.docsUrl ? `<a href="${escapeHtml(provider.docsUrl)}" target="_blank" rel="noreferrer">Docs</a>` : ""
+            signupUrl ? `<a href="${escapeHtml(signupUrl)}" target="_blank" rel="noopener noreferrer">Get key</a>` : "",
+            providerDocsUrl ? `<a href="${escapeHtml(providerDocsUrl)}" target="_blank" rel="noopener noreferrer">Docs</a>` : ""
           ].filter(Boolean).join(" ");
           const envKeyOptions = (provider.envKeys ?? [provider.writableEnvKey])
             .filter(Boolean)
@@ -2594,7 +2627,7 @@ function renderStatMuseSnapshot(payload) {
             .map(
               (game) => `
               <article class="snapshot-game">
-                <strong>${escapeHtml(game.away.abbreviation)} ${game.away.score ?? ""} @ ${escapeHtml(game.home.abbreviation)} ${game.home.score ?? ""}</strong>
+                <strong>${escapeHtml(game.away.abbreviation)} ${escapeHtml(game.away.score ?? "")} @ ${escapeHtml(game.home.abbreviation)} ${escapeHtml(game.home.score ?? "")}</strong>
                 <span>${escapeHtml(game.status ?? game.startTime ?? "unknown")}</span>
                 ${
                   typeof game.displayedMoneylineOdds === "number"
@@ -3585,6 +3618,7 @@ function renderDataQuality(dataQuality) {
     ["Settled BET Coverage", formatPercent(metrics.settlementCoverageForBetCalls)],
     ["Graded BET Coverage", formatPercent(metrics.gradedCoverageForBetCalls)],
     ["Malformed Rows", metrics.malformedLineCount ?? 0],
+    ["Legacy Rows Excluded", metrics.legacyRecordCount ?? 0],
     ["Orphan Settlements", metrics.orphanSettlementCount ?? 0],
     ["Missing Source Times", metrics.missingSourceTimestampBetCalls ?? 0]
   ];
@@ -3603,6 +3637,546 @@ function renderDataQuality(dataQuality) {
         : '<p class="sources">Decision log quality checks passed for the currently logged data.</p>'
     }
   `;
+}
+
+function setEvidenceQueueStatus(message, isError = false) {
+  els.evidenceQueueStatus.textContent = message;
+  els.evidenceQueueStatus.style.color = isError ? "var(--red)" : "var(--muted)";
+}
+
+function evidenceStatusLabel(status) {
+  return ({
+    awaiting_event: "Waiting for event",
+    missing_outcome_and_close: "Outcome and close missing",
+    missing_outcome: "Official outcome missing",
+    missing_close: "Verified close missing",
+    complete: "Complete observation",
+    blocked: "Ledger blocked"
+  })[status] ?? status ?? "Unknown";
+}
+
+function evidenceSourceSummary(record) {
+  const source = record?.source;
+  if (!source) {
+    return '<span class="muted">Not recorded</span>';
+  }
+
+  const safeUrl = safeExternalUrl(source.sourceLocator);
+  const locator = safeUrl
+    ? `<a href="${escapeHtml(safeUrl)}" target="_blank" rel="noopener noreferrer">Open retained source</a>`
+    : escapeHtml(source.sourceLocator ?? "No locator");
+
+  return `
+    <span>${escapeHtml(source.provider ?? "Unknown provider")}</span>
+    <span>${escapeHtml(source.verificationStatus ?? "Unknown status")}</span>
+    <span>${escapeHtml(formatDate(source.sourceTime))}</span>
+    ${locator}
+  `;
+}
+
+function renderExistingEvidence(label, record) {
+  if (!record) {
+    return `
+      <article class="evidence-existing missing">
+        <span>${escapeHtml(label)}</span>
+        <strong>Missing</strong>
+      </article>
+    `;
+  }
+
+  const detail = record.recordType === "prediction_outcome"
+    ? `${record.outcome} / observed ${record.marketResult?.observedValue ?? "-"} ${record.marketResult?.unit ?? ""}`
+    : `${formatOdds(record.price?.marketOdds)} / opposite ${formatOdds(record.price?.oppositeOdds)}`;
+
+  return `
+    <article class="evidence-existing complete">
+      <span>${escapeHtml(label)}</span>
+      <strong>${escapeHtml(detail)}</strong>
+      <small>${escapeHtml(record.id)}</small>
+      <div class="evidence-source-summary">${evidenceSourceSummary(record)}</div>
+    </article>
+  `;
+}
+
+function renderEvidenceSourceFields(verificationStatus) {
+  return `
+    <label>
+      <span>Provider</span>
+      <input name="sourceProvider" required autocomplete="off" placeholder="mlb_official or licensed provider">
+    </label>
+    <label>
+      <span>Source type</span>
+      <input name="sourceType" required autocomplete="off" placeholder="official_box_score">
+    </label>
+    <label class="evidence-wide-field">
+      <span>Source locator</span>
+      <input name="sourceLocator" type="url" required autocomplete="off" placeholder="https://official-or-provider-source.example/record">
+    </label>
+    <label>
+      <span>Artifact captured at (local time)</span>
+      <input name="sourceCapturedAt" type="datetime-local" step="1" required>
+    </label>
+    <label>
+      <span>Source time (local time)</span>
+      <input name="sourceTime" type="datetime-local" step="1" required>
+    </label>
+    <label class="evidence-wide-field">
+      <span>Artifact SHA-256 digest</span>
+      <input name="sourceDigest" required minlength="64" maxlength="64" pattern="[a-f0-9]{64}" autocomplete="off" placeholder="64 lowercase hexadecimal characters">
+    </label>
+    <input type="hidden" name="verificationStatus" value="${escapeHtml(verificationStatus)}">
+    <p class="evidence-fixed-status evidence-wide-field">Fixed verification status: <strong>${escapeHtml(verificationStatus)}</strong></p>
+  `;
+}
+
+function renderOutcomeEvidenceForm(item) {
+  if (!item.canRecordOutcome) {
+    return '<p class="evidence-form-blocked">Official outcome entry unlocks after the scheduled event start and only when ledger integrity is valid.</p>';
+  }
+
+  const correction = Boolean(item.outcomeSupersedesId);
+  return `
+    <details class="evidence-entry">
+      <summary>${correction ? "Append official outcome correction" : "Record official outcome"}</summary>
+      <form class="outcome-evidence-form evidence-form" data-evaluation-id="${escapeHtml(item.evaluationId)}" data-supersedes-id="${escapeHtml(item.outcomeSupersedesId ?? "")}">
+        <label>
+          <span>Outcome</span>
+          <select name="outcome" required>
+            <option value="win">Win</option>
+            <option value="loss">Loss</option>
+            <option value="push">Push</option>
+            <option value="void">Void</option>
+          </select>
+        </label>
+        <label>
+          <span>Resolved at (local time)</span>
+          <input name="resolvedAt" type="datetime-local" step="1" required>
+        </label>
+        <label>
+          <span>Final home score</span>
+          <input name="homeScore" type="number" min="0" step="1" inputmode="numeric" placeholder="Optional with away score">
+        </label>
+        <label>
+          <span>Final away score</span>
+          <input name="awayScore" type="number" min="0" step="1" inputmode="numeric" placeholder="Optional with home score">
+        </label>
+        <label>
+          <span>Observed market value</span>
+          <input name="observedValue" type="number" step="any" inputmode="decimal" placeholder="Blank only when void">
+        </label>
+        <label>
+          <span>Observed unit</span>
+          <input name="observedUnit" required autocomplete="off" placeholder="strikeouts, hits, runs">
+        </label>
+        ${renderEvidenceSourceFields("verified_official_result")}
+        <label class="evidence-wide-field">
+          <span>Notes</span>
+          <textarea name="notes" rows="2" placeholder="Optional correction or source context"></textarea>
+        </label>
+        <button type="submit">${correction ? "Append Outcome Correction" : "Append Official Outcome"}</button>
+      </form>
+    </details>
+  `;
+}
+
+function renderClosingEvidenceForm(item) {
+  if (!item.canRecordClosingPrice) {
+    return '<p class="evidence-form-blocked">Closing-price entry is blocked until authoritative ledger integrity is restored.</p>';
+  }
+
+  const correction = Boolean(item.closingPriceSupersedesId);
+  return `
+    <details class="evidence-entry">
+      <summary>${correction ? "Append verified close correction" : "Record verified closing price"}</summary>
+      <form class="closing-evidence-form evidence-form" data-evaluation-id="${escapeHtml(item.evaluationId)}" data-supersedes-id="${escapeHtml(item.closingPriceSupersedesId ?? "")}">
+        <label>
+          <span>Evaluated sportsbook</span>
+          <input name="sportsbook" value="${escapeHtml(item.price?.sportsbook ?? "")}" readonly required>
+        </label>
+        <label>
+          <span>Market closed at (local time)</span>
+          <input name="marketClosedAt" type="datetime-local" step="1" required>
+        </label>
+        <label>
+          <span>Final market price</span>
+          <input name="marketOdds" type="number" step="1" inputmode="numeric" required placeholder="-120">
+        </label>
+        <label>
+          <span>Final opposite price</span>
+          <input name="oppositeOdds" type="number" step="1" inputmode="numeric" required placeholder="+100">
+        </label>
+        ${renderEvidenceSourceFields("verified_provider_capture")}
+        <p class="evidence-provider-warning evidence-wide-field">Manual screens, screenshots, aggregators, and browser extensions are not verified-provider closing evidence.</p>
+        <label class="evidence-wide-field">
+          <span>Notes</span>
+          <textarea name="notes" rows="2" placeholder="Optional correction or provider context"></textarea>
+        </label>
+        <button type="submit">${correction ? "Append Close Correction" : "Append Verified Close"}</button>
+      </form>
+    </details>
+  `;
+}
+
+function renderEvidenceQueue(payload) {
+  window.__bearEdgeEvidenceQueue = payload;
+  const summary = payload?.summary ?? {};
+  const items = Array.isArray(payload?.items) ? payload.items : [];
+  const findings = Array.isArray(payload?.findings) ? payload.findings : [];
+  const summaryCards = [
+    ["Ledger", payload?.writeBlocked ? "BLOCKED" : "VALID"],
+    ["Complete", summary.completeObservations ?? 0],
+    ["Proof Target", `${summary.completeObservations ?? 0}/${summary.minimumSettledPredictions ?? 500}`],
+    ["Missing Outcomes", summary.missingOutcomes ?? 0],
+    ["Missing Closes", summary.missingClosingPrices ?? 0],
+    ["Remaining", summary.remainingToMinimum ?? 0]
+  ];
+
+  const findingsHtml = findings.length > 0
+    ? `<div class="warning-list evidence-findings">${findings.map((entry) => `
+        <p><strong>${escapeHtml(entry.code)}</strong>: ${escapeHtml(entry.message)} (${escapeHtml(entry.count)})</p>
+      `).join("")}</div>`
+    : "";
+  const cardsHtml = items.length === 0
+    ? '<p class="muted evidence-empty">No evaluations match this evidence filter.</p>'
+    : `<div class="evidence-card-list">${items.map((item) => {
+        const missing = Array.isArray(item.missingEvidence) ? item.missingEvidence : [];
+        return `
+          <article class="evidence-card" data-evidence-status="${escapeHtml(item.evidenceStatus)}">
+            <header>
+              <div>
+                <span class="evidence-event">${escapeHtml(item.event?.awayTeam ?? "Away")} at ${escapeHtml(item.event?.homeTeam ?? "Home")}</span>
+                <strong>${escapeHtml(item.market?.selection ?? "Unknown selection")}</strong>
+                <small>${escapeHtml(formatDate(item.event?.startTime))} / ${escapeHtml(item.evaluationId)}</small>
+              </div>
+              <span class="evidence-status-pill">${escapeHtml(evidenceStatusLabel(item.evidenceStatus))}</span>
+            </header>
+            <div class="evidence-identity-grid">
+              <span><small>Side and line</small><strong>${escapeHtml(item.market?.side ?? "-")} ${escapeHtml(item.market?.line ?? "-")}</strong></span>
+              <span><small>Evaluated book</small><strong>${escapeHtml(item.price?.sportsbook ?? "-")}</strong></span>
+              <span><small>Offered prices</small><strong>${escapeHtml(formatOdds(item.price?.marketOdds))} / ${escapeHtml(formatOdds(item.price?.oppositeOdds))}</strong></span>
+              <span><small>Model status</small><strong>${escapeHtml(item.model?.modelStatus ?? "-")}</strong></span>
+              <span><small>Historical verdict</small><strong>${escapeHtml(item.verdict ?? "-")}</strong></span>
+              <span><small>Permission then</small><strong>${escapeHtml(item.permission ?? "-")}</strong></span>
+            </div>
+            ${missing.length > 0 ? `<div class="tag-row evidence-missing-tags">${missing.map((code) => `<span class="tag">${escapeHtml(code)}</span>`).join("")}</div>` : ""}
+            <div class="evidence-existing-grid">
+              ${renderExistingEvidence("Official outcome", item.latestOutcome)}
+              ${renderExistingEvidence("Verified close", item.latestClosingPrice)}
+            </div>
+            <div class="evidence-form-grid">
+              ${renderOutcomeEvidenceForm(item)}
+              ${renderClosingEvidenceForm(item)}
+            </div>
+          </article>
+        `;
+      }).join("")}</div>`;
+
+  els.evidenceQueueBoard.innerHTML = `
+    <div class="summary-grid compact-grid evidence-summary-grid">
+      ${summaryCards.map(([label, value]) => `<article class="metric compact"><span>${escapeHtml(label)}</span><strong>${escapeHtml(value)}</strong></article>`).join("")}
+    </div>
+    ${findingsHtml}
+    ${cardsHtml}
+  `;
+  els.evidenceQueueTimestamp.textContent = `Generated ${formatDate(payload?.generatedAt)}`;
+}
+
+async function loadEvidenceQueue() {
+  const status = els.evidenceQueueFilter?.value ?? "unresolved";
+  setEvidenceQueueStatus("Loading authoritative shadow evidence...");
+
+  try {
+    const response = await fetch(`/api/evidence-queue?status=${encodeURIComponent(status)}&limit=100`);
+    const payload = await response.json();
+    if (!response.ok) {
+      throw new Error(payload.error ?? "Unable to load shadow evidence.");
+    }
+
+    renderEvidenceQueue(payload);
+    setEvidenceQueueStatus(payload.writeBlocked
+      ? "Evidence writes are blocked by ledger integrity findings."
+      : "Shadow evidence loaded. This workflow does not authorize bets.", payload.writeBlocked);
+  } catch (error) {
+    els.evidenceQueueBoard.innerHTML = `<p class="muted evidence-empty">${escapeHtml(error.message)}</p>`;
+    els.evidenceQueueTimestamp.textContent = "Evidence check failed";
+    setEvidenceQueueStatus(error.message, true);
+  }
+}
+
+function setDirectScreenCaptureStatus(message, isError = false) {
+  els.directScreenCaptureStatus.textContent = message;
+  els.directScreenCaptureStatus.style.color = isError ? "var(--red)" : "var(--muted)";
+}
+
+function renderDirectScreenCapture(payload) {
+  const capture = payload?.latest;
+
+  if (!capture) {
+    els.directScreenCaptureResult.innerHTML = '<p class="muted">No direct browser capture has been retained yet.</p>';
+    els.directScreenCaptureTimestamp.textContent = "No retained capture";
+    return;
+  }
+
+  const sourceUrl = safeExternalUrl(capture.sourceUrl);
+  const summary = capture.summary ?? {};
+  const matching = payload.matching?.summary ?? {};
+  const freshness = payload.matching?.freshness?.status ?? "unavailable";
+  const markets = Array.isArray(capture.markets) ? capture.markets : [];
+  const omissions = Array.isArray(capture.omissions) ? capture.omissions : [];
+  const marketRows = markets.map((market) => `
+    <tr>
+      <td>${escapeHtml(market.period ?? "-")}</td>
+      <td>${escapeHtml(market.marketType ?? "-")}</td>
+      <td>${escapeHtml(market.selection ?? "-")}</td>
+      <td>${escapeHtml(market.side ?? "-")}</td>
+      <td>${market.line === null || market.line === undefined ? "-" : escapeHtml(market.line)}</td>
+      <td>${escapeHtml(formatOdds(market.americanOdds))}</td>
+      <td>${market.oppositeAmericanOdds === null || market.oppositeAmericanOdds === undefined ? "Missing" : escapeHtml(formatOdds(market.oppositeAmericanOdds))}</td>
+      <td><span class="tag ${market.pairStatus === "complete" ? "ok" : "medium"}">${escapeHtml(market.pairStatus ?? "incomplete")}</span></td>
+    </tr>
+  `).join("");
+  const matchingWarnings = Array.isArray(payload.matching?.warnings)
+    ? payload.matching.warnings
+    : [];
+
+  els.directScreenCaptureResult.innerHTML = `
+    <div class="summary-grid compact-grid direct-capture-summary">
+      ${[
+        ["Visible rows", summary.markets ?? markets.length],
+        ["Complete pairs", summary.completeMarkets ?? 0],
+        ["Incomplete pairs", summary.incompleteMarkets ?? 0],
+        ["Omitted conflicts", summary.omissions ?? omissions.length],
+        ["Match freshness", freshness],
+        ["Exact candidate matches", matching.matches ?? 0],
+        ["WAIT evidence", matching.waitEvidence ?? 0],
+        ["Authorized", "$0"]
+      ].map(([label, value]) => `<article class="metric compact"><span>${escapeHtml(label)}</span><strong>${escapeHtml(value)}</strong></article>`).join("")}
+    </div>
+    <div class="direct-capture-meta">
+      <p><strong>${escapeHtml(capture.pageTitle ?? "Direct screen capture")}</strong></p>
+      <p>${escapeHtml(capture.event?.away ?? "Away")} at ${escapeHtml(capture.event?.home ?? "Home")} · ${escapeHtml(capture.event?.status ?? "-")} · ${escapeHtml(capture.provider ?? "-")}</p>
+      <p>Captured ${escapeHtml(formatDate(capture.capturedAt))} · ${sourceUrl ? `<a href="${escapeHtml(sourceUrl)}" target="_blank" rel="noopener noreferrer">Open retained source page</a>` : "Source URL unavailable"}</p>
+      <p><strong>Capture ID</strong> <code>${escapeHtml(capture.captureId ?? "-")}</code></p>
+      <p><strong>Screenshot SHA-256</strong> <code>${escapeHtml(capture.evidence?.screenshotSha256 ?? "-")}</code></p>
+      <p><strong>Visible text SHA-256</strong> <code>${escapeHtml(capture.evidence?.visibleTextSha256 ?? "-")}</code></p>
+      <p><strong>Screenshot artifact</strong> <code>${escapeHtml(capture.evidence?.screenshotArtifact ?? "-")}</code></p>
+      <p><strong>Visible text artifact</strong> <code>${escapeHtml(capture.evidence?.visibleTextArtifact ?? "-")}</code></p>
+      <div class="tag-row">
+        <span class="tag medium">Captured unverified</span>
+        <span class="tag medium">${escapeHtml(capture.betCallPermission ?? "PRICE_CHECK_ONLY")}</span>
+        <span class="tag medium">$0 authorized</span>
+      </div>
+    </div>
+    <div class="direct-capture-table-wrap">
+      <table class="direct-capture-table">
+        <thead>
+          <tr>
+            <th>Period</th>
+            <th>Market</th>
+            <th>Selection</th>
+            <th>Side</th>
+            <th>Line</th>
+            <th>Price</th>
+            <th>Opposite</th>
+            <th>Pair</th>
+          </tr>
+        </thead>
+        <tbody>${marketRows || '<tr><td colspan="8">No visible market rows were retained.</td></tr>'}</tbody>
+      </table>
+    </div>
+    ${omissions.length > 0 ? `<div class="finding-list">${omissions.map((omission) => {
+      const visibleRows = Array.isArray(omission.visibleRows) ? omission.visibleRows : [];
+      const evidence = visibleRows.length > 0
+        ? visibleRows.map((row) => `${row.label ?? "-"} ${formatOdds(row.americanOdds)}`).join(" / ")
+        : (omission.visibleAmericanOdds ?? []).map(formatOdds).join(" / ");
+
+      return `<p><strong>Omitted conflict</strong>: ${escapeHtml(omission.selection ?? "-")} · ${escapeHtml(evidence)}</p>`;
+    }).join("")}</div>` : ""}
+    ${matchingWarnings.length > 0 ? `<div class="finding-list">${matchingWarnings.map((warning) => `<p><strong>Capture note</strong>: ${escapeHtml(warning)}</p>`).join("")}</div>` : ""}
+  `;
+  els.directScreenCaptureTimestamp.textContent = `Captured ${formatDate(capture.capturedAt)}`;
+}
+
+async function loadDirectScreenCapture() {
+  setDirectScreenCaptureStatus("Loading retained browser evidence...");
+
+  try {
+    const response = await fetch("/api/direct-screen-captures/latest");
+    const payload = await response.json();
+
+    if (!response.ok) {
+      throw new Error(payload.error ?? "Unable to load direct screen capture.");
+    }
+
+    renderDirectScreenCapture(payload);
+    setDirectScreenCaptureStatus(payload.latest
+      ? "Retained direct screen evidence loaded. This workflow does not authorize bets."
+      : "No retained direct screen evidence exists yet.");
+  } catch (error) {
+    els.directScreenCaptureResult.innerHTML = `<p class="muted">${escapeHtml(error.message)}</p>`;
+    els.directScreenCaptureTimestamp.textContent = "Capture check failed";
+    setDirectScreenCaptureStatus(error.message, true);
+  }
+}
+
+function requiredEvidenceValue(form, name, label) {
+  const value = String(new FormData(form).get(name) ?? "").trim();
+  if (!value) {
+    throw new Error(`${label} is required.`);
+  }
+  return value;
+}
+
+function evidenceInteger(form, name, label) {
+  const text = requiredEvidenceValue(form, name, label);
+  const value = Number(text);
+  if (!Number.isSafeInteger(value) || value === 0) {
+    throw new Error(`${label} must be a non-zero whole-number American price.`);
+  }
+  return value;
+}
+
+function evidenceTimestamp(form, name, label) {
+  const value = requiredEvidenceValue(form, name, label);
+  const timestamp = new Date(value);
+  if (!Number.isFinite(timestamp.getTime())) {
+    throw new Error(`${label} must be a valid date and time.`);
+  }
+  return timestamp.toISOString();
+}
+
+function evidenceNotes(form) {
+  const value = String(new FormData(form).get("notes") ?? "").trim();
+  return value ? [value] : [];
+}
+
+function evidenceSource(form, verificationStatus) {
+  return {
+    provider: requiredEvidenceValue(form, "sourceProvider", "Provider"),
+    sourceType: requiredEvidenceValue(form, "sourceType", "Source type"),
+    sourceLocator: requiredEvidenceValue(form, "sourceLocator", "Source locator"),
+    capturedAt: evidenceTimestamp(form, "sourceCapturedAt", "Artifact capture time"),
+    sourceTime: evidenceTimestamp(form, "sourceTime", "Source time"),
+    digest: requiredEvidenceValue(form, "sourceDigest", "Artifact SHA-256 digest").toLowerCase(),
+    verificationStatus
+  };
+}
+
+function optionalScore(form, name, label) {
+  const text = String(new FormData(form).get(name) ?? "").trim();
+  if (!text) {
+    return null;
+  }
+  const value = Number(text);
+  if (!Number.isSafeInteger(value) || value < 0) {
+    throw new Error(`${label} must be a non-negative whole number.`);
+  }
+  return value;
+}
+
+function confirmEvidenceCorrection(form, label) {
+  if (!form.dataset.supersedesId) {
+    return true;
+  }
+
+  return window.confirm(`Append a new ${label} record that supersedes ${form.dataset.supersedesId}? Prior evidence will remain unchanged in append-only history.`);
+}
+
+async function postEvidence(form, endpoint, payload, successLabel) {
+  const submitButton = form.querySelector('button[type="submit"]');
+  submitButton.disabled = true;
+
+  try {
+    const response = await fetch(endpoint, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(payload)
+    });
+    const result = await response.json();
+    if (!response.ok) {
+      throw new Error(result.error ?? `${successLabel} failed.`);
+    }
+
+    await Promise.all([loadEvidenceQueue(), loadDashboard(), loadReleaseReadiness()]);
+    setEvidenceQueueStatus(`${successLabel} appended. Sync state: ${result.syncState ?? "local only"}.`);
+  } catch (error) {
+    submitButton.disabled = false;
+    setEvidenceQueueStatus(error.message, true);
+  }
+}
+
+async function submitOutcomeEvidence(form) {
+  if (!confirmEvidenceCorrection(form, "official outcome correction")) {
+    return;
+  }
+
+  const formData = new FormData(form);
+  const outcome = requiredEvidenceValue(form, "outcome", "Outcome");
+  const homeScore = optionalScore(form, "homeScore", "Final home score");
+  const awayScore = optionalScore(form, "awayScore", "Final away score");
+  if ((homeScore === null) !== (awayScore === null)) {
+    throw new Error("Final home and away scores must both be supplied or both be blank.");
+  }
+
+  const observedText = String(formData.get("observedValue") ?? "").trim();
+  const observedValue = observedText ? Number(observedText) : null;
+  if (outcome !== "void" && !Number.isFinite(observedValue)) {
+    throw new Error("Observed market value is required unless the outcome is void.");
+  }
+
+  await postEvidence(form, "/api/prediction-outcomes", {
+    evaluationId: form.dataset.evaluationId,
+    supersedesId: form.dataset.supersedesId || null,
+    outcome,
+    resolvedAt: evidenceTimestamp(form, "resolvedAt", "Resolution time"),
+    eventResult: { status: "final", homeScore, awayScore },
+    marketResult: {
+      observedValue,
+      unit: requiredEvidenceValue(form, "observedUnit", "Observed unit")
+    },
+    source: evidenceSource(form, "verified_official_result"),
+    notes: evidenceNotes(form)
+  }, "Official outcome");
+}
+
+async function submitClosingEvidence(form) {
+  if (!confirmEvidenceCorrection(form, "verified closing-price correction")) {
+    return;
+  }
+
+  await postEvidence(form, "/api/closing-prices", {
+    evaluationId: form.dataset.evaluationId,
+    supersedesId: form.dataset.supersedesId || null,
+    price: {
+      sportsbook: requiredEvidenceValue(form, "sportsbook", "Evaluated sportsbook"),
+      marketOdds: evidenceInteger(form, "marketOdds", "Final market price"),
+      oppositeOdds: evidenceInteger(form, "oppositeOdds", "Final opposite price"),
+      marketClosedAt: evidenceTimestamp(form, "marketClosedAt", "Market close time"),
+      isFinal: true
+    },
+    source: evidenceSource(form, "verified_provider_capture"),
+    notes: evidenceNotes(form)
+  }, "Verified closing price");
+}
+
+async function submitEvidenceForm(event) {
+  const outcomeForm = event.target.closest(".outcome-evidence-form");
+  const closingForm = event.target.closest(".closing-evidence-form");
+  const form = outcomeForm ?? closingForm;
+  if (!form) {
+    return;
+  }
+
+  event.preventDefault();
+  try {
+    if (outcomeForm) {
+      await submitOutcomeEvidence(outcomeForm);
+    } else {
+      await submitClosingEvidence(closingForm);
+    }
+  } catch (error) {
+    setEvidenceQueueStatus(error.message, true);
+  }
 }
 
 function renderGames(payload) {
@@ -3634,14 +4208,14 @@ function renderGames(payload) {
                 <strong>${escapeHtml(game.away?.name ?? "Away")}</strong>
                 <div class="probable">${escapeHtml(awayPitcher)}</div>
               </div>
-              <span>${game.away?.score ?? "-"}</span>
+              <span>${escapeHtml(game.away?.score ?? "-")}</span>
             </div>
             <div class="team-row">
               <div>
                 <strong>${escapeHtml(game.home?.name ?? "Home")}</strong>
                 <div class="probable">${escapeHtml(homePitcher)}</div>
               </div>
-              <span>${game.home?.score ?? "-"}</span>
+              <span>${escapeHtml(game.home?.score ?? "-")}</span>
             </div>
           </div>
           <p class="sources">${escapeHtml(game.venue ?? "Venue TBD")} / official source</p>
@@ -4448,11 +5022,17 @@ function renderBestTargets(payload) {
   const providerLabel = payload?.status === "odds_error"
     ? "odds provider error"
     : summaryLabelForOdds(summary);
+  const cache = payload?.oddsSources?.cache ?? null;
+  const updateLabel = cache?.anyHit === true
+    ? "Cached prices"
+    : summary.paidOddsRequested === true
+      ? "Provider refresh"
+      : "Updated";
   window.__bearEdgeBestTargets = targets;
 
   els.bestTargetsTimestamp.textContent = payload?.fetchedAt
-    ? `Updated ${shortTimestamp(payload.fetchedAt)}`
-    : "Updated";
+    ? `${updateLabel} ${shortTimestamp(payload.fetchedAt)}`
+    : updateLabel;
 
   if (targets.length === 0) {
     els.bestTargetsBoard.innerHTML = '<p class="muted">No MLB targets returned yet.</p>';
@@ -4475,6 +5055,7 @@ function renderBestTargets(payload) {
       <span class="tag ${payload.status === "priced" ? "low" : "medium"}">${escapeHtml(modeLabel)}</span>
       <span>${escapeHtml(summary.pricedCandidates ?? 0)} priced / ${escapeHtml(summary.candidates ?? 0)} candidates</span>
       <span>${escapeHtml(providerLabel)}</span>
+      ${cache ? `<span>${cache.anyHit ? "Paid cache reused" : "Fresh provider requests"}</span>` : ""}
       ${quota?.remainingCredits !== null && quota?.remainingCredits !== undefined ? `<span>${escapeHtml(quota.remainingCredits)} credits remaining</span>` : ""}
       ${usageBudget ? `<span>Estimated request cost: ${escapeHtml(usageBudget.maximumEstimatedCost)} / ${escapeHtml(usageBudget.maxCreditsPerRefresh)} credit cap</span>` : ""}
       <span>Presentation control: ${escapeHtml(window.__bearEdgeStatsigControl.status?.mode ?? "control_fallback")}</span>
@@ -4765,6 +5346,8 @@ async function loadInitialDashboardPanels() {
   await Promise.all([
     loadStatsigControl(),
     loadDashboard(),
+    loadEvidenceQueue(),
+    loadDirectScreenCapture(),
     loadAutoUpdateStatus(),
     loadLiveDataHealth(),
     loadSystemAudit(),
@@ -4788,9 +5371,12 @@ async function loadDeferredDashboardPanels() {
 async function refreshDashboardPanels() {
   await Promise.all([
     loadDashboard(),
+    loadEvidenceQueue(),
+    loadDirectScreenCapture(),
     loadAutoUpdateStatus(),
     loadSystemAudit(),
     loadReleaseReadiness(),
+    loadPitcherStrikeoutResearchReadiness(),
     loadProviderSetup(),
     loadOddsKeyStatus(),
     loadSourceStatus("today"),
@@ -5835,6 +6421,16 @@ els.recordingComparisonClearButton.addEventListener("click", () => {
 });
 els.refreshButton.addEventListener("click", () => {
   loadDashboard().catch((error) => setStatus(error.message, true));
+});
+els.evidenceQueueRefreshButton.addEventListener("click", () => {
+  loadEvidenceQueue();
+});
+els.evidenceQueueFilter.addEventListener("change", () => {
+  loadEvidenceQueue();
+});
+els.evidenceQueueBoard.addEventListener("submit", submitEvidenceForm);
+els.directScreenCaptureRefreshButton.addEventListener("click", () => {
+  loadDirectScreenCapture();
 });
 els.systemAuditRefreshButton.addEventListener("click", () => {
   loadSystemAudit();

@@ -54,9 +54,6 @@ async function saveProviderApiKey(input, options = {}) {
   const provider = providerForId(String(input?.providerId ?? ""));
   const envKey = writableEnvKeyFor(provider, input?.envKey);
   const normalized = validateProviderApiKey(input?.apiKey);
-  const previousValue = process.env[envKey];
-
-  process.env[envKey] = normalized;
 
   let verification;
 
@@ -70,14 +67,7 @@ async function saveProviderApiKey(input, options = {}) {
       throw new Error(verification.message);
     }
   } catch (error) {
-    const message = safeErrorMessage(error);
-
-    if (previousValue === undefined) {
-      delete process.env[envKey];
-    } else {
-      process.env[envKey] = previousValue;
-    }
-
+    const message = safeErrorMessage(error, [normalized]);
     throw new Error(message);
   }
 
@@ -88,6 +78,9 @@ async function saveProviderApiKey(input, options = {}) {
   await fs.mkdir(path.dirname(envPath), { recursive: true });
   await fs.writeFile(envPath, next, { mode: 0o600 });
   await fs.chmod(envPath, 0o600).catch(() => undefined);
+
+  // A key is activated only after its durable local write succeeds.
+  process.env[envKey] = normalized;
 
   return {
     configured: true,

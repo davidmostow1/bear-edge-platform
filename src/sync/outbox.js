@@ -16,7 +16,9 @@ const OUTBOX_STATES = Object.freeze([
 const SYNCABLE_RECORD_TYPES = Object.freeze([
   "evaluation",
   "settlement",
-  "amendment"
+  "amendment",
+  "prediction_outcome",
+  "closing_price"
 ]);
 const DEFAULT_OUTBOX_PATH = path.resolve(process.cwd(), "data/logs/sync_outbox.jsonl");
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -382,7 +384,7 @@ async function enqueueRecord(record, options = {}) {
   if (!validation.valid || !SYNCABLE_RECORD_TYPES.includes(record?.recordType)) {
     throw new OutboxError(
       "OUTBOX_INVALID_RECORD",
-      "Only valid canonical evaluation, settlement, or amendment records can be synchronized."
+      `Only valid canonical ${SYNCABLE_RECORD_TYPES.join(", ")} records can be synchronized.`
     );
   }
 

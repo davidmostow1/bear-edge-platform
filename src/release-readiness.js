@@ -351,6 +351,7 @@ async function getReleaseReadiness(options = {}) {
   const runtimeControls = systemAudit.runtimeControls;
   const operatorWriteBoundaryReady = runtimeControls.operatorAuth.writeBoundaryReady;
   const statsigFailClosed = runtimeControls.statsig.failClosed;
+  const legacyRecordCount = decisionLog.legacyRecords?.length ?? 0;
   const localLedgerIntegrityIssues = (decisionLog.malformedLines?.length ?? 0)
     + (decisionLog.duplicateIds?.length ?? 0)
     + (decisionLog.digestConflicts?.length ?? 0)
@@ -364,6 +365,7 @@ async function getReleaseReadiness(options = {}) {
     "/api/ocr-snapshot",
     "/api/candidates",
     "/api/best-mlb-targets",
+    "/api/evidence-queue",
     "/api/amend",
     "/api/auto-update",
     "/api/sync-health",
@@ -433,7 +435,7 @@ async function getReleaseReadiness(options = {}) {
       validatedModelCount: modelCalibration.validatedModelCount,
       models: modelCalibration.models,
       action: modelCalibration.registryValid
-        ? "Promote a model only after its immutable calibration report passes every registered policy threshold."
+        ? "Promote a model only after its content-addressed, digest-verified calibration report passes every registered policy threshold."
         : "Repair the model registry or its referenced calibration reports before evaluating production probabilities."
     },
     {
@@ -522,11 +524,24 @@ async function getReleaseReadiness(options = {}) {
         : "Authoritative local ledger has integrity failures",
       {
         malformedLines: decisionLog.malformedLines?.length ?? 0,
+        quarantinedLegacyRecords: legacyRecordCount,
         duplicateIds: decisionLog.duplicateIds?.length ?? 0,
         digestConflicts: decisionLog.digestConflicts?.length ?? 0,
         invalidRecords: decisionLog.invalidRecords?.length ?? 0
       },
-      "Repair malformed, duplicate, conflicting, or schema-invalid ledger records before release."
+      "Repair malformed, duplicate, conflicting, or schema-invalid canonical records before release."
+    ),
+    check(
+      legacyRecordCount === 0 ? "pass" : "warn",
+      "analytics",
+      legacyRecordCount === 0
+        ? "No pre-schema ledger rows require quarantine"
+        : "Pre-schema ledger rows are quarantined from authoritative integrity",
+      {
+        legacyRecords: legacyRecordCount,
+        authorityScope: legacyRecordCount === 0 ? "not_applicable" : "historical_only"
+      },
+      "Preserve legacy rows as historical evidence and migrate them only through an explicit audited process."
     ),
     check(releaseScriptExists ? "pass" : "warn", "runtime", "Release-readiness audit script exists"),
     check(publicMlbProviderExists && publicNhlProviderExists ? "pass" : "warn", "providers", "Official public MLB/NHL stat adapters exist", null, "Restore src/live/providers/mlb.js and src/live/providers/nhl.js before generating sport stat candidates."),
@@ -577,6 +592,8 @@ async function getReleaseReadiness(options = {}) {
         integrityStatus: localLedgerIntegrityIssues === 0 ? "valid" : "invalid",
         integrityIssues: localLedgerIntegrityIssues,
         malformedLines: decisionLog.malformedLines?.length ?? 0,
+        legacyRecords: legacyRecordCount,
+        legacyIsolationStatus: legacyRecordCount > 0 ? "quarantined" : "not_required",
         duplicateIds: decisionLog.duplicateIds?.length ?? 0,
         digestConflicts: decisionLog.digestConflicts?.length ?? 0,
         invalidRecords: decisionLog.invalidRecords?.length ?? 0,

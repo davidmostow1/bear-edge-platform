@@ -5,6 +5,10 @@ const os = require("node:os");
 const path = require("node:path");
 
 const { createServer } = require("../src/server.js");
+const {
+  appendAuthoritativeRecord,
+  createEvaluationRecord
+} = require("../src/index.js");
 const { createOperatorAuth } = require("../src/config/operator-auth.js");
 const { getBestMlbTargets } = require("../src/live/best-mlb-targets.js");
 const {
@@ -15,10 +19,15 @@ const {
 const { fetchJson, fetchText } = require("../src/live/fixture-fetch.js");
 
 async function withServer(run, options = {}) {
+  const operatorAuth = options.operatorAuth ?? createOperatorAuth({
+    lanMode: false,
+    requireToken: false
+  });
   const server = createServer({
     fetchJsonImpl: fetchJson,
     fetchTextImpl: fetchText,
-    ...options
+    ...options,
+    operatorAuth
   });
 
   await new Promise((resolve) => server.listen(0, () => resolve(undefined)));
@@ -38,6 +47,42 @@ async function withServer(run, options = {}) {
   }
 }
 
+test("HTTP server construction requires an explicit operator authorization policy", () => {
+  assert.throws(
+    () => createServer(),
+    /requires an explicit operatorAuth policy/
+  );
+});
+
+test("HTTP server never replaces its configured transport with fixture mode", async () => {
+  const previousTestMode = process.env.BEAR_EDGE_TEST_MODE;
+  let liveTransportCalls = 0;
+
+  process.env.BEAR_EDGE_TEST_MODE = "1";
+
+  try {
+    await withServer(async (baseUrl) => {
+      const response = await fetch(`${baseUrl}/api/games?date=2026-06-17&days=1&sports=mlb`);
+      const payload = await response.json();
+
+      assert.equal(response.status, 200);
+      assert.equal(liveTransportCalls, 1);
+      assert.equal(payload.games.length, 0);
+    }, {
+      fetchJsonImpl: async () => {
+        liveTransportCalls += 1;
+        return { dates: [], totalGames: 0 };
+      }
+    });
+  } finally {
+    if (previousTestMode === undefined) {
+      delete process.env.BEAR_EDGE_TEST_MODE;
+    } else {
+      process.env.BEAR_EDGE_TEST_MODE = previousTestMode;
+    }
+  }
+});
+
 test("HTTP API exposes schemas", async () => {
   await withServer(async (baseUrl) => {
     const response = await fetch(`${baseUrl}/schemas`);
@@ -52,7 +97,27 @@ test("HTTP API exposes schemas", async () => {
   });
 });
 
-test("LAN operator authentication keeps reads open and blocks every unauthenticated write", async () => {
+test("HTTP API rejects JSON bodies larger than the configured limit", async () => {
+  await withServer(async (baseUrl) => {
+    const response = await fetch(`${baseUrl}/api/statsig-control/exposure`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json"
+      },
+      body: JSON.stringify({
+        gateName: "bear_edge_provenance_ui",
+        padding: "x".repeat(256)
+      })
+    });
+    const payload = await response.json();
+
+    assert.equal(response.status, 413);
+    assert.equal(payload.code, "REQUEST_BODY_TOO_LARGE");
+    assert.equal(payload.maxBytes, 128);
+  }, { maxRequestBodyBytes: 128 });
+});
+
+test("LAN operator authentication protects sensitive reads and every write", async () => {
   const operatorToken = "operator-auth-test-token-1234567890";
   const operatorAuth = createOperatorAuth({
     lanMode: true,
@@ -67,6 +132,15 @@ test("LAN operator authentication keeps reads open and blocks every unauthentica
     assert.equal(status.required, true);
     assert.equal(status.secretReturned, false);
     assert.equal(JSON.stringify(status).includes(operatorToken), false);
+
+    const missingReadResponse = await fetch(`${baseUrl}/api/decision-log`);
+    const validReadResponse = await fetch(`${baseUrl}/api/decision-log`, {
+      headers: { authorization: `Bearer ${operatorToken}` }
+    });
+    const missingQueueResponse = await fetch(`${baseUrl}/api/evidence-queue`);
+    const validQueueResponse = await fetch(`${baseUrl}/api/evidence-queue`, {
+      headers: { authorization: `Bearer ${operatorToken}` }
+    });
 
     const body = JSON.stringify({ gateName: "bear_edge_provenance_ui" });
     const missingResponse = await fetch(`${baseUrl}/api/statsig-control/exposure`, {
@@ -99,12 +173,61 @@ test("LAN operator authentication keeps reads open and blocks every unauthentica
       body
     });
 
+    assert.equal(missingReadResponse.status, 401);
+    assert.equal(validReadResponse.status, 200);
+    assert.equal(missingQueueResponse.status, 401);
+    assert.equal(validQueueResponse.status, 200);
     assert.equal(missingResponse.status, 401);
     assert.equal(malformedResponse.status, 401);
     assert.equal(invalidResponse.status, 401);
     assert.equal(validResponse.status, 200);
     assert.equal(JSON.stringify(await missingResponse.json()).includes(operatorToken), false);
   }, { operatorAuth });
+});
+
+test("LAN operator authentication protects paid and state-changing GET requests", async () => {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "bear-edge-api-auth-get-"));
+  const logPath = path.join(tempDir, "decision_log.jsonl");
+  const operatorToken = "operator-auth-paid-get-token-1234567890";
+  const operatorAuth = createOperatorAuth({
+    lanMode: true,
+    token: operatorToken
+  });
+  const previousOddsApiKey = process.env.THE_ODDS_API_KEY;
+  const previousAltOddsApiKey = process.env.ODDS_API_KEY;
+
+  delete process.env.THE_ODDS_API_KEY;
+  delete process.env.ODDS_API_KEY;
+
+  try {
+    await withServer(async (baseUrl) => {
+      const ordinaryRead = await fetch(`${baseUrl}/api/operator-auth`);
+      const paidOddsRead = await fetch(`${baseUrl}/api/odds/markets?sport=mlb`);
+      const paidRefresh = await fetch(`${baseUrl}/api/best-mlb-targets?refresh=1`);
+      const authorizedPaidOddsRead = await fetch(`${baseUrl}/api/odds/markets?sport=mlb`, {
+        headers: {
+          authorization: `Bearer ${operatorToken}`
+        }
+      });
+
+      assert.equal(ordinaryRead.status, 200);
+      assert.equal(paidOddsRead.status, 401);
+      assert.equal(paidRefresh.status, 401);
+      assert.equal(authorizedPaidOddsRead.status, 428);
+    }, { logPath, operatorAuth });
+  } finally {
+    if (previousOddsApiKey === undefined) {
+      delete process.env.THE_ODDS_API_KEY;
+    } else {
+      process.env.THE_ODDS_API_KEY = previousOddsApiKey;
+    }
+
+    if (previousAltOddsApiKey === undefined) {
+      delete process.env.ODDS_API_KEY;
+    } else {
+      process.env.ODDS_API_KEY = previousAltOddsApiKey;
+    }
+  }
 });
 
 test("HTTP API exposes control-only Statsig state and records exposure after display", async () => {
@@ -601,6 +724,25 @@ test("HTTP API serves the local dashboard", async () => {
   });
 });
 
+test("HTTP responses include browser hardening and cache controls", async () => {
+  await withServer(async (baseUrl) => {
+    const dashboardResponse = await fetch(`${baseUrl}/dashboard`);
+    const apiResponse = await fetch(`${baseUrl}/api/operator-auth`);
+
+    assert.equal(dashboardResponse.status, 200);
+    assert.equal(dashboardResponse.headers.get("x-content-type-options"), "nosniff");
+    assert.equal(dashboardResponse.headers.get("x-frame-options"), "DENY");
+    assert.equal(dashboardResponse.headers.get("referrer-policy"), "no-referrer");
+    assert.equal(dashboardResponse.headers.get("cross-origin-opener-policy"), "same-origin");
+    assert.equal(dashboardResponse.headers.get("cross-origin-resource-policy"), "same-origin");
+    assert.equal(dashboardResponse.headers.get("cache-control"), "no-cache");
+    assert.match(dashboardResponse.headers.get("content-security-policy"), /script-src 'self'/);
+    assert.match(dashboardResponse.headers.get("content-security-policy"), /frame-ancestors 'none'/);
+    assert.equal(apiResponse.headers.get("cache-control"), "no-store");
+    assert.equal(apiResponse.headers.get("x-content-type-options"), "nosniff");
+  });
+});
+
 test("HTTP API exposes provider setup requirements without leaking secrets", async () => {
   const previousOddsApiKey = process.env.THE_ODDS_API_KEY;
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "bear-edge-provider-setup-"));
@@ -790,6 +932,14 @@ test("HTTP API exposes release readiness checks", async () => {
     assert.equal(payload.runtimeControls.operatorAuth.mode, "local_open");
     assert.equal(payload.runtimeControls.statsig.failClosed, true);
     assert.equal(payload.operationalEvidence.localLedger.integrityStatus, "valid");
+    assert.equal(payload.operationalEvidence.localLedger.integrityIssues, 0);
+    assert.equal(payload.operationalEvidence.localLedger.legacyRecords > 0, true);
+    assert.equal(payload.operationalEvidence.localLedger.legacyIsolationStatus, "quarantined");
+    assert.ok(payload.checks.some((entry) => (
+      entry.area === "analytics"
+      && entry.status === "warn"
+      && entry.message === "Pre-schema ledger rows are quarantined from authoritative integrity"
+    )));
     assert.equal(payload.operationalEvidence.outbox.integrityIssues, 0);
     assert.equal(payload.operationalEvidence.modelRegistry.registryValid, true);
     assert.deepEqual(payload.trackedFiles.blockedMatches, []);
@@ -884,6 +1034,8 @@ test("release readiness is zero-credit and reports configured odds as price-chec
         assert.equal(payload.dataEdge.bestTargets.status, "odds_refresh_required");
         assert.equal(payload.dataEdge.betCallPermission, "PRICE_CHECK_ONLY");
         assert.equal(dataEdge.status, "needs-work");
+        assert.equal(payload.operationalEvidence.localLedger.legacyRecords > 0, true);
+        assert.equal(payload.operationalEvidence.localLedger.legacyIsolationStatus, "quarantined");
         assert.ok(payload.checks.some((entry) =>
           entry.area === "providers" &&
           entry.status === "warn" &&
@@ -1024,6 +1176,19 @@ test("auto-update service refreshes current source, game, candidate, and log sum
     autoUpdateLogPath,
     autoUpdateLatestPath,
     autoUpdateSnapshotPath,
+    resolveOfficialOutcomesImpl: async (options) => {
+      assert.equal(options.logPath, logPath);
+      assert.equal(options.fetchJsonImpl, fetchJson);
+      return {
+        inspected: 0,
+        appended: 0,
+        alreadyResolved: 0,
+        awaitingFinal: 0,
+        unsupported: 0,
+        failed: 0,
+        failures: []
+      };
+    },
     maxCandidates: 2
   });
 
@@ -1038,6 +1203,8 @@ test("auto-update service refreshes current source, game, candidate, and log sum
   assert.equal(status.lastResult.games.gameCount, 6);
   assert.equal(status.lastResult.candidates.candidateCount, 2);
   assert.equal(status.lastResult.decisionLog.totalEvaluations, 0);
+  assert.equal(status.lastResult.outcomes.appended, 0);
+  assert.equal(status.lastResult.outcomes.failed, 0);
   assert.equal(status.lastResult.endpoints.games, "/api/games?date=today&days=2");
   assert.equal(status.historyPath, autoUpdateLogPath);
   assert.equal(status.latestPath, autoUpdateLatestPath);
@@ -1066,6 +1233,7 @@ test("auto-update service refreshes current source, game, candidate, and log sum
   assert.equal(snapshot.snapshot.recordType, "auto_update_snapshot");
   assert.equal(snapshot.snapshot.games.games.length, 6);
   assert.equal(snapshot.snapshot.candidates.candidates.length, 2);
+  assert.equal(snapshot.snapshot.outcomes.failed, 0);
 });
 
 test("auto-update service persists failed runs without stale successful results", async () => {
@@ -1356,7 +1524,7 @@ test("HTTP API prices and evaluates best MLB targets with a configured odds key"
       assert.ok(payload.best.length >= 1);
       assert.equal(payload.best[0].status, "priced");
       assert.equal(payload.best[0].odds.bookmaker.key, "draftkings");
-      assert.match(payload.best[0].odds.selectionMethod, /best_.*available_price/);
+      assert.equal(payload.best[0].odds.selectionMethod, "required_bookmaker_price");
       assert.ok(payload.best[0].odds.availableOffers.length >= 2);
       assert.ok(payload.best[0].odds.marketContext.consensus.length >= 2);
       assert.equal(payload.best[0].evaluation.marketIntelligence.consensus.bookCount, 0);
@@ -1368,7 +1536,7 @@ test("HTTP API prices and evaluates best MLB targets with a configured odds key"
       assert.equal(payload.best[0].riskFlags.some((flag) => flag.code === "MISSING_MARKET_ODDS"), false);
       assert.ok(["BET", "PASS", "WAIT"].includes(payload.best[0].evaluation.verdict));
       assert.equal(payload.best[0].auditRecord.verdict, "WAIT");
-      assert.equal(payload.best[0].auditRecord.permission, "VERIFIED_BETS_ALLOWED");
+      assert.equal(payload.best[0].auditRecord.permission, "PRICE_CHECK_ONLY");
       assert.equal(payload.best[0].auditRecord.model.modelStatus, "research_only");
       assert.equal(payload.best[0].recordId, payload.best[0].auditRecord.id);
       assert.equal(payload.best[0].contentDigest, payload.best[0].auditRecord.contentDigest);
@@ -2255,13 +2423,13 @@ test("HTTP API finds online MLB and World Cup opportunities from separate source
     assert.equal(response.status, 200);
     assert.equal(payload.summary.mlbGames, 1);
     assert.equal(payload.summary.worldCupGames, 1);
-    assert.ok(payload.summary.pricedOpportunities >= 1);
+    assert.ok(payload.summary.unverifiedPublicPrices >= 1);
     assert.ok(payload.summary.oddsNeededOpportunities >= 1);
     assert.ok(payload.sources.some((source) => source.provider === "Covers"));
     assert.ok(payload.sources.some((source) => source.provider === "Hard Rock Bet" && source.sport === "worldcup"));
     assert.ok(payload.sources.some((source) => source.provider === "StatMuse" && source.sport === "mlb"));
 
-    const pricedProp = payload.opportunities.find((entry) => entry.status === "priced_online");
+    const pricedProp = payload.opportunities.find((entry) => entry.status === "unverified_public_price");
     const worldCupMarket = payload.opportunities.find((entry) => entry.sport === "worldcup" && entry.marketType === "three_way_moneyline");
 
     assert.equal(pricedProp.marketLabel, "TOTAL BASES");
@@ -2273,12 +2441,16 @@ test("HTTP API finds online MLB and World Cup opportunities from separate source
     assert.equal(pricedProp.draftKingsPrice.americanOdds, 113);
     assert.equal(pricedProp.bestVsDraftKings.americanOddsDelta, 12);
     assert.ok(Math.abs(pricedProp.bestVsDraftKings.profitOn100Delta - 12) < 0.001);
-    assert.equal(pricedProp.edgeTier, "bet_candidate");
+    assert.equal(pricedProp.edgeTier, "source_signal");
+    assert.equal(pricedProp.permission, "PRICE_CHECK_ONLY");
+    assert.equal(pricedProp.evidenceStatus, "unverified_public_snapshot");
+    assert.equal(pricedProp.sourceEvPercent, pricedProp.evPercent);
+    assert.equal(pricedProp.priceSourceTime, null);
     assert.ok(pricedProp.bestPrice.impliedProbability > 0.44 && pricedProp.bestPrice.impliedProbability < 0.45);
     assert.ok(pricedProp.bestVsDraftKings.impliedProbabilitySavings > 0.02);
     assert.equal(worldCupMarket.matchup, "Ghana @ Croatia");
     assert.deepEqual(worldCupMarket.selections, ["home win", "draw", "away win"]);
-    assert.ok(payload.warnings.some((warning) => warning.includes("priced_online")));
+    assert.ok(payload.warnings.some((warning) => warning.includes("not verified sportsbook authorization")));
   });
 });
 
@@ -2342,7 +2514,7 @@ test("HTTP API parses World Cup goalscorer snapshot rows with payout math", asyn
   });
 });
 
-test("HTTP API persists straight evaluations and summarizes attached settlements", async () => {
+test("HTTP API persists straight price checks and refuses to settle non-BET evaluations", async () => {
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "bear-edge-api-log-"));
   const logPath = path.join(tempDir, "decision_log.jsonl");
 
@@ -2372,7 +2544,7 @@ test("HTTP API persists straight evaluations and summarizes attached settlements
       assert.equal(evaluationResponse.status, 200);
       assert.equal(evaluation.verdict, "WAIT");
       assert.equal(evaluation.logPath, logPath);
-      assert.equal(evaluation.decisionLog.schemaVersion, "2.0.0");
+      assert.equal(evaluation.decisionLog.schemaVersion, "2.1.0");
       assert.equal(evaluation.recordId, evaluation.decisionLog.id);
       assert.equal(evaluation.clientEventId, evaluation.decisionLog.clientEventId);
       assert.equal(evaluation.contentDigest, evaluation.decisionLog.contentDigest);
@@ -2395,31 +2567,15 @@ test("HTTP API persists straight evaluations and summarizes attached settlements
             isFinal: true,
             sourceLocator: "file:///verified-closing-line.png",
             sourceDigest: "c".repeat(64)
-          }
+          },
+          stake: 10,
+          profit: -10
         })
       });
       const settlementPayload = await settlementResponse.json();
 
-      assert.equal(settlementResponse.status, 200);
-      assert.equal(settlementPayload.settlement.closingLineEvidence.sportsbook, "operator_input");
-      assert.equal(settlementPayload.settlement.closingLineEvidence.sourceDigest, "c".repeat(64));
-
-      const amendmentResponse = await fetch(`${baseUrl}/api/amend`, {
-        method: "POST",
-        headers: {
-          "content-type": "application/json"
-        },
-        body: JSON.stringify({
-          evaluationId: evaluation.decisionLog.id,
-          settlementId: settlementPayload.settlement.id,
-          reason: "Official scoring correction",
-          patch: { outcome: "push", profit: 0 }
-        })
-      });
-      const amendmentPayload = await amendmentResponse.json();
-
-      assert.equal(amendmentResponse.status, 200);
-      assert.equal(amendmentPayload.record.recordType, "amendment");
+      assert.equal(settlementResponse.status, 400);
+      assert.match(settlementPayload.error, /Only a BET evaluation can be settled/);
 
       const dashboardResponse = await fetch(`${baseUrl}/api/decision-log`);
       const dashboard = await dashboardResponse.json();
@@ -2429,13 +2585,188 @@ test("HTTP API persists straight evaluations and summarizes attached settlements
       assert.equal(dashboard.summary.falsePositiveBetCalls, 0);
       assert.equal(dashboard.summary.hitRate, null);
       assert.equal(dashboard.byMarketType[0].marketType, "moneyline");
-      assert.ok(Math.abs(dashboard.evaluations[0].closingLineValue - 0.1) < 1e-12);
-      assert.equal(dashboard.settlements[0].outcome, "push");
-      assert.equal(dashboard.amendments.length, 1);
-      assert.equal(fs.readFileSync(logPath, "utf8").trim().split("\n").length, 3);
+      assert.equal(dashboard.settlements.length, 0);
+      assert.equal(dashboard.amendments.length, 0);
+      assert.equal(fs.readFileSync(logPath, "utf8").trim().split("\n").length, 1);
     },
     { logPath }
   );
+});
+
+test("HTTP API settles and amends a canonical validated BET", async () => {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "bear-edge-api-settlement-"));
+  const logPath = path.join(tempDir, "decision_log.jsonl");
+  const evaluation = createEvaluationRecord({
+    origin: { channel: "test", actorType: "operator" },
+    event: {
+      sport: "mlb",
+      league: "MLB",
+      eventId: "api-event-901",
+      startTime: "2026-07-17T23:00:00.000Z",
+      homeTeam: "Home",
+      awayTeam: "Away"
+    },
+    market: {
+      marketFamily: "moneyline",
+      marketType: "moneyline",
+      selection: "Verified API moneyline"
+    },
+    price: {
+      sportsbook: "draftkings",
+      marketOdds: 120,
+      oppositeOdds: -135,
+      priceCapturedAt: "2026-07-17T17:59:00.000Z",
+      priceSourceTime: "2026-07-17T17:58:30.000Z"
+    },
+    sources: [{
+      provider: "the_odds_api",
+      sourceType: "sportsbook_price",
+      sourceLocator: "https://api.the-odds-api.com/v4/sports/baseball_mlb/odds",
+      parserVersion: "test_v1",
+      capturedAt: "2026-07-17T17:59:00.000Z",
+      sourceTime: "2026-07-17T17:58:30.000Z",
+      digest: "a".repeat(64),
+      freshness: "fresh",
+      verificationStatus: "verified_provider_capture"
+    }],
+    model: {
+      modelId: "validated_moneyline",
+      modelVersion: "1.0.0",
+      probabilityMethod: "calibrated_logistic",
+      modelStatus: "validated",
+      calibrationReportId: "calibration-report-001",
+      sampleSize: 500
+    },
+    probability: {
+      rawModelProbability: 0.59,
+      adjustedProbability: 0.58,
+      marketImpliedProbability: 0.4545,
+      marketNoVigProbability: 0.47
+    },
+    edge: {
+      fairEdge: 0.11,
+      priceEdge: 0.1255,
+      expectedValueRoi: 0.276,
+      kellyFraction: 0.12
+    },
+    stake: {
+      recommendedStake: 10,
+      bankroll: 1000,
+      stakePolicyVersion: "test_v1"
+    },
+    decision: {
+      verdict: "BET",
+      permission: "VERIFIED_BETS_ALLOWED",
+      reasons: ["Canonical validated test evaluation."],
+      riskFlags: [],
+      gateResults: [{ gate: "authorization", passed: true }]
+    },
+    audit: {
+      codeVersion: "test",
+      configurationDigest: "b".repeat(64),
+      calculationVersion: "test_v1",
+      evidenceCompleteness: "verified",
+      warnings: []
+    }
+  }, {
+    clientEventId: "00000000-0000-4000-8000-000000000901",
+    createdAt: "2026-07-17T18:00:00.000Z"
+  });
+
+  await appendAuthoritativeRecord(evaluation, {
+    ledgerPath: logPath,
+    resolveModelEvidenceImpl: (identity) => ({
+      ...identity,
+      calibrationReportId: evaluation.model.calibrationReportId,
+      validated: true
+    })
+  });
+
+  await withServer(async (baseUrl) => {
+    const settlementResponse = await fetch(`${baseUrl}/api/settle`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        evaluationId: evaluation.id,
+        outcome: "loss",
+        closingOdds: 100,
+        closingOppositeOdds: -120,
+        closingLineEvidence: {
+          sportsbook: "operator_input",
+          capturedAt: "2026-07-17T19:10:05.000Z",
+          marketClosedAt: "2026-07-17T19:10:00.000Z",
+          isFinal: true,
+          sourceLocator: "file:///verified-closing-line.png",
+          sourceDigest: "c".repeat(64)
+        },
+        stake: 10,
+        profit: -10
+      })
+    });
+    const settlementPayload = await settlementResponse.json();
+
+    assert.equal(settlementResponse.status, 200);
+    assert.equal(settlementPayload.settlement.closingLineEvidence.sportsbook, "operator_input");
+    assert.equal(settlementPayload.settlement.closingLineEvidence.sourceDigest, "c".repeat(64));
+
+    const amendmentResponse = await fetch(`${baseUrl}/api/amend`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        evaluationId: evaluation.id,
+        settlementId: settlementPayload.settlement.id,
+        reason: "Official scoring correction",
+        patch: { outcome: "push", profit: 0 }
+      })
+    });
+    const amendmentPayload = await amendmentResponse.json();
+
+    assert.equal(amendmentResponse.status, 200);
+    assert.equal(amendmentPayload.record.recordType, "amendment");
+
+    const dashboardResponse = await fetch(`${baseUrl}/api/decision-log`);
+    const dashboard = await dashboardResponse.json();
+
+    assert.equal(dashboardResponse.status, 200);
+    assert.equal(dashboard.summary.totalEvaluations, 1);
+    assert.equal(dashboard.summary.falsePositiveBetCalls, 0);
+    assert.equal(dashboard.summary.hitRate, null);
+    assert.equal(dashboard.byMarketType[0].marketType, "moneyline");
+    assert.ok(Math.abs(dashboard.evaluations[0].closingLineValue - 0.1) < 1e-12);
+    assert.equal(dashboard.settlements[0].outcome, "push");
+    assert.equal(dashboard.amendments.length, 1);
+    assert.equal(fs.readFileSync(logPath, "utf8").trim().split("\n").length, 3);
+  }, { logPath });
+});
+
+test("HTTP evaluation API rejects a client-controlled authoritative ledger path", async () => {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "bear-edge-api-ledger-boundary-"));
+  const serverLogPath = path.join(tempDir, "server", "decision_log.jsonl");
+  const clientLogPath = path.join(tempDir, "client-selected", "decision_log.jsonl");
+
+  await withServer(async (baseUrl) => {
+    const response = await fetch(`${baseUrl}/evaluate`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json"
+      },
+      body: JSON.stringify({
+        selection: "Client-selected ledger path",
+        marketType: "moneyline",
+        marketOdds: 120,
+        oppositeOdds: -135,
+        modelProbability: 0.59,
+        bankroll: 1000,
+        logPath: clientLogPath
+      })
+    });
+    const payload = await response.json();
+
+    assert.equal(response.status, 400);
+    assert.equal(payload.code, "SERVER_CONTROLLED_LEDGER_PATH");
+    assert.equal(fs.existsSync(clientLogPath), false);
+    assert.equal(fs.existsSync(serverLogPath), false);
+  }, { logPath: serverLogPath });
 });
 
 test("settlement API rejects an orphan evaluation reference", async () => {
@@ -2696,5 +3027,243 @@ test("HTTP API rejects malformed live tickets", async () => {
     assert.equal(response.status, 400);
     assert.match(payload.error, /Live ticket validation failed/);
     assert.ok(Array.isArray(payload.issues));
+  });
+});
+
+function directScreenCaptureApiBody() {
+  const visibleText = [
+    "KC Royals @ DET Tigers",
+    "KC Royals",
+    "DET Tigers",
+    "Riley Greene",
+    "Over 1.5 Hits",
+    "+121",
+    "Under 1.5 Hits",
+    "-131"
+  ].join("\n");
+
+  return {
+    capturedAt: "2026-07-23T23:41:00.000Z",
+    sourceUrl: "https://predictions.draftkings.com/en/event/kc-royals-%40-det-tigers/34425631?category=all-odds&subcategory=batter",
+    pageTitle: "KC Royals @ DET Tigers Predictions: Batter",
+    mimeType: "image/png",
+    fileName: "kc-det-batter.png",
+    imageBase64: `data:image/png;base64,${Buffer.concat([
+      Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+      Buffer.from("retained-browser-screenshot")
+    ]).toString("base64")}`,
+    visibleText,
+    event: {
+      sport: "mlb",
+      league: "MLB",
+      eventId: "34425631",
+      away: "KC Royals",
+      home: "DET Tigers",
+      status: "live"
+    },
+    markets: [
+      {
+        period: "game",
+        marketType: "player_prop",
+        selection: "Riley Greene Over 1.5 Hits",
+        side: "over",
+        line: 1.5,
+        americanOdds: 121,
+        playerName: "Riley Greene",
+        statKey: "hits"
+      },
+      {
+        period: "game",
+        marketType: "player_prop",
+        selection: "Riley Greene Under 1.5 Hits",
+        side: "under",
+        line: 1.5,
+        americanOdds: -131,
+        playerName: "Riley Greene",
+        statKey: "hits"
+      }
+    ]
+  };
+}
+
+function directScreenCaptureCandidate() {
+  return {
+    id: "mlb-745926-away-682985-hits",
+    sport: "mlb",
+    gameDate: "2026-07-23T22:40:00.000Z",
+    player: {
+      name: "Riley Greene",
+      teamName: "Detroit Tigers",
+      opponentName: "Kansas City Royals"
+    },
+    statKey: "hits",
+    line: 1.5,
+    lean: "over",
+    ticketDraft: {
+      selection: "Riley Greene over 1.5 hits"
+    }
+  };
+}
+
+test("HTTP API retains a direct screen capture and returns exact candidate matches", async (t) => {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "bear-edge-direct-capture-api-"));
+  const ledgerPath = path.join(tempDir, "direct_screen_captures.jsonl");
+  const artifactDir = path.join(tempDir, "screenshots");
+
+  t.after(() => fs.rmSync(tempDir, { recursive: true, force: true }));
+
+  await withServer(async (baseUrl) => {
+    const postResponse = await fetch(`${baseUrl}/api/direct-screen-captures`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json"
+      },
+      body: JSON.stringify(directScreenCaptureApiBody())
+    });
+    const post = await postResponse.json();
+
+    assert.equal(postResponse.status, 200);
+    assert.match(post.capture.captureId, /^dsc_[a-f0-9]{24}$/);
+    assert.equal(post.capture.summary.completeMarkets, 1);
+    assert.equal(post.capture.summary.incompleteMarkets, 0);
+    assert.equal(post.capture.evidenceStatus, "captured_unverified");
+    assert.equal(post.capture.betCallPermission, "PRICE_CHECK_ONLY");
+    assert.equal(post.capture.authorizedStake, 0);
+    assert.equal(post.persistence.idempotent, false);
+    assert.match(post.capture.evidence.visibleTextArtifact, /\.txt$/);
+    assert.equal(post.matching.summary.matches, 1);
+    assert.equal(post.matching.matches[0].candidateId, "mlb-745926-away-682985-hits");
+    assert.equal(JSON.stringify(post).includes("imageBase64"), false);
+
+    const latestResponse = await fetch(`${baseUrl}/api/direct-screen-captures/latest`);
+    const latest = await latestResponse.json();
+
+    assert.equal(latestResponse.status, 200);
+    assert.equal(latest.latest.captureId, post.capture.captureId);
+    assert.equal(latest.summary.records, 1);
+    assert.equal(JSON.stringify(latest).includes("retained-browser-screenshot"), false);
+    assert.equal(JSON.stringify(latest).includes(directScreenCaptureApiBody().visibleText), false);
+  }, {
+    directScreenCaptureLedgerPath: ledgerPath,
+    directScreenCaptureArtifactDir: artifactDir,
+    directScreenCaptureNow: new Date("2026-07-23T23:41:10.000Z"),
+    generateResearchCandidatesImpl: async () => ({
+      candidates: [directScreenCaptureCandidate()],
+      skipped: []
+    })
+  });
+});
+
+test("HTTP API rejects invalid direct screen captures as client errors", async () => {
+  await withServer(async (baseUrl) => {
+    const response = await fetch(`${baseUrl}/api/direct-screen-captures`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json"
+      },
+      body: JSON.stringify({
+        ...directScreenCaptureApiBody(),
+        sourceUrl: "https://example.com/fake"
+      })
+    });
+    const payload = await response.json();
+
+    assert.equal(response.status, 400);
+    assert.match(payload.error, /predictions\.draftkings\.com/);
+  });
+});
+
+test("HTTP API redacts direct screen capture persistence failures", async () => {
+  await withServer(async (baseUrl) => {
+    const response = await fetch(`${baseUrl}/api/direct-screen-captures`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json"
+      },
+      body: JSON.stringify(directScreenCaptureApiBody())
+    });
+    const payload = await response.json();
+
+    assert.equal(response.status, 500);
+    assert.equal(payload.code, "DIRECT_SCREEN_CAPTURE_PERSIST_FAILED");
+    assert.equal(payload.error, "Direct screen capture persistence failed.");
+    assert.equal(JSON.stringify(payload).includes("/private/secret/evidence"), false);
+  }, {
+    directScreenCaptureNow: new Date("2026-07-23T23:41:10.000Z"),
+    persistDirectScreenCaptureImpl: async () => {
+      throw new Error("EACCES: /private/secret/evidence/captures.jsonl");
+    }
+  });
+});
+
+test("HTTP API generates direct screen capture candidates from the prior slate after local midnight", async (t) => {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "bear-edge-direct-capture-midnight-"));
+  let requestedDate = null;
+
+  t.after(() => fs.rmSync(tempDir, { recursive: true, force: true }));
+
+  await withServer(async (baseUrl) => {
+    const response = await fetch(`${baseUrl}/api/direct-screen-captures`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json"
+      },
+      body: JSON.stringify({
+        ...directScreenCaptureApiBody(),
+        capturedAt: "2026-07-24T04:35:00.000Z"
+      })
+    });
+
+    assert.equal(response.status, 200);
+    assert.equal(requestedDate, "2026-07-23");
+  }, {
+    directScreenCaptureNow: new Date("2026-07-24T04:36:00.000Z"),
+    directScreenCaptureLedgerPath: path.join(tempDir, "captures.jsonl"),
+    directScreenCaptureArtifactDir: path.join(tempDir, "screenshots"),
+    generateResearchCandidatesImpl: async (options) => {
+      requestedDate = options.date;
+      return { candidates: [], skipped: [] };
+    }
+  });
+});
+
+test("LAN operator authentication protects direct screen capture reads and writes", async (t) => {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "bear-edge-direct-capture-auth-"));
+  const operatorToken = "direct-capture-operator-token-1234567890";
+  const operatorAuth = createOperatorAuth({
+    lanMode: true,
+    token: operatorToken
+  });
+
+  t.after(() => fs.rmSync(tempDir, { recursive: true, force: true }));
+
+  await withServer(async (baseUrl) => {
+    const missingRead = await fetch(`${baseUrl}/api/direct-screen-captures/latest`);
+    const missingWrite = await fetch(`${baseUrl}/api/direct-screen-captures`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(directScreenCaptureApiBody())
+    });
+    const validWrite = await fetch(`${baseUrl}/api/direct-screen-captures`, {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${operatorToken}`,
+        "content-type": "application/json"
+      },
+      body: JSON.stringify(directScreenCaptureApiBody())
+    });
+
+    assert.equal(missingRead.status, 401);
+    assert.equal(missingWrite.status, 401);
+    assert.equal(validWrite.status, 200);
+  }, {
+    operatorAuth,
+    directScreenCaptureLedgerPath: path.join(tempDir, "captures.jsonl"),
+    directScreenCaptureArtifactDir: path.join(tempDir, "screenshots"),
+    directScreenCaptureNow: new Date("2026-07-23T23:41:10.000Z"),
+    generateResearchCandidatesImpl: async () => ({
+      candidates: [],
+      skipped: []
+    })
   });
 });

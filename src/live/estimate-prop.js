@@ -178,6 +178,10 @@ function poissonCdf(k, mean) {
 }
 
 function estimateCountProbability({ mean, line, side }) {
+  if (Number.isInteger(line)) {
+    throw new Error("Integer count lines require push-aware modeling.");
+  }
+
   const flooredLine = Math.floor(line);
 
   if (side === "over") {

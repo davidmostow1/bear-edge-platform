@@ -111,6 +111,7 @@ async function main(argv = process.argv.slice(2)) {
   const configuredOperatorToken = process.env.BEAR_EDGE_OPERATOR_TOKEN;
   const operatorAuth = createOperatorAuth({
     lanMode,
+    requireToken: true,
     token: configuredOperatorToken
   });
   const generatedOperatorToken = operatorAuth.createLaunchToken();
@@ -135,7 +136,7 @@ async function main(argv = process.argv.slice(2)) {
   await new Promise((resolve) => server.listen(port, host, () => resolve(undefined)));
   process.stdout.write(`Bear Edge server listening on http://${host}:${port}\n`);
   if (operatorAuth.getStatus().required) {
-    process.stdout.write("Operator authentication required for write operations.\n");
+    process.stdout.write("Operator authentication required for protected operations.\n");
   }
   if (generatedOperatorToken) {
     process.stdout.write(

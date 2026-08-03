@@ -7,7 +7,7 @@ const path = require("node:path");
 const { spawn } = require("node:child_process");
 
 const { loadEnvFiles } = require("../config/env.js");
-const { createOperatorAuth, envFlagEnabled } = require("../config/operator-auth.js");
+const { createOperatorAuth } = require("../config/operator-auth.js");
 
 const PROJECT_ROOT = path.resolve(__dirname, "../..");
 const DEFAULT_PORT = 3000;
@@ -199,26 +199,27 @@ function buildDashboardUrl(port, host = "127.0.0.1", operatorToken = null) {
 }
 
 function openDashboard(port, host = "127.0.0.1", operatorToken = null) {
-  const url = buildDashboardUrl(port, host, operatorToken);
+  const privateUrl = buildDashboardUrl(port, host, operatorToken);
+  const publicUrl = buildDashboardUrl(port, host);
 
   if (process.platform === "darwin") {
-    const child = spawn("open", [url], {
+    const child = spawn("open", [privateUrl], {
       detached: true,
       stdio: "ignore"
     });
     child.unref();
-    return url;
+    return publicUrl;
   }
 
-  process.stdout.write(`Open ${url}\n`);
-  return url;
+  process.stdout.write(`Open ${publicUrl}\n`);
+  return publicUrl;
 }
 
 async function launch(options) {
   const alreadyRunning = await healthCheck(options.port, options.host);
   let startedPid = null;
   const lanMode = !["127.0.0.1", "localhost", "::1"].includes(options.host);
-  const tokenRequired = lanMode || envFlagEnabled(process.env.BEAR_EDGE_REQUIRE_OPERATOR_TOKEN);
+  const tokenRequired = true;
   const configuredOperatorToken = String(process.env.BEAR_EDGE_OPERATOR_TOKEN ?? "").trim() || null;
   let operatorToken = configuredOperatorToken;
 
@@ -252,7 +253,11 @@ async function launch(options) {
 
   const url = options.openBrowser
     ? openDashboard(options.port, options.host, operatorToken)
-    : buildDashboardUrl(options.port, options.host, operatorToken);
+    : buildDashboardUrl(
+        options.port,
+        options.host,
+        configuredOperatorToken ? null : operatorToken
+      );
 
   return {
     alreadyRunning,

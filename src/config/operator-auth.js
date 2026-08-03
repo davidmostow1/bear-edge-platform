@@ -31,9 +31,9 @@ function extractBearerToken(authorization) {
 function createOperatorAuth(options = {}) {
   const lanMode = Boolean(options.lanMode);
   const required = options.requireToken === undefined
-    ? lanMode || envFlagEnabled(process.env.BEAR_EDGE_REQUIRE_OPERATOR_TOKEN)
+    ? lanMode
     : Boolean(options.requireToken);
-  const configuredToken = String(options.token ?? process.env.BEAR_EDGE_OPERATOR_TOKEN ?? "").trim();
+  const configuredToken = String(options.token ?? "").trim();
   let launchToken = null;
   let tokenSource = "not_required";
   let tokenDigest = null;

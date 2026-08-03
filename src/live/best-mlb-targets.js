@@ -21,6 +21,7 @@ const { buildPriceDiscipline } = require("./price-discipline.js");
 const { evaluateRecommendationLifecycle } = require("./recommendation-lifecycle.js");
 
 const DEFAULT_MLB_BOOKMAKERS = "draftkings,fanduel,betmgm,caesars,fanatics";
+const DEFAULT_EXECUTION_BOOKMAKER = "draftkings";
 
 const MLB_PROP_MARKETS = Object.freeze({
   strikeOuts: "pitcher_strikeouts",
@@ -708,7 +709,8 @@ async function fetchPricedEventsForCandidates(candidates, options) {
     regions: options.regions,
     oddsFormat: "american",
     fetchJsonImpl: options.fetchJsonImpl,
-    oddsApiKey: options.oddsApiKey
+    oddsApiKey: options.oddsApiKey,
+    forceRefresh: options.forceRefresh === true
   });
 
   const candidateEvents = new Map();
@@ -730,6 +732,7 @@ async function fetchPricedEventsForCandidates(candidates, options) {
 
   const marketKeys = Array.from(new Set(candidates.map(mappedMarketKey).filter(Boolean))).join(",");
   const pricedEvents = new Map();
+  const eventCaches = [];
   const warnings = [...(eventsResult.warnings ?? [])];
   const maxOddsCreditsPerRefresh = Number.isFinite(options.maxOddsCreditsPerRefresh) && options.maxOddsCreditsPerRefresh > 0
     ? Math.min(Math.floor(options.maxOddsCreditsPerRefresh), 100)
@@ -761,7 +764,13 @@ async function fetchPricedEventsForCandidates(candidates, options) {
         regions: options.regions,
         oddsFormat: "american",
         fetchJsonImpl: options.fetchJsonImpl,
-        oddsApiKey: options.oddsApiKey
+        oddsApiKey: options.oddsApiKey,
+        forceRefresh: options.forceRefresh === true
+      });
+
+      eventCaches.push({
+        eventId: event.id,
+        cache: propsResult.cache ?? null
       });
 
       if (propsResult.event) {
@@ -786,6 +795,13 @@ async function fetchPricedEventsForCandidates(candidates, options) {
     pricedEvents,
     candidateEvents,
     warnings,
+    cache: {
+      league: eventsResult.cache ?? null,
+      events: eventCaches,
+      anyHit: Boolean(
+        eventsResult.cache?.hit || eventCaches.some((entry) => entry.cache?.hit)
+      )
+    },
     usageBudget: {
       maxCreditsPerRefresh: maxOddsCreditsPerRefresh,
       reserveCredits,
@@ -884,6 +900,10 @@ function evaluatePricedCandidate(candidate, price, options = {}) {
 
 async function getBestMlbTargets(options = {}) {
   const limit = Number.isInteger(options.limit) && options.limit > 0 ? Math.min(options.limit, 12) : 3;
+  const executionBookmaker = typeof options.requiredBookmaker === "string" &&
+    options.requiredBookmaker.trim()
+    ? options.requiredBookmaker.trim().toLowerCase()
+    : DEFAULT_EXECUTION_BOOKMAKER;
   const maxCandidates = Number.isInteger(options.maxCandidates) && options.maxCandidates > 0
     ? Math.min(options.maxCandidates, 150)
     : 80;
@@ -908,6 +928,7 @@ async function getBestMlbTargets(options = {}) {
       status: "odds_needed",
       fetchedAt: new Date().toISOString(),
       sourceMode: "official_stats_without_verified_odds",
+      executionBookmaker,
       summary: {
         candidates: eligibleCandidates.length,
         pricedCandidates: 0,
@@ -927,6 +948,7 @@ async function getBestMlbTargets(options = {}) {
       status: "odds_refresh_required",
       fetchedAt: new Date().toISOString(),
       sourceMode: "official_stats_awaiting_manual_odds_refresh",
+      executionBookmaker,
       summary: {
         candidates: eligibleCandidates.length,
         pricedCandidates: 0,
@@ -960,6 +982,7 @@ async function getBestMlbTargets(options = {}) {
       status: "odds_error",
       fetchedAt: new Date().toISOString(),
       sourceMode: "official_stats_with_odds_provider_error",
+      executionBookmaker,
       summary: {
         candidates: eligibleCandidates.length,
         pricedCandidates: 0,
@@ -989,7 +1012,7 @@ async function getBestMlbTargets(options = {}) {
           now: options.now,
           maxMarketAgeMinutes:
             options.maxMarketAgeMinutes ?? candidate.ticketDraft?.livePolicy?.maxMarketAgeMinutes,
-          requiredBookmaker: options.requiredBookmaker
+          requiredBookmaker: executionBookmaker
         })
       : null;
 
@@ -1016,6 +1039,7 @@ async function getBestMlbTargets(options = {}) {
     status: priced.length > 0 ? "priced" : "odds_unmatched",
     fetchedAt: new Date().toISOString(),
     sourceMode: "official_stats_plus_verified_odds",
+    executionBookmaker,
     summary: {
       candidates: eligibleCandidates.length,
       pricedCandidates: priced.length,
@@ -1033,7 +1057,8 @@ async function getBestMlbTargets(options = {}) {
       eventsSourceUrl: pricing.eventsResult.sourceUrl,
       eventCount: pricing.eventsResult.eventCount,
       bookmaker: options.bookmakers ?? DEFAULT_MLB_BOOKMAKERS,
-      bookmakers: options.bookmakers ?? DEFAULT_MLB_BOOKMAKERS
+      bookmakers: options.bookmakers ?? DEFAULT_MLB_BOOKMAKERS,
+      cache: pricing.cache
     },
     oddsUsageBudget: pricing.usageBudget,
     quota: quotaSnapshot(oddsApiKey),
@@ -1047,6 +1072,7 @@ async function getBestMlbTargets(options = {}) {
 }
 
 module.exports = {
+  DEFAULT_EXECUTION_BOOKMAKER,
   DEFAULT_MLB_BOOKMAKERS,
   evaluatePrice,
   getBestMlbTargets,

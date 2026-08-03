@@ -1,6 +1,6 @@
 // @ts-nocheck
 
-const CACHE_NAME = "bear-edge-dashboard-v7";
+const CACHE_NAME = "bear-edge-dashboard-v9";
 const SHELL_ASSETS = [
   "/dashboard",
   "/dashboard/",

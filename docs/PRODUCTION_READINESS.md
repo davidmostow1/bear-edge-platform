@@ -21,6 +21,8 @@ Bear Edge is designed as a local betting research and decision engine. The app s
 - Research-only Poisson count estimates are never production `BET` probabilities; a calibrated model probability or a resolved live outcome gate is required.
 - Decision-log quality blocks blind trust in hit rate and ROI when bets are not settled.
 - A persisted `BET` requires both `VERIFIED_BETS_ALLOWED` and an exact `validated` model-registry entry with immutable calibration-report evidence.
+- Financial settlement remains restricted to canonical `BET` evaluations; shadow and research evaluations use separate non-financial `prediction_outcome` and `closing_price` records.
+- A shadow observation is calibration-eligible only after an official final outcome and exact-book final two-sided close are both present with valid provenance and linear correction history.
 - Every non-read HTTP request requires a process-scoped bearer token in LAN mode; missing, malformed, or invalid authorization returns HTTP `401`.
 - The optional Supabase projection is secondary to the append-only local ledger; remote failure cannot erase or rewrite local evidence.
 - Statsig is limited to presentation and shadow-assignment controls and fails closed to control. It has no verdict, probability, stake, or authorization authority.
@@ -82,9 +84,9 @@ A top-level `shippable-with-warnings` result means the local software checks pas
 
 ## Local And LAN Security Boundary
 
-The supported local launch is `npm run launch`, which binds to `127.0.0.1` and keeps writes locally open unless `BEAR_EDGE_REQUIRE_OPERATOR_TOKEN=1` is explicitly set.
+The supported local launch is `npm run launch`, which binds to `127.0.0.1` and requires a one-time operator token for every protected API read and write.
 
-The supported private-network launch is `npm run launch:lan -- --no-open`. It generates a random 32-byte operator token unless a valid `BEAR_EDGE_OPERATOR_TOKEN` was supplied, passes only its SHA-256 digest into the request verifier, and prints a one-time bootstrap URL with the raw token in the URL fragment. The dashboard stores that token in session storage and removes the fragment immediately. Read-only routes remain public to the trusted LAN; all write routes require `Authorization: Bearer <token>`.
+The supported private-network phone launch is `Open Bear Edge On Phone.command`. It suppresses any configured long-lived operator credential, generates a process-scoped random 32-byte bootstrap token, passes only its SHA-256 digest into the request verifier, and prints the bootstrap URL with that generated token in the URL fragment. A configured credential used by the desktop launcher is opened directly in the browser process and never returned through normal launcher output; `--no-open` prints only the unauthenticated base URL. The dashboard stores the active token in session storage and removes the fragment immediately. Read-only routes remain public to the trusted LAN; all write routes require `Authorization: Bearer <token>`.
 
 The safe status route `/api/operator-auth` never returns the token. Losing the generated token requires restarting the LAN process. Plain HTTP on a private LAN is not a public or commercial deployment and must never be port-forwarded.
 
@@ -132,9 +134,9 @@ Bear Edge is not production-complete until these are improved:
 - Verified tennis schedule, roster, and stat provider before automated tennis candidates.
 - More robust injury and lineup feeds.
 - Historical backtesting dataset large enough to measure edge by market type.
-- Routine settlement with final two-sided closing-line evidence and retained source digests.
+- Routine wager settlement plus separate shadow outcome and exact-book closing-price capture with retained source digests.
 - Sufficient chronological out-of-sample evidence to validate exact model, version, and market-family registry entries.
-- Optional remote audit projection configured and reconciled if centralized retention is required.
+- Optional remote audit projection configured and reconciled if centralized retention is required; migration `20260718010000_shadow_evidence_v21.sql` is version-controlled but must be deployed and post-deployment-audited before new evidence records can synchronize.
 - Security review before any public exposure; authenticated private-LAN HTTP is not public deployment.
 
 Screenshots, screen recordings, optical-character-recognition text, ESPN pages, and manually confirmed captures are useful operator evidence but are not equivalent to licensed, timestamped sportsbook or lineup providers. Research estimates and ranked candidates are not “best bets.” External providers can be stale, blocked, quota-exhausted, rate-limited, or wrong. No test suite, short winning streak, backtest, model, or product-readiness score guarantees future profitability.

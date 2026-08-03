@@ -121,7 +121,7 @@ test("mapDecisionRecord preserves canonical identity and complete snapshots", ()
   assert.equal(row.client_event_id, evaluation.clientEventId);
   assert.equal(row.verdict, "WAIT");
   assert.equal(row.source, "live_ui");
-  assert.equal(row.schema_version, "2.0.0");
+  assert.equal(row.schema_version, "2.1.0");
   assert.equal(row.content_digest, evaluation.contentDigest);
   assert.equal(row.authority, "local");
   assert.equal(row.canonical_event_id, "401816143");
