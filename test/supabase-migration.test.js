@@ -20,6 +20,10 @@ const shadowEvidenceMigrationPath = path.resolve(
   __dirname,
   "../supabase/migrations/20260718010000_shadow_evidence_v21.sql"
 );
+const leanVerdictMigrationPath = path.resolve(
+  __dirname,
+  "../supabase/migrations/20260801173038_allow_lean_decision_verdict.sql"
+);
 
 const versionControlledMigrationFiles = [
   "20260711021059_auth_user_state.sql",
@@ -37,7 +41,8 @@ const versionControlledMigrationFiles = [
   "20260717075523_align_audit_records_20260717.sql",
   "20260717075721_allow_service_projection_20260717.sql",
   "20260717080017_remove_duplicate_client_event_index_20260717.sql",
-  "20260718010000_shadow_evidence_v21.sql"
+  "20260718010000_shadow_evidence_v21.sql",
+  "20260801173038_allow_lean_decision_verdict.sql"
 ];
 
 function migrationSql() {
@@ -56,12 +61,25 @@ function shadowEvidenceMigrationSql() {
   return fs.readFileSync(shadowEvidenceMigrationPath, "utf8");
 }
 
+function leanVerdictMigrationSql() {
+  return fs.readFileSync(leanVerdictMigrationPath, "utf8");
+}
+
 test("repository contains the complete version-controlled migration ledger", () => {
   const migrationFiles = fs.readdirSync(migrationDir)
     .filter((file) => file.endsWith(".sql"))
     .sort();
 
   assert.deepEqual(migrationFiles, versionControlledMigrationFiles);
+});
+
+test("lean verdict migration preserves the canonical verdict constraint", () => {
+  const sql = leanVerdictMigrationSql();
+
+  assert.match(sql, /drop constraint if exists decision_records_verdict_check/i);
+  assert.match(sql, /add constraint decision_records_verdict_check/i);
+  assert.match(sql, /array\['BET'::text, 'LEAN'::text, 'WAIT'::text, 'PASS'::text\]/i);
+  assert.doesNotMatch(sql, /'NO BET'/i);
 });
 
 test("migration stops unless all projection tables are empty", () => {
