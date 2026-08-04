@@ -882,7 +882,12 @@ test("HTTP API exposes local system audit without leaking key values", async () 
   });
 });
 
-test("HTTP API exposes release readiness checks", async () => {
+test("HTTP API exposes release readiness checks", async (t) => {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "bear-edge-release-readiness-"));
+  const logPath = path.join(tempDir, "decision_log.jsonl");
+  fs.writeFileSync(logPath, "", "utf8");
+  t.after(() => fs.rmSync(tempDir, { recursive: true, force: true }));
+
   await withServer(async (baseUrl) => {
     const response = await fetch(`${baseUrl}/api/release-readiness`);
     const payload = await response.json();
@@ -933,18 +938,18 @@ test("HTTP API exposes release readiness checks", async () => {
     assert.equal(payload.runtimeControls.statsig.failClosed, true);
     assert.equal(payload.operationalEvidence.localLedger.integrityStatus, "valid");
     assert.equal(payload.operationalEvidence.localLedger.integrityIssues, 0);
-    assert.equal(payload.operationalEvidence.localLedger.legacyRecords > 0, true);
-    assert.equal(payload.operationalEvidence.localLedger.legacyIsolationStatus, "quarantined");
-    assert.ok(payload.checks.some((entry) => (
+    assert.equal(payload.operationalEvidence.localLedger.legacyRecords, 0);
+    assert.equal(payload.operationalEvidence.localLedger.legacyIsolationStatus, "not_required");
+    assert.equal(payload.checks.some((entry) => (
       entry.area === "analytics"
       && entry.status === "warn"
       && entry.message === "Pre-schema ledger rows are quarantined from authoritative integrity"
-    )));
+    )), false);
     assert.equal(payload.operationalEvidence.outbox.integrityIssues, 0);
     assert.equal(payload.operationalEvidence.modelRegistry.registryValid, true);
     assert.deepEqual(payload.trackedFiles.blockedMatches, []);
     assert.equal(JSON.stringify(payload).includes(process.env.THE_ODDS_API_KEY ?? "unlikely-secret-marker"), false);
-  });
+  }, { logPath });
 });
 
 test("release readiness blocks an unsafe LAN runtime without required operator authentication", async () => {
@@ -1016,9 +1021,13 @@ test("release readiness blocks on terminal synchronization failures", async () =
   }, { syncWorker });
 });
 
-test("release readiness is zero-credit and reports configured odds as price-check-only", async () => {
+test("release readiness is zero-credit and reports configured odds as price-check-only", async (t) => {
   const previousOddsApiKey = process.env.THE_ODDS_API_KEY;
   const oddsUrls = [];
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "bear-edge-release-readiness-odds-"));
+  const logPath = path.join(tempDir, "decision_log.jsonl");
+  fs.writeFileSync(logPath, "", "utf8");
+  t.after(() => fs.rmSync(tempDir, { recursive: true, force: true }));
 
   process.env.THE_ODDS_API_KEY = "test-odds-key";
 
@@ -1034,8 +1043,8 @@ test("release readiness is zero-credit and reports configured odds as price-chec
         assert.equal(payload.dataEdge.bestTargets.status, "odds_refresh_required");
         assert.equal(payload.dataEdge.betCallPermission, "PRICE_CHECK_ONLY");
         assert.equal(dataEdge.status, "needs-work");
-        assert.equal(payload.operationalEvidence.localLedger.legacyRecords > 0, true);
-        assert.equal(payload.operationalEvidence.localLedger.legacyIsolationStatus, "quarantined");
+        assert.equal(payload.operationalEvidence.localLedger.legacyRecords, 0);
+        assert.equal(payload.operationalEvidence.localLedger.legacyIsolationStatus, "not_required");
         assert.ok(payload.checks.some((entry) =>
           entry.area === "providers" &&
           entry.status === "warn" &&
@@ -1052,7 +1061,8 @@ test("release readiness is zero-credit and reports configured odds as price-chec
 
           return fetchJson(url);
         },
-        fetchTextImpl: fetchText
+        fetchTextImpl: fetchText,
+        logPath
       }
     );
   } finally {
