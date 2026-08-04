@@ -1,0 +1,40 @@
+name: Epic 18 Clean-Room Export
+
+on:
+  push:
+    branches:
+      - "codex/epic-18-task-0-1"
+
+permissions:
+  contents: read
+
+jobs:
+  export:
+    name: Export verified source snapshot
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          clean: true
+
+      - name: Record source identity
+        run: |
+          git remote -v > epic18-source-identity.txt
+          git status --short --branch >> epic18-source-identity.txt
+          git rev-parse HEAD >> epic18-source-identity.txt
+          git rev-parse HEAD^{tree} >> epic18-source-identity.txt
+
+      - name: Export source archive
+        run: git archive --format=zip --output=epic18-source.zip HEAD
+
+      - name: Upload source snapshot
+        uses: actions/upload-artifact@v4
+        with:
+          name: epic18-source-${{ github.sha }}
+          path: |
+            epic18-source.zip
+            epic18-source-identity.txt
+          if-no-files-found: error
+          retention-days: 1
