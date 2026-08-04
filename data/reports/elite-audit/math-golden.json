@@ -1,0 +1,37 @@
+{
+  "schemaVersion": "1.0.0",
+  "verifiedAt": "2026-07-17T08:23:15Z",
+  "verifier": "Wolfram Language evaluator",
+  "purpose": "Independent golden verification for src/calibration/metrics.js",
+  "query": "p = {9/10, 4/5, 2/5, 1/5}; y = {1, 1, 0, 1}; brier = Mean[(p - y)^2]; loss = -Mean[y Log[p] + (1 - y) Log[1 - p]]; calibrationData = Join[Table[{Log[(1/5)/(4/5)], outcome}, {outcome, {1, 0, 0, 0, 0}}], Table[{Log[(4/5)/(1/5)], outcome}, {outcome, {1, 1, 1, 1, 0}}]]; fit = LogitModelFit[calibrationData, x, x]; <|\"BrierExact\" -> brier, \"Brier50Digits\" -> N[brier, 50], \"LogLossExact\" -> loss, \"LogLoss50Digits\" -> N[loss, 50], \"CalibrationParameters\" -> fit[\"BestFitParameters\"], \"CalibrationParameters30Digits\" -> N[fit[\"BestFitParameters\"], 30]|>",
+  "output": {
+    "brierExact": "17/80",
+    "brier50Digits": "0.2125",
+    "logLossExact": "(Log[10/9] + Log[5/4] + Log[5/3] + Log[5])/4",
+    "logLoss50Digits": "0.61219190079303177870001737516974921902110840231139",
+    "calibrationParameters": {
+      "intercept": "-5.858358101049392e-16",
+      "slope": "0.9999999999987508"
+    }
+  },
+  "fixtures": {
+    "metricRows": [
+      { "probability": 0.9, "outcome": 1 },
+      { "probability": 0.8, "outcome": 1 },
+      { "probability": 0.4, "outcome": 0 },
+      { "probability": 0.2, "outcome": 1 }
+    ],
+    "calibrationRows": [
+      { "probability": 0.2, "outcome": 1 },
+      { "probability": 0.2, "outcome": 0 },
+      { "probability": 0.2, "outcome": 0 },
+      { "probability": 0.2, "outcome": 0 },
+      { "probability": 0.2, "outcome": 0 },
+      { "probability": 0.8, "outcome": 1 },
+      { "probability": 0.8, "outcome": 1 },
+      { "probability": 0.8, "outcome": 1 },
+      { "probability": 0.8, "outcome": 1 },
+      { "probability": 0.8, "outcome": 0 }
+    ]
+  }
+}

@@ -1,0 +1,68 @@
+{
+  "schemaVersion": "1.1",
+  "phase": "BEGIN",
+  "runId": "prompt-mastery-20260801T094029465014Z-f65ab37117ba4a9aa2cf5cfda235f4e9",
+  "impactId": "b48b0ad9b1d54f57b378e5b12321a9ec",
+  "createdAt": "2026-08-01T09:40:29.465014Z",
+  "plugin": {
+    "name": "prompt-mastery",
+    "version": "0.1.0+codex.20260730065217"
+  },
+  "skills": [
+    "pilot-prompt-mastery"
+  ],
+  "repository": {
+    "path": "/Users/davidbearmostow/Documents/Codex/2026-06-17-documents-openai-developers-google-drive-google",
+    "branch": "codex/bear-edge-release-candidate",
+    "commit": "2ca03a24fc1af20a3c03086757cd1dfb85c43d1e"
+  },
+  "request": {
+    "sha256": "e466320de89aa0b0e622bd081ad660fb1c763337efc06d03d0448435e5501d8e"
+  },
+  "action": "Implement the bounded pitcher-strikeout complete-data research milestone with fail-closed provider and dashboard evidence.",
+  "evidenceArtifacts": [
+    {
+      "path": "docs/CODEX_PICKUP_BEAR_EDGE_2026-07-30.md",
+      "sha256": "d1b51b053c2b1552f6a43113381d0155e4121ed3f3317fa03d824ed76785ff56"
+    },
+    {
+      "path": "models/registry.json",
+      "sha256": "144121210f18200991a740bc5c9f42d759718d920086f9bb79d667b1249b901f"
+    },
+    {
+      "path": "package.json",
+      "sha256": "53ca1cb2cb090b69e173fd577ed3b9d624a5521403c2779f28ecc9985027c21d"
+    }
+  ],
+  "impactGate": {
+    "triggerReasons": [
+      "bear-project",
+      "broad",
+      "consequential"
+    ],
+    "mutationExpected": true,
+    "beginning": {
+      "helpingBear": {
+        "status": "EXPECTED",
+        "basis": "Expected to make missing prediction evidence visible without creating betting authority."
+      },
+      "helpingSystem": {
+        "status": "EXPECTED",
+        "basis": "Expected to add attributed source contracts, leakage guards, and fail-closed behavior."
+      },
+      "helpingProject": {
+        "status": "EXPECTED",
+        "basis": "Expected to deliver the user-approved first pitcher-strikeout milestone in the canonical checkout."
+      },
+      "decision": "PROCEED",
+      "noDegradationPlan": [
+        "Run focused tests after each feature group, then full verify, boundary audit, doctor, and dashboard read-back; stop on overlap, regression, or balance at 90 percent."
+      ]
+    }
+  },
+  "boundaries": {
+    "predictiveImprovement": "NOT_EVALUATED",
+    "wageringAuthority": "UNCHANGED",
+    "modelValidation": "NOT_ESTABLISHED"
+  }
+}

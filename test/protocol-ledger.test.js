@@ -9,13 +9,17 @@ const {
   summarizeRoiByMarketType
 } = require("../src/audit/protocol-ledger.js");
 
-test("protocol ledger normalizes settled thread examples and flags missing evidence", () => {
+test("protocol ledger normalizes settled account evidence and flags missing evidence", () => {
   const ledger = buildLedger();
   const torkelson = ledger.find((entry) => entry.id === "thread-006");
   const dinglerSafe = ledger.find((entry) => entry.id === "thread-008");
   const marlins = ledger.find((entry) => entry.id === "thread-001");
+  const july21 = ledger.filter((entry) => (
+    entry.date === "2026-07-21"
+    && entry.source_type === "authenticated_draftkings_predictions_settlement"
+  ));
 
-  assert.equal(ledger.length, 19);
+  assert.equal(ledger.length, 27);
   assert.equal(torkelson.net_profit, -9.28);
   assert.ok(torkelson.mistake_tags.includes("oversized_stake"));
   assert.ok(torkelson.mistake_tags.includes("bad_ladder"));
@@ -23,6 +27,15 @@ test("protocol ledger normalizes settled thread examples and flags missing evide
   assert.ok(dinglerSafe.implied_probability > 0.49 && dinglerSafe.implied_probability < 0.50);
   assert.equal(marlins.net_profit, null);
   assert.ok(marlins.audit.missingEvidence.includes("stake"));
+  assert.equal(july21.length, 8);
+  assert.equal(july21.filter((entry) => entry.status === "won").length, 3);
+  assert.equal(july21.filter((entry) => entry.status === "lost").length, 5);
+  assert.equal(july21.reduce((total, entry) => total + entry.stake, 0).toFixed(2), "49.14");
+  assert.equal(july21.reduce((total, entry) => total + entry.net_profit, 0).toFixed(2), "12.76");
+  assert.match(
+    july21.find((entry) => entry.id === "dkp-2026-07-21-002").notes,
+    /closed early/i
+  );
 });
 
 test("protocol audit summarizes ROI, process grades, leaks, and repeatable edges", () => {
@@ -32,11 +45,11 @@ test("protocol audit summarizes ROI, process grades, leaks, and repeatable edges
   const badLadder = report.leakReport.find((entry) => entry.leak === "bad_ladder");
   const repeatableTotalBases = report.repeatableEdges.find((entry) => entry.market_type === "MLB_total_bases");
 
-  assert.equal(report.summary.ledgerRows, 19);
+  assert.equal(report.summary.ledgerRows, 27);
   assert.equal(report.summary.rowsMissingStake, 12);
-  assert.equal(report.summary.rowsWithCalculatedNet, 7);
-  assert.equal(report.summary.knownStake.toFixed(2), "39.67");
-  assert.equal(report.summary.knownNetProfit.toFixed(2), "-30.67");
+  assert.equal(report.summary.rowsWithCalculatedNet, 15);
+  assert.equal(report.summary.knownStake.toFixed(2), "88.81");
+  assert.equal(report.summary.knownNetProfit.toFixed(2), "-17.91");
   assert.equal(soccerTotal.calculable_bets, 2);
   assert.equal(soccerTotal.net_profit.toFixed(2), "-17.15");
   assert.ok(soccerTotal.roi < -0.99);

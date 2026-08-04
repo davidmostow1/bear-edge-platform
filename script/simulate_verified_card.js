@@ -2,11 +2,12 @@
 
 const fs = require("node:fs/promises");
 const path = require("node:path");
+const { createHash } = require("node:crypto");
 const { simulateBetCard } = require("../src/live/probability-causality.js");
 
-const DEFAULT_INPUT =
-  "/Users/davidbearmostow/Documents/BearEdgeBettingSystem/artifacts/dk_predictions_visible_board_2026-06-27_1250.json";
-const DEFAULT_OUTPUT_DIR = "/Users/davidbearmostow/Documents/BearEdgeBettingSystem/artifacts";
+const PROJECT_ROOT = path.resolve(__dirname, "..");
+const DEFAULT_INPUT = path.join(PROJECT_ROOT, "examples", "historical-verified-card.json");
+const DEFAULT_OUTPUT_DIR = path.resolve(process.cwd(), "data", "reports");
 const DEFAULT_ITERATIONS = 100;
 const DEFAULT_SEED = "bear-edge-2026-06-27-verified-card";
 
@@ -52,6 +53,28 @@ function percent(value, digits = 2) {
 
 function money(value) {
   return Number.isFinite(value) ? `$${value.toFixed(2)}` : "";
+}
+
+function sha256(value) {
+  return `sha256:${createHash("sha256").update(value).digest("hex")}`;
+}
+
+function buildRunManifest(report, inputText, seed, iterations, startedAt, scenario = "fair") {
+  const scenarioSeed = scenario === "fair" ? String(seed) : `${seed}:${scenario}`;
+
+  return {
+    runId: `BE-RESEARCH-${report.slateDate ?? "unknown"}-${iterations}-${scenario}`,
+    executionVenue: "research_fixture",
+    codeVersion: "probability-causality/v2",
+    inputSnapshotDigest: sha256(inputText),
+    startedAt,
+    seed: scenarioSeed,
+    model: {
+      id: "operator_probability_input",
+      version: "1.0.0",
+      calibrationStatus: "research_only"
+    }
+  };
 }
 
 function csvEscape(value) {
@@ -165,16 +188,27 @@ function buildMarkdown(report, simulation, stressResults, trialRows) {
     "Ending Bankroll": money(Number(row.endingBankroll))
   }));
 
-  return `# Bear Edge 100-Trial Simulation And Probability Infrastructure Upgrade
+  return `# Bear Edge Research Simulation
+
+## Evidence Boundary
+
+- Audit status: \`${simulation.evidenceClassification.auditStatus}\`.
+- Permission: \`${simulation.evidenceClassification.betCallPermission}\`.
+- Authorized stake: ${money(simulation.evidenceClassification.authorizedStake)}.
+- Venue: \`${simulation.evidenceClassification.executionVenue}\`.
+- Run ID: \`${simulation.runManifest?.runId ?? "missing"}\`.
+- Input digest: \`${simulation.runManifest?.inputSnapshotDigest ?? "missing"}\`.
+
+This artifact is reproducible research, not an executable bet. It does not model DraftKings Predictions contract pricing, commissions, exchange fees, liquidity, or settlement terms.
 
 ## Context
 
-This simulation uses only the two screenshot-verified choices from the DK Predictions visible-board audit:
+This simulation uses two historical screenshot-audit inputs from the source report:
 
 - AZ moneyline at +127.
 - CHC moneyline at +150.
 
-The visible bankroll from the screenshot batch is $${Number(report.visibleBankroll).toFixed(2)}. The screenshot batch was captured on ${report.evidenceClassification?.date} between ${report.evidenceClassification?.timeWindow}. The simulation uses a deterministic seed: \`${simulation.seed}\`.
+The reported bankroll in the historical fixture is $${Number(report.visibleBankroll).toFixed(2)}. The source was captured on ${report.evidenceClassification?.date} between ${report.evidenceClassification?.timeWindow}. These inputs are research evidence, not current prices or betting authorization. The simulation uses a deterministic seed: \`${simulation.seed}\`.
 
 This is a predictive risk simulation, not a causal claim. It does not prove that any feature caused either team to win. It tests what a 100-slate replay would look like if the stated ex-ante probabilities were true.
 
@@ -272,12 +306,14 @@ async function main() {
   const inputText = await fs.readFile(args.input, "utf8");
   const report = JSON.parse(inputText);
   const bets = buildBets(report);
+  const startedAt = new Date().toISOString();
   const baseline = simulateBetCard({
     bets,
     iterations: args.iterations,
     seed: args.seed,
     scenario: "fair",
-    startingBankroll: report.visibleBankroll
+    startingBankroll: report.visibleBankroll,
+    runManifest: buildRunManifest(report, inputText, args.seed, args.iterations, startedAt)
   });
   const stressResults = [
     baseline,
@@ -287,7 +323,15 @@ async function main() {
         iterations: args.iterations,
         seed: `${args.seed}:${scenario}`,
         scenario,
-        startingBankroll: report.visibleBankroll
+        startingBankroll: report.visibleBankroll,
+        runManifest: buildRunManifest(
+          report,
+          inputText,
+          args.seed,
+          args.iterations,
+          startedAt,
+          scenario
+        )
       })
     )
   ];

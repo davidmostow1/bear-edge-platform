@@ -1,0 +1,69 @@
+{
+  "schemaVersion": "1.1",
+  "phase": "BEGIN",
+  "runId": "prompt-mastery-20260803T213315298040Z-0203c19e82a34b1ea39dd98d9aaac0c8",
+  "impactId": "89178761da284cfba54f58cbb0137eb8",
+  "createdAt": "2026-08-03T21:33:15.298040Z",
+  "plugin": {
+    "name": "prompt-mastery",
+    "version": "0.1.0+codex.20260730065217"
+  },
+  "skills": [
+    "pilot-prompt-mastery"
+  ],
+  "repository": {
+    "path": "/Users/davidbearmostow/Documents/Codex/2026-06-17-documents-openai-developers-google-drive-google",
+    "branch": "codex/pitcher-strikeout-complete-data-research",
+    "commit": "083d933cfebade6fac1304a880da9483a838bf4f"
+  },
+  "request": {
+    "sha256": "e6fe1569d8d7cc06a48444b87ac2186e61f16205f2d20af224d66b4b0848890f"
+  },
+  "action": "Preserve the dirty checkout, create scoped commits on the existing research branch, verify, push, and open a draft pull request without merge or wagering changes.",
+  "evidenceArtifacts": [
+    {
+      "path": "AGENTS.md",
+      "sha256": "a2570baa8410ccc3495d688d929f6aa471117969f0631732a5d35a5bf2473538"
+    },
+    {
+      "path": "package.json",
+      "sha256": "53ca1cb2cb090b69e173fd577ed3b9d624a5521403c2779f28ecc9985027c21d"
+    },
+    {
+      "path": "models/registry.json",
+      "sha256": "8b035b256d40b3f68c7728152b7ab961d29ad3d59e62412df01db72809a5af51"
+    }
+  ],
+  "impactGate": {
+    "triggerReasons": [
+      "bear-project",
+      "consequential"
+    ],
+    "mutationExpected": true,
+    "beginning": {
+      "helpingBear": {
+        "status": "EXPECTED",
+        "basis": "Preserves the user-owned research implementation and keeps wagering authority at zero."
+      },
+      "helpingSystem": {
+        "status": "EXPECTED",
+        "basis": "Creates a reproducible savepoint and subjects the committed state to repository verification and CI."
+      },
+      "helpingProject": {
+        "status": "EXPECTED",
+        "basis": "Moves the existing remote branch toward a reviewable draft pull request without merging."
+      },
+      "decision": "PROCEED",
+      "noDegradationPlan": [
+        "Preserve all tracked modifications and untracked non-ignored files in a SHA-256 savepoint before Git changes.",
+        "Run git diff checks, npm ci, npm run verify, and Bear Edge Operator doctor on the final committed state.",
+        "Keep every model research_only, authorized stake at 0, Statsig gates disabled, and bet execution disabled."
+      ]
+    }
+  },
+  "boundaries": {
+    "predictiveImprovement": "NOT_EVALUATED",
+    "wageringAuthority": "UNCHANGED",
+    "modelValidation": "NOT_ESTABLISHED"
+  }
+}

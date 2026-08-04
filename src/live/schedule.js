@@ -1,4 +1,5 @@
 const { fetchJson } = require("./fetch-json.js");
+const { resolveDateWindow } = require("./date-window.js");
 
 const SUPPORTED_SPORTS = Object.freeze(["mlb", "nhl", "worldcup", "tennis"]);
 
@@ -8,35 +9,6 @@ function pad2(value) {
 
 function formatDate(date) {
   return `${date.getFullYear()}-${pad2(date.getMonth() + 1)}-${pad2(date.getDate())}`;
-}
-
-function parseDate(value) {
-  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
-
-  if (!match) {
-    throw new Error("Date must use YYYY-MM-DD format.");
-  }
-
-  const [, year, month, day] = match;
-  return new Date(Number(year), Number(month) - 1, Number(day));
-}
-
-function addDays(date, days) {
-  const nextDate = new Date(date);
-  nextDate.setDate(nextDate.getDate() + days);
-  return nextDate;
-}
-
-function resolveStartDate(value) {
-  if (!value || value === "today") {
-    return new Date();
-  }
-
-  if (value === "tomorrow") {
-    return addDays(new Date(), 1);
-  }
-
-  return parseDate(value);
 }
 
 function normalizeMlbTeam(rawTeam) {
@@ -184,11 +156,15 @@ async function fetchTennisGamesForDate(date, options = {}) {
 }
 
 async function fetchGamesForWindow(options = {}) {
-  const startDate = resolveStartDate(options.date);
   const days = Number.isInteger(options.days) && options.days > 0 ? Math.min(options.days, 7) : 2;
   const sports = Array.isArray(options.sports) && options.sports.length > 0 ? options.sports : SUPPORTED_SPORTS;
   const fetchedAt = new Date().toISOString();
-  const dates = Array.from({ length: days }, (_, index) => formatDate(addDays(startDate, index)));
+  const dates = resolveDateWindow({
+    date: options.date,
+    days,
+    now: options.now,
+    timeZone: options.timeZone
+  });
   const sources = [];
   const games = [];
 

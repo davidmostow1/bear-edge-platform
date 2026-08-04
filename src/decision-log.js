@@ -1,5 +1,8 @@
-const fs = require("node:fs/promises");
 const path = require("node:path");
+
+const {
+  appendAuthoritativeRecord
+} = require("./audit/authoritative-ledger.js");
 
 const DEFAULT_DECISION_LOG_PATH = path.resolve(process.cwd(), "data/logs/decision_log.jsonl");
 
@@ -17,11 +20,12 @@ function resolveDecisionLogPath(logPath) {
 
 async function appendDecisionLog(decisionLog, options = {}) {
   const resolvedPath = resolveDecisionLogPath(options.logPath);
+  const result = await appendAuthoritativeRecord(decisionLog, {
+    ledgerPath: resolvedPath,
+    fsImpl: options.fsImpl
+  });
 
-  await fs.mkdir(path.dirname(resolvedPath), { recursive: true });
-  await fs.appendFile(resolvedPath, `${JSON.stringify(decisionLog)}\n`, "utf8");
-
-  return resolvedPath;
+  return result.ledgerPath;
 }
 
 module.exports = {

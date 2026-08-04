@@ -1,4 +1,5 @@
 .codex/
+.superpowers/
 .tools/
 node_modules/
 npm-debug.log*
@@ -10,4 +11,8 @@ data/logs/*.jsonl
 data/logs/*.json
 data/logs/*.log
 data/cache/
+data/reports/
+data/evidence/direct-screen-captures/
+data/evidence/direct_screen_captures.jsonl
+data/evidence/draftkings_predictions_settled_*.json
 dist/

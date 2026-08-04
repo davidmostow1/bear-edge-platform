@@ -1,0 +1,68 @@
+{
+  "schemaVersion": "1.1",
+  "phase": "BEGIN",
+  "runId": "prompt-mastery-20260730T095049369703Z-d75a7546e3e045599bbbd7757baf374a",
+  "impactId": "e3b57cb057e840f9bb02db0e0a6f405d",
+  "createdAt": "2026-07-30T09:50:49.369703Z",
+  "plugin": {
+    "name": "prompt-mastery",
+    "version": "0.1.0+codex.20260730065217"
+  },
+  "skills": [
+    "pilot-prompt-mastery"
+  ],
+  "repository": {
+    "path": "/Users/davidbearmostow/Documents/Codex/2026-06-17-documents-openai-developers-google-drive-google",
+    "branch": "codex/bear-edge-release-candidate",
+    "commit": "2ca03a24fc1af20a3c03086757cd1dfb85c43d1e"
+  },
+  "request": {
+    "sha256": "3ccc64eba8f6a63686a0ec92ca7d0a2ea2688bfb2b154f05f956f9327da5b1f0"
+  },
+  "action": "Create a bounded repair specification, verification ledger, milestone checklist, and Codex pickup package while preserving product and wagering boundaries.",
+  "evidenceArtifacts": [
+    {
+      "path": "AGENTS.md",
+      "sha256": "a2570baa8410ccc3495d688d929f6aa471117969f0631732a5d35a5bf2473538"
+    },
+    {
+      "path": "models/registry.json",
+      "sha256": "144121210f18200991a740bc5c9f42d759718d920086f9bb79d667b1249b901f"
+    },
+    {
+      "path": "package.json",
+      "sha256": "80236814c7c90ed28fa41bbce7a791800da0f42868d29f1088e32cfb32afb74f"
+    }
+  ],
+  "impactGate": {
+    "triggerReasons": [
+      "bear-project",
+      "broad",
+      "consequential"
+    ],
+    "mutationExpected": true,
+    "beginning": {
+      "helpingBear": {
+        "status": "EXPECTED",
+        "basis": "Preserves authorization and bankroll boundaries requested by the user."
+      },
+      "helpingSystem": {
+        "status": "EXPECTED",
+        "basis": "Adds auditable separation and stop conditions around existing research-only code."
+      },
+      "helpingProject": {
+        "status": "EXPECTED",
+        "basis": "Delivers the requested canonical repair artifacts and verified local milestone."
+      },
+      "decision": "PROCEED",
+      "noDegradationPlan": [
+        "Run targeted model, ledger, product-separation, and market-economics tests before the full native verification; run the Bear Edge doctor and git diff check; do not change model status or wagering authority."
+      ]
+    }
+  },
+  "boundaries": {
+    "predictiveImprovement": "NOT_EVALUATED",
+    "wageringAuthority": "UNCHANGED",
+    "modelValidation": "NOT_ESTABLISHED"
+  }
+}
