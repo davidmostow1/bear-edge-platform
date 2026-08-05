@@ -5,6 +5,7 @@ on:
     branches:
       - master
       - "codex/**"
+      - "reconcile/**"
   pull_request:
 
 permissions:
