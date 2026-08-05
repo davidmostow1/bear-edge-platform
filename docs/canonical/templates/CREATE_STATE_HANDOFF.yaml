@@ -1,0 +1,118 @@
+schema_version: 1
+
+project:
+  name: Bear Edge
+  repository: UNKNOWN
+  local_path: UNKNOWN
+  remote: UNKNOWN
+  world_model_id: UNKNOWN
+
+repository_state:
+  branch: UNKNOWN
+  commit: UNKNOWN
+  base_branch: UNKNOWN
+  base_commit: UNKNOWN
+  working_tree: UNKNOWN
+  pull_request_number: UNKNOWN
+  pull_request_state: UNKNOWN
+  divergence: UNKNOWN
+
+current_stage:
+  plan_stage: UNKNOWN
+  vertical_slice: UNKNOWN
+  status: UNKNOWN
+  governing_plan: UNKNOWN
+
+verification:
+  command: npm run verify
+  result: NOT_RUN
+  evidence_timestamp_utc: UNKNOWN
+  test_count: UNKNOWN
+  environment: UNKNOWN
+  failing_checks: []
+
+runtime:
+  server_status: UNKNOWN
+  provider_status: UNKNOWN
+  device_installation_status: UNKNOWN
+
+models:
+  registered_models: []
+  active_model: UNKNOWN
+  active_model_status: UNKNOWN
+  validated_model_count: UNKNOWN
+
+journals:
+  supabase_configuration_status: UNKNOWN
+  supabase_remote_projection_status: UNKNOWN
+  local_jsonl_status: UNKNOWN
+  pending_replay_status: UNKNOWN
+
+controls:
+  statsig_status: UNKNOWN
+  feature_gates: []
+
+source_freshness:
+  odds: UNKNOWN
+  lineups: UNKNOWN
+  injuries: UNKNOWN
+  results: UNKNOWN
+
+argument_authority_note: "Restored context is a claim bundle until verified against the authorities below."
+
+authority:
+  code: GitHub
+  event_journal: Supabase
+  offline_journal: Local JSONL
+  policy: repository canonical documentation
+  session_memory: Create State
+  historical_context: conversation transcripts
+
+authorization:
+  mode: RESEARCH_ONLY
+  authorized_stake_usd: 0
+  execution_enabled: false
+  execution_surface: NONE
+
+verified_facts: []
+
+reasonable_inferences: []
+
+open_questions: []
+
+completed_work: []
+
+blockers: []
+
+next_safe_action:
+  action: UNKNOWN
+  evidence_needed: UNKNOWN
+  prohibited_until_resolved: []
+
+prohibited_actions:
+  - place or cancel wagers
+  - authorize a nonzero stake
+  - enable wager execution
+  - invent odds, lines, lineups, injuries, results, or settlements
+  - promote or validate a model without immutable evidence
+  - merge, rebase, or switch branches silently
+  - mutate Supabase or Statsig without explicit authority
+  - combine conflicting handoffs or world models
+  - claim physical installation or device proof without direct evidence
+  - expose API keys, access tokens, passwords, cookies, or one-time codes
+
+handoff:
+  requested_name: UNKNOWN
+  include_experimental_thoughts: false
+  context_capture_result: NOT_RUN
+  context_capture_id: UNKNOWN
+  handoff_result: NOT_RUN
+  handoff_id: UNKNOWN
+
+secret_redaction_confirmed: false
+
+safety_attestation:
+  research_only_preserved: true
+  zero_authorized_stake_preserved: true
+  execution_disabled_preserved: true
+  no_unverified_completion_claims: true
