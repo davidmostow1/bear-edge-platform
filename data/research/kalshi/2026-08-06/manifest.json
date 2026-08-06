@@ -1,0 +1,87 @@
+{
+  "snapshot_id": "5e2403b3-b359-56c5-8e6c-39d2c15b18e6",
+  "captured_at": "2026-08-06T13:05:27-04:00",
+  "operational_mode": "RESEARCH_ONLY",
+  "authorized_stake_usd": 0,
+  "record_counts": {
+    "quote_observations": 316,
+    "series_event_inventory": 62,
+    "schedule_probable_pitchers": 11,
+    "strikeouts": 170,
+    "home_runs": 134,
+    "rbi": 8,
+    "stolen_bases": 3,
+    "outs_recorded": 1
+  },
+  "source_surface_counts": {
+    "kalshi_api": 218,
+    "kalshi_app_screenshot": 97,
+    "kalshi_app_position": 1
+  },
+  "google_drive": {
+    "folder_id": "17O_ewgQGylm6j46JSie3hUqVB8DefCAH",
+    "evidence_zip_id": "1Hf9R-tpzgw4vxCKf0MOTJM28klxjhSih",
+    "quotes_csv_id": "14FPK6siGPpjMh-8cmJxKNDeeR_yADn2Q",
+    "events_jsonl_id": "1v0kx8P2ifYz44GyT8jQj2BRfwpANzQwF",
+    "snapshot_json_id": "1KOIWaIZvWIL4RpzaghRRAFYIN6tk5EDO",
+    "series_inventory_csv_id": "1SCFN7lV-53Qen-GFnJvhfLhHlY8QQ3-F",
+    "schedule_csv_id": "1fPmRG8UTDexqK0yPEwtYCREDx4dPLKqr",
+    "source_manifest_id": "1hV2EBi8_ZtC6TeP2G6NQobIgbLtpFJh-",
+    "readme_id": "1qQHXgb-o_9oo9Ip-GswadOuPopdJteHh",
+    "migration_sql_id": "1PgwsNgB9VhrFv9vG9JSZE-zfijd9Fj0H",
+    "checksums_id": "1owrsexEMaM1cRXlY6t286Y_KcxYSrvD7"
+  },
+  "sha256": {
+    "20260806130527_create_market_quote_events.sql": "a2fb7553f92f495489548b95766df7f6903e712e080664813ac96d6240f9bc19",
+    "README.md": "600c2a96551da99d7d13e98015539acfb16540e458f9da1a9ed70b47cdd5172d",
+    "kalshi_mlb_quote_events_2026-08-06.jsonl": "93341b70038b2d60ec2b5ba958d5bce0d193ecc8c63a448d1faeb8eb2d013185",
+    "kalshi_mlb_quote_observations_2026-08-06.csv": "cf3e21290c7d02961b6af62d667cbbf08f9d787d26fa831bb4cf8bd31f479197",
+    "kalshi_mlb_snapshot_2026-08-06.json": "90c919e5536ab3c2ec4db6fcf47c9fa04b542c9ab773a2c59b03de98c6ec0bd6",
+    "kalshi_series_event_inventory_2026-08-06.csv": "4e0d369e70465798a761c0640c25bfac591f4a76ece8f058550a3b3fc70cfbb3",
+    "mlb_schedule_probable_pitchers_2026-08-06.csv": "fa1cbdd3e0663eb93bd4ecb97fa486955d1aa1127e805615ea265ae4f51976a6",
+    "source_manifest.json": "3032e0890b727aaa1a65794494ba047da02ead893b427a6c598f7a692584eb3c"
+  },
+  "source_hierarchy": [
+    {
+      "tier": 1,
+      "source": "Kalshi public Trade API",
+      "role": "Primary contract and quote authority",
+      "url": "https://docs.kalshi.com/getting_started/quick_start_market_data"
+    },
+    {
+      "tier": 1,
+      "source": "MLB Stats API",
+      "role": "Primary schedule, game-state and probable-pitcher authority",
+      "url": "https://statsapi.mlb.com/api/v1/schedule?sportId=1&date=2026-08-06&hydrate=probablePitcher,team,linescore"
+    },
+    {
+      "tier": 1,
+      "source": "Baseball Savant / Statcast",
+      "role": "Pitch and batted-ball enrichment",
+      "url": "https://baseballsavant.mlb.com/en/"
+    },
+    {
+      "tier": 1,
+      "source": "FanGraphs",
+      "role": "Independent advanced-stat enrichment",
+      "url": "https://www.fangraphs.com/leaders/major-league"
+    },
+    {
+      "tier": 1,
+      "source": "FanDuel Research",
+      "role": "Comparison context only",
+      "url": "https://www.fanduel.com/research/mlb/best-prop-bets-today"
+    }
+  ],
+  "data_quality": {
+    "unsupported_home_run_volume_fields_removed": 71,
+    "verified_home_run_volume_rows": 17,
+    "content_digest_uniqueness": "316/316"
+  },
+  "supabase_status": {
+    "project_ref": "anxouzruouyraumgjdju",
+    "raw_quote_table_present_before_capture": false,
+    "data_inserted": false,
+    "reason": "A quote observation must not be written into decision_records. Deploy the reviewed market_quote_events migration first."
+  }
+}
