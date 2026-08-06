@@ -23,6 +23,10 @@
     "evidence_zip_id": "1Hf9R-tpzgw4vxCKf0MOTJM28klxjhSih",
     "quotes_csv_id": "14FPK6siGPpjMh-8cmJxKNDeeR_yADn2Q",
     "events_jsonl_id": "1v0kx8P2ifYz44GyT8jQj2BRfwpANzQwF",
+    "snapshot_json_id": "1KOIWaIZvWIL4RpzaghRRAFYIN6tk5EDO",
+    "series_inventory_csv_id": "1SCFN7lV-53Qen-GFnJvhfLhHlY8QQ3-F",
+    "schedule_csv_id": "1fPmRG8UTDexqK0yPEwtYCREDx4dPLKqr",
+    "source_manifest_id": "1hV2EBi8_ZtC6TeP2G6NQobIgbLtpFJh-",
     "readme_id": "1qQHXgb-o_9oo9Ip-GswadOuPopdJteHh",
     "migration_sql_id": "1PgwsNgB9VhrFv9vG9JSZE-zfijd9Fj0H",
     "checksums_id": "1owrsexEMaM1cRXlY6t286Y_KcxYSrvD7"
@@ -30,9 +34,9 @@
   "sha256": {
     "20260806130527_create_market_quote_events.sql": "a2fb7553f92f495489548b95766df7f6903e712e080664813ac96d6240f9bc19",
     "README.md": "600c2a96551da99d7d13e98015539acfb16540e458f9da1a9ed70b47cdd5172d",
-    "kalshi_mlb_quote_events_2026-08-06.jsonl": "d1b4a3016413aefd912022d4bacc066138a1fa7e358f295f6b44065be0f6838b",
-    "kalshi_mlb_quote_observations_2026-08-06.csv": "6316ad9a14bd02c3c7e0dafb2958104ae1e075ae267a14150e2e27d9365fd94f",
-    "kalshi_mlb_snapshot_2026-08-06.json": "03c1468f070ff5e765c1670a9a417cd0b469f80be323112d004341311607599e",
+    "kalshi_mlb_quote_events_2026-08-06.jsonl": "93341b70038b2d60ec2b5ba958d5bce0d193ecc8c63a448d1faeb8eb2d013185",
+    "kalshi_mlb_quote_observations_2026-08-06.csv": "cf3e21290c7d02961b6af62d667cbbf08f9d787d26fa831bb4cf8bd31f479197",
+    "kalshi_mlb_snapshot_2026-08-06.json": "90c919e5536ab3c2ec4db6fcf47c9fa04b542c9ab773a2c59b03de98c6ec0bd6",
     "kalshi_series_event_inventory_2026-08-06.csv": "4e0d369e70465798a761c0640c25bfac591f4a76ece8f058550a3b3fc70cfbb3",
     "mlb_schedule_probable_pitchers_2026-08-06.csv": "fa1cbdd3e0663eb93bd4ecb97fa486955d1aa1127e805615ea265ae4f51976a6",
     "source_manifest.json": "3032e0890b727aaa1a65794494ba047da02ead893b427a6c598f7a692584eb3c"
@@ -69,6 +73,11 @@
       "url": "https://www.fanduel.com/research/mlb/best-prop-bets-today"
     }
   ],
+  "data_quality": {
+    "unsupported_home_run_volume_fields_removed": 71,
+    "verified_home_run_volume_rows": 17,
+    "content_digest_uniqueness": "316/316"
+  },
   "supabase_status": {
     "project_ref": "anxouzruouyraumgjdju",
     "raw_quote_table_present_before_capture": false,
