@@ -1,0 +1,345 @@
+const test = require("node:test");
+const assert = require("node:assert/strict");
+const fs = require("node:fs");
+const path = require("node:path");
+
+const {
+  REQUIRED_DOCUMENTS,
+  auditCanonicalStatus,
+  readGitRepositoryState,
+  validateExpectedHead,
+  validateCanonicalStatusDocument
+} = require("../script/check_canonical_status.js");
+
+const ROOT = path.resolve(__dirname, "..");
+
+function loadContext() {
+  return {
+    boundaries: JSON.parse(fs.readFileSync(
+      path.join(ROOT, "governance", "system-boundaries.json"),
+      "utf8"
+    )),
+    documents: Object.fromEntries(REQUIRED_DOCUMENTS.map((relativePath) => [
+      relativePath,
+      fs.readFileSync(path.join(ROOT, relativePath), "utf8")
+    ])),
+    migrationFiles: fs.readdirSync(path.join(ROOT, "supabase", "migrations"))
+      .filter((fileName) => fileName.endsWith(".sql"))
+      .sort(),
+    registry: JSON.parse(fs.readFileSync(path.join(ROOT, "models", "registry.json"), "utf8"))
+  };
+}
+
+function loadStatus() {
+  return JSON.parse(fs.readFileSync(
+    path.join(ROOT, "docs", "canonical", "STATUS.json"),
+    "utf8"
+  ));
+}
+
+function assertFailureCode(callback, code) {
+  assert.throws(callback, (error) => (
+    error instanceof Error
+    && /** @type {{ code?: unknown }} */ (error).code === code
+  ));
+}
+
+test("canonical status audit agrees with registry, migrations, authorization, and documents", () => {
+  const result = auditCanonicalStatus();
+  const packageJson = JSON.parse(fs.readFileSync(path.join(ROOT, "package.json"), "utf8"));
+
+  assert.equal(result.status, "PASS");
+  assert.equal(result.modelCount, 5);
+  assert.equal(result.validatedModelCount, 0);
+  assert.equal(result.authorizedStakeUsd, 0);
+  assert.equal(result.executionEnabled, false);
+  assert.equal(result.gitMigrationCount, 17);
+  assert.ok(
+    packageJson.files.includes("docs/canonical/**/*"),
+    "portable packages must retain the machine-audited canonical status bundle"
+  );
+  assert.ok(
+    packageJson.files.includes("AGENTS.md"),
+    "portable packages must retain the reviewer protocol audited by canonical status"
+  );
+});
+
+test("canonical status audit fails closed when Git evidence is unavailable", () => {
+  const previousPath = process.env.PATH;
+
+  try {
+    process.env.PATH = "/nonexistent";
+    assertFailureCode(
+      () => auditCanonicalStatus(),
+      "REPOSITORY_STATE_UNAVAILABLE"
+    );
+  } finally {
+    process.env.PATH = previousPath;
+  }
+});
+
+test("exact-SHA verification accepts only the matching clean checkout", () => {
+  const headCommit = "a".repeat(40);
+
+  assert.doesNotThrow(() => validateExpectedHead({ headCommit, workingTreeClean: true }, headCommit));
+  assertFailureCode(
+    () => validateExpectedHead({ headCommit, workingTreeClean: true }, "b".repeat(40)),
+    "EXPECTED_HEAD_SHA_MISMATCH"
+  );
+  assertFailureCode(
+    () => validateExpectedHead({ headCommit, workingTreeClean: false }, headCommit),
+    "EXPECTED_HEAD_WORKTREE_DIRTY"
+  );
+});
+
+test("CI binds verification to the pull-request head instead of the synthetic merge SHA", () => {
+  const workflow = fs.readFileSync(path.join(ROOT, ".github", "workflows", "ci.yml"), "utf8");
+
+  assert.match(workflow, /ref: \$\{\{ github\.event\.pull_request\.head\.sha \|\| github\.sha \}\}/);
+  assert.match(workflow, /fetch-depth: 0/);
+  assert.match(
+    workflow,
+    /BEAR_EDGE_EXPECTED_HEAD_SHA: \$\{\{ github\.event\.pull_request\.head\.sha \|\| github\.sha \}\}/
+  );
+});
+
+test("canonical status audit rejects unvalidated top-level claims", () => {
+  const status = loadStatus();
+  status.profitability = "CONFIRMED";
+
+  assertFailureCode(
+    () => validateCanonicalStatusDocument(status, loadContext()),
+    "STATUS_FIELDS_INVALID"
+  );
+});
+
+test("canonical status audit binds evidence time and every authority field", () => {
+  const repositoryState = readGitRepositoryState(ROOT);
+  assert.ok(repositoryState);
+
+  for (const mutate of [
+    (status) => { status.externalEvidenceAsOf = "2099-12-31T23:59:59.000Z"; },
+    (status) => { status.authority.current.code = "CONVERSATION_MEMORY"; },
+    (status) => { status.authority.target.rawEvidence = "UNRETAINED_CHAT_TEXT"; }
+  ]) {
+    const status = loadStatus();
+    mutate(status);
+
+    assertFailureCode(
+      () => validateCanonicalStatusDocument(status, {
+        ...loadContext(),
+        repositoryState
+      }),
+      "STATUS_SNAPSHOT_DRIFT"
+    );
+  }
+});
+
+test("canonical status audit rejects a nonzero authorized stake", () => {
+  const status = loadStatus();
+  status.authorization.authorizedStakeUsd = 1;
+
+  assertFailureCode(
+    () => validateCanonicalStatusDocument(status, loadContext()),
+    "AUTHORIZATION_BOUNDARY_CHANGED"
+  );
+});
+
+test("canonical status audit rejects model-count drift", () => {
+  const status = loadStatus();
+  status.models.registered += 1;
+
+  assertFailureCode(
+    () => validateCanonicalStatusDocument(status, loadContext()),
+    "MODEL_STATUS_DRIFT"
+  );
+});
+
+test("canonical status audit rejects an invented esports model capability", () => {
+  const status = loadStatus();
+  status.esports.independentProbabilityGeneratorImplemented = true;
+
+  assertFailureCode(
+    () => validateCanonicalStatusDocument(status, loadContext()),
+    "ESPORTS_STATUS_OVERCLAIMED"
+  );
+});
+
+test("canonical status audit rejects a silent Supabase authority claim", () => {
+  const status = loadStatus();
+  status.authority.current.decisionLifecycle = "SUPABASE_APPEND_ONLY_OPERATIONAL_EVENTS";
+
+  assertFailureCode(
+    () => validateCanonicalStatusDocument(status, loadContext()),
+    "AUTHORITY_ARCHITECTURE_DRIFT"
+  );
+});
+
+test("canonical status audit rejects safety wording removed from a required document", () => {
+  const context = loadContext();
+  context.documents["docs/canonical/ROADMAP.md"] = "RESEARCH_ONLY without an authorized-stake statement";
+
+  assertFailureCode(
+    () => validateCanonicalStatusDocument(loadStatus(), context),
+    "CANONICAL_SAFETY_BOUNDARY_MISSING"
+  );
+});
+
+test("canonical status audit binds the standing reviewer model count", () => {
+  const context = loadContext();
+  context.documents["AGENTS.md"] = context.documents["AGENTS.md"].replace(
+    "**Models validated:** 0/5",
+    "**Models validated:** 0/4"
+  );
+
+  assertFailureCode(
+    () => validateCanonicalStatusDocument(loadStatus(), context),
+    "REVIEWER_STANDING_STATE_DRIFT"
+  );
+});
+
+test("canonical status audit rejects fabricated repository evidence", () => {
+  const status = loadStatus();
+  status.repository.fullName = "wrong-owner/wrong-repository";
+  status.repository.defaultBranchCommit = "a".repeat(40);
+  status.repository.recoveryBaselineCommit = "b".repeat(40);
+
+  assertFailureCode(
+    () => validateCanonicalStatusDocument(status, loadContext()),
+    "REPOSITORY_EVIDENCE_DRIFT"
+  );
+});
+
+test("canonical status audit rejects a fabricated verification count", () => {
+  const status = loadStatus();
+  status.softwareVerification.canonicalizationCandidate.passed = 999999;
+
+  assertFailureCode(
+    () => validateCanonicalStatusDocument(status, loadContext()),
+    "CANDIDATE_VERIFICATION_EVIDENCE_DRIFT"
+  );
+});
+
+test("canonical status audit rejects an invented predictive-edge grade", () => {
+  const status = loadStatus();
+  status.models.predictiveEdgeGrade = "CONFIRMED";
+
+  assertFailureCode(
+    () => validateCanonicalStatusDocument(status, loadContext()),
+    "MODEL_EVIDENCE_GRADE_DRIFT"
+  );
+});
+
+test("canonical status audit rejects fabricated Supabase evidence", () => {
+  const status = loadStatus();
+  status.supabaseSnapshot.projectRef = "fabricated-project";
+  status.supabaseSnapshot.decisionRecords = 999999;
+
+  assertFailureCode(
+    () => validateCanonicalStatusDocument(status, loadContext()),
+    "SUPABASE_EVIDENCE_DRIFT"
+  );
+});
+
+test("canonical status audit binds every promotion-policy field and digest", () => {
+  const status = loadStatus();
+  status.promotionPolicy.thresholds.maximumExpectedCalibrationError = 0.99;
+
+  assertFailureCode(
+    () => validateCanonicalStatusDocument(status, loadContext()),
+    "PROMOTION_POLICY_DRIFT"
+  );
+});
+
+test("canonical status audit rejects negated safety prose containing the old tokens", () => {
+  const context = loadContext();
+  context.documents["docs/canonical/ROADMAP.md"] = context.documents[
+    "docs/canonical/ROADMAP.md"
+  ].replace(
+    "SAFETY_INVARIANT: authorization is RESEARCH_ONLY; authorized stake is $0; execution is disabled.",
+    "SAFETY_INVARIANT: authorization is not RESEARCH_ONLY; authorized stake is not $0; execution is enabled."
+  );
+
+  assertFailureCode(
+    () => validateCanonicalStatusDocument(loadStatus(), context),
+    "CANONICAL_SAFETY_BOUNDARY_MISSING"
+  );
+});
+
+test("canonical status audit rejects inverted authority prose", () => {
+  const context = loadContext();
+  context.documents["docs/canonical/ARCHITECTURE.md"] = context.documents[
+    "docs/canonical/ARCHITECTURE.md"
+  ].replace(
+    "CURRENT: local JSONL is authoritative; Supabase is a remote projection.",
+    "CURRENT: Supabase is authoritative; local JSONL is a remote projection."
+  );
+
+  assertFailureCode(
+    () => validateCanonicalStatusDocument(loadStatus(), context),
+    "AUTHORITY_DOCUMENT_AMBIGUOUS"
+  );
+});
+
+test("canonical status audit rejects a syntactically plausible but unverified remote lifecycle", () => {
+  const status = loadStatus();
+  const context = loadContext();
+  const candidateCommit = "c".repeat(40);
+
+  status.repository.canonicalizationState = "REMOTE_GREEN";
+  status.repository.commitIdentityMode = candidateCommit;
+  status.blockingIssues = status.blockingIssues.filter(
+    (blocker) => blocker !== "CANONICALIZATION_REQUIRES_EXTERNAL_EXACT_SHA_CI_RECEIPT"
+  );
+  status.softwareVerification.canonicalizationCandidate = {
+    command: "npm run verify",
+    commitBinding: candidateCommit,
+    environment: "GITHUB_ACTIONS_NODE_20",
+    verificationNotBefore: "2026-08-12T08:45:00.000Z",
+    passed: 749,
+    failed: 0,
+    grade: "CONFIRMED",
+    remoteRunUrl: "https://github.com/davidmostow1/bear-edge-platform/actions/runs/123456"
+  };
+  context.documents["docs/canonical/STATUS.md"] = context.documents[
+    "docs/canonical/STATUS.md"
+  ].replace(
+    "**Candidate lifecycle:** `CONSOLIDATION_CANDIDATE`",
+    "**Candidate lifecycle:** `REMOTE_GREEN`"
+  );
+
+  assertFailureCode(
+    () => validateCanonicalStatusDocument(status, context),
+    "LIFECYCLE_REQUIRES_EXTERNAL_VERIFIER"
+  );
+});
+
+test("canonical status validates the same aggregate content across logical commits", () => {
+  const repositoryState = readGitRepositoryState(ROOT);
+  assert.ok(repositoryState);
+
+  assert.doesNotThrow(() => validateCanonicalStatusDocument(loadStatus(), {
+    ...loadContext(),
+    repositoryState: {
+      ...repositoryState,
+      headCommit: "d".repeat(40),
+      workingTreeClean: true
+    }
+  }));
+});
+
+test("canonical status rejects an extra path in the aggregate baseline diff", () => {
+  const repositoryState = readGitRepositoryState(ROOT);
+  assert.ok(repositoryState);
+
+  assertFailureCode(
+    () => validateCanonicalStatusDocument(loadStatus(), {
+      ...loadContext(),
+      repositoryState: {
+        ...repositoryState,
+        changedPaths: [...repositoryState.changedPaths, "unreviewed-file.txt"].sort()
+      }
+    }),
+    "CANDIDATE_CONTENT_EVIDENCE_DRIFT"
+  );
+});

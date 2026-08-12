@@ -176,13 +176,19 @@ follow-up ticket. Anything less is a deferral.
 
 ---
 
-## 8. Current standing state (as of 2026-07-23)
+## 8. Current standing state (as of 2026-08-12)
 
 Update this section as reality changes; do not let it go stale.
 
+SAFETY_INVARIANT: authorization is RESEARCH_ONLY; authorized stake is $0; execution is disabled.
+
+The machine-readable current count and evidence grades live in
+`docs/canonical/STATUS.json`; this section must agree with that file and the
+registry on the evaluated Git tree.
+
 - **Permission level:** `PRICE_CHECK_ONLY`
-- **Models validated:** 0/4 — all `research_only`
-- **Priced candidates:** 0 (odds provider at zero credits)
+- **Models validated:** 0/5 — all five registered models are `research_only`
+- **Priced candidates:** `UNVERIFIED` — the July 23 snapshot was 0; refresh provider state before any current claim
 - **DraftKings role:** manually verified comparison price only. Never a primary
   automated feed. ToS position: verify the specific retrieval method against
   actual terms; do not assume authorization either way.

@@ -161,7 +161,11 @@ That runs:
 ```bash
 npm run typecheck
 npm test
+npm run audit:boundaries
+npm run audit:canonical-status
 ```
+
+The canonical-status audit checks local safety invariants and consistency with a pinned evidence snapshot. It does not query GitHub or Supabase and cannot certify a committed or remote-green lifecycle.
 
 ## Release Readiness
 
