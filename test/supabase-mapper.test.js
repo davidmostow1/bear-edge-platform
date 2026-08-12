@@ -39,6 +39,7 @@ function evaluationRecord(modelStatus = "shadow") {
     market: {
       marketFamily: "PLAYER_PROP",
       marketType: "PITCHER_STRIKEOUTS",
+      marketPeriod: "full_game",
       participantId: "4414215",
       participantName: "Christian Scott",
       selection: "Christian Scott over 5.5 strikeouts",
@@ -145,6 +146,74 @@ test("mapDecisionRecord preserves canonical identity and complete snapshots", ()
   assert.deepEqual(row.state_snapshot.gates, evaluation.gateResults);
   assert.deepEqual(row.output_snapshot.edge, evaluation.edge);
   assert.equal(row.output_snapshot.permission, "PRICE_CHECK_ONLY");
+  assert.equal(row.recommended_stake, 0);
+  assert.equal(row.market_period, evaluation.market.marketPeriod);
+});
+
+test("mapDecisionRecord maps lower-case research families to allowed remote market kinds", () => {
+  const evaluation = evaluationRecord();
+  const families = new Map([
+    ["pitcher_strikeouts", "PLAYER_PROP"],
+    ["batter_hits", "PLAYER_PROP"],
+    ["batter_runs_scored", "PLAYER_PROP"],
+    ["batter_total_bases", "PLAYER_PROP"],
+    ["moneyline", "MONEYLINE"]
+  ]);
+
+  for (const [marketFamily, expectedMarketKind] of families) {
+    const researchEvaluation = createEvaluationRecord({
+      ...evaluation,
+      market: {
+        ...evaluation.market,
+        marketFamily,
+        marketType: expectedMarketKind === "PLAYER_PROP" ? "player_prop" : marketFamily
+      },
+      decision: {
+        verdict: evaluation.verdict,
+        permission: evaluation.permission,
+        reasons: evaluation.reasons,
+        riskFlags: evaluation.riskFlags,
+        gateResults: evaluation.gateResults
+      }
+    }, {
+      clientEventId: EVALUATION_EVENT_ID,
+      createdAt: CREATED_AT
+    });
+    const row = mapDecisionRecord(researchEvaluation, OWNER_USER_ID);
+
+    assert.equal(row.market, marketFamily);
+    assert.equal(row.market_kind, expectedMarketKind);
+    assert.equal(
+      row.market_type,
+      expectedMarketKind === "PLAYER_PROP" ? "Primary Prop" : "Main Side"
+    );
+    assert.equal(row.output_snapshot.permission, "PRICE_CHECK_ONLY");
+    assert.equal(row.recommended_stake, 0);
+  }
+
+  const unknownEvaluation = createEvaluationRecord({
+    ...evaluation,
+    market: {
+      ...evaluation.market,
+      marketFamily: "unregistered_research_family",
+      marketType: "research_market"
+    },
+    decision: {
+      verdict: evaluation.verdict,
+      permission: evaluation.permission,
+      reasons: evaluation.reasons,
+      riskFlags: evaluation.riskFlags,
+      gateResults: evaluation.gateResults
+    }
+  }, {
+    clientEventId: EVALUATION_EVENT_ID,
+    createdAt: CREATED_AT
+  });
+  const unknownRow = mapDecisionRecord(unknownEvaluation, OWNER_USER_ID);
+
+  assert.equal(unknownRow.market_kind, null);
+  assert.notEqual(unknownRow.market_kind, unknownEvaluation.market.marketFamily);
+  assert.equal(unknownRow.market_identity_status, "BLOCK");
 });
 
 test("mapDecisionRecord blocks provenance for every model status except validated", () => {
@@ -167,7 +236,7 @@ test("mapDecisionRecord blocks provenance for every model status except validate
   );
 });
 
-test("mapDecisionRecord keeps market identity blocked when remote-only identity fields are absent", () => {
+test("mapDecisionRecord completes identity only with a source-supplied period and passing gates", () => {
   const evaluation = evaluationRecord();
   const withPassingIdentityGates = createEvaluationRecord({
     ...evaluation,
@@ -188,10 +257,27 @@ test("mapDecisionRecord keeps market identity blocked when remote-only identity 
     createdAt: CREATED_AT
   });
 
-  assert.equal(
-    mapDecisionRecord(withPassingIdentityGates, OWNER_USER_ID).market_identity_status,
-    "BLOCK"
-  );
+  const row = mapDecisionRecord(withPassingIdentityGates, OWNER_USER_ID);
+  assert.equal(row.market_period, "full_game");
+  assert.equal(row.market_identity_status, "COMPLETE");
+  assert.equal(row.market_fingerprint, null);
+
+  const { marketPeriod: _marketPeriod, ...marketWithoutPeriod } = evaluation.market;
+  const withoutPeriod = createEvaluationRecord({
+    ...evaluation,
+    market: marketWithoutPeriod,
+    decision: {
+      verdict: evaluation.verdict,
+      permission: evaluation.permission,
+      reasons: evaluation.reasons,
+      riskFlags: evaluation.riskFlags,
+      gateResults: withPassingIdentityGates.gateResults
+    }
+  }, {
+    clientEventId: EVALUATION_EVENT_ID,
+    createdAt: CREATED_AT
+  });
+  assert.equal(mapDecisionRecord(withoutPeriod, OWNER_USER_ID).market_identity_status, "BLOCK");
 });
 
 test("mapSettlementRecord uses the referenced authoritative evaluation for taken odds", () => {

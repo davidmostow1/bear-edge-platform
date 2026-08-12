@@ -9,6 +9,24 @@ const REMOTE_SOURCES = new Set([
   "screenshot_intake",
   "assistant_review"
 ]);
+const REMOTE_MARKET_KINDS = new Set([
+  "MONEYLINE",
+  "SPREAD",
+  "TOTAL",
+  "PLAYER_PROP",
+  "TEAM_PROP"
+]);
+const RESEARCH_MARKET_KINDS = Object.freeze({
+  batter_hits: "PLAYER_PROP",
+  batter_runs_scored: "PLAYER_PROP",
+  batter_total_bases: "PLAYER_PROP",
+  game_moneyline: "MONEYLINE",
+  game_spread: "SPREAD",
+  game_total: "TOTAL",
+  pitcher_strikeouts: "PLAYER_PROP",
+  run_line: "SPREAD",
+  team_total: "TEAM_PROP"
+});
 
 function clone(value) {
   return JSON.parse(canonicalStringify(value));
@@ -146,6 +164,17 @@ function priceIntegrityStatus(record) {
   return sourceVerified ? "CLEAR" : "REVIEW";
 }
 
+function remoteMarketKind(record) {
+  const marketFamily = normalizedText(record?.market?.marketFamily, "");
+  const normalizedKind = marketFamily.toUpperCase();
+
+  if (REMOTE_MARKET_KINDS.has(normalizedKind)) {
+    return normalizedKind;
+  }
+
+  return RESEARCH_MARKET_KINDS[marketFamily.toLowerCase()] ?? null;
+}
+
 function marketIdentityStatus(record) {
   const identityGates = record.gateResults.filter((gate) => (
     gate &&
@@ -164,10 +193,10 @@ function marketIdentityStatus(record) {
     record.event.league &&
     record.event.eventId &&
     record.market.marketFamily &&
+    remoteMarketKind(record) &&
     record.market.selection &&
     record.market.marketPeriod &&
-    record.market.marketFingerprint &&
-    (!['PLAYER_PROP', 'TEAM_PROP'].includes(record.market.marketFamily) || (
+    (!["PLAYER_PROP", "TEAM_PROP"].includes(remoteMarketKind(record)) || (
       record.market.participantId || record.market.participantName
     ))
   );
@@ -186,7 +215,7 @@ function remoteMarketType(record) {
     TOTAL: "Main Total",
     PLAYER_PROP: "Primary Prop",
     TEAM_PROP: "Derivative Prop"
-  }[record.market.marketFamily] ?? "Derivative Prop";
+  }[remoteMarketKind(record)] ?? "Derivative Prop";
 }
 
 function remoteProbabilityMethod(record) {
@@ -275,8 +304,8 @@ function mapDecisionRecord(record, ownerUserId) {
     sport_code: evaluation.event.sport,
     league_code: evaluation.event.league,
     canonical_event_id: evaluation.event.eventId,
-    market_kind: evaluation.market.marketFamily,
-    market_period: null,
+    market_kind: remoteMarketKind(evaluation),
+    market_period: evaluation.market.marketPeriod,
     market_subject: evaluation.market.participantId ?? evaluation.market.participantName,
     market_selection: evaluation.market.selection,
     line_value: evaluation.market.line,

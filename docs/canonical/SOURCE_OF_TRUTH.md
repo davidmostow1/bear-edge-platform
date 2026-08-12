@@ -66,6 +66,8 @@ Examples from this recovery:
 
 - The August 1 plan says Supabase should be the sole durable authority, while deployed comments and current code say local JSONL is authoritative. The correct status is `CURRENT local / TARGET Supabase`, not a silent choice between documents.
 - `reconcile@8f0d6cb…` is green but smaller; PR #17 head `5f284eb8…` contains the fuller recovered implementation and also has green CI. The former is not promoted merely because its branch name says “canonical.”
+- PR #31 merged the reviewed recovery tree as `3698869…`; that exact merge commit is now the canonical research baseline. Its name does not make it a release, and the unprotected default branch remains a P0 governance blocker.
+- Supabase migration history says the v2.1 shadow-evidence migration is deployed, but deployment does not prove safe compatibility. Live constraints, grants, triggers, row shape, retry behavior, and retained parent data all remain independently reviewable facts.
 - Historical plugin receipts prove earlier invocations of `prompt-mastery` and `bear-edge-operator`; they do not make those plugins callable in the current runtime.
 - The August 12 esports slate proves that a manual JSON observation exists. It does not prove source authenticity, an independent prediction, a model edge, or an executable price.
 

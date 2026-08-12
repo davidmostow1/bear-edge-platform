@@ -191,6 +191,10 @@ function createEvaluationRecord(input, context = {}) {
     record.audit.warnings = cloneJson(record.audit.warnings);
   }
 
+  if (isPlainObject(input.market) && Object.prototype.hasOwnProperty.call(input.market, "marketPeriod")) {
+    record.market.marketPeriod = valueOrNull(input.market.marketPeriod);
+  }
+
   if (record.verdict !== "BET" || record.permission !== "VERIFIED_BETS_ALLOWED") {
     record.stake.recommendedStake = 0;
   }
@@ -596,6 +600,12 @@ function validateAuditRecord(record) {
 
     if (isPlainObject(record.market)) {
       validateFinite(record.market.line, "market.line");
+      if (Object.prototype.hasOwnProperty.call(record.market, "marketPeriod") && (
+        !isNonEmptyString(record.market.marketPeriod)
+        || record.market.marketPeriod.length > 80
+      )) {
+        addIssue("market.marketPeriod", "must be a non-empty string of at most 80 characters when present.");
+      }
     }
 
     if (isPlainObject(record.model)) {

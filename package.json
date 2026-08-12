@@ -82,6 +82,7 @@
   },
   "license": "MIT",
   "devDependencies": {
+    "@electric-sql/pglite": "^0.5.4",
     "@types/node": "^24.0.0",
     "typescript": "^5.6.3"
   },
