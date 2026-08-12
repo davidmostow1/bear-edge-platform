@@ -171,6 +171,7 @@ test("Supabase mappers encode correction lineage with the superseded client even
 test("Supabase client accepts only the two explicit shadow evidence projection tables", async () => {
   const calls = [];
   const client = createSupabaseClient({
+    auditSchemaVersion: "2.1.0",
     supabaseUrl: "https://project-ref.supabase.co",
     serviceRoleKey: "service-role-secret",
     ownerUserId: OWNER_USER_ID,
@@ -238,6 +239,7 @@ test("sync worker projects evaluation, closing price, and outcome in dependency 
     ownerUserId: OWNER_USER_ID,
     configured: true,
     enabled: true,
+    remoteAuditSchemaVersions: ["2.0.0", "2.1.0"],
     ledgerPath,
     outboxPath,
     clock: () => new Date(RUN_AT)
@@ -304,6 +306,7 @@ test("sync worker resolves the superseded remote evidence before projecting a co
     ownerUserId: OWNER_USER_ID,
     configured: true,
     enabled: true,
+    remoteAuditSchemaVersions: ["2.0.0", "2.1.0"],
     ledgerPath,
     outboxPath,
     clock: () => new Date(RUN_AT)

@@ -88,6 +88,7 @@ function workerOptions(fixture, client, overrides = {}) {
     ownerUserId: OWNER_USER_ID,
     configured: true,
     enabled: true,
+    remoteAuditSchemaVersions: ["2.0.0", "2.1.0"],
     ledgerPath: fixture.ledgerPath,
     outboxPath: fixture.outboxPath,
     clock: () => new Date(RUN_AT),
@@ -103,6 +104,16 @@ test("retry delay uses capped exponential backoff plus deterministic jitter", ()
   assert.equal(first, repeated);
   assert.equal(first >= 2_000 && first < 3_000, true);
   assert.equal(capped >= 300_000 && capped < 301_000, true);
+});
+
+test("enabled synchronization fails closed without verified v2.1 remote support", () => {
+  assert.throws(() => createSyncWorker({
+    client: { insertRecord: async () => ({ status: "synchronized" }) },
+    ownerUserId: OWNER_USER_ID,
+    configured: true,
+    enabled: true,
+    remoteAuditSchemaVersions: ["2.0.0"]
+  }), /verified remote support for audit schema 2\.1\.0/);
 });
 
 test("a retryable remote failure is retained with its exact next attempt", async (t) => {

@@ -1,6 +1,7 @@
 const crypto = require("node:crypto");
 
 const { readAuthoritativeLedger } = require("../audit/authoritative-ledger.js");
+const { AUDIT_RECORD_SCHEMA_VERSION } = require("../audit/record-contract.js");
 const { safeErrorMessage } = require("../config/secrets.js");
 const {
   appendSyncEvent,
@@ -81,6 +82,9 @@ function createSyncWorker(options = {}) {
   const enabled = options.enabled ?? configured;
   const batchSize = options.batchSize ?? DEFAULT_BATCH_SIZE;
   const pollIntervalMs = options.pollIntervalMs ?? DEFAULT_POLL_INTERVAL_MS;
+  const remoteAuditSchemaVersions = Array.isArray(options.remoteAuditSchemaVersions)
+    ? [...new Set(options.remoteAuditSchemaVersions)]
+    : [];
   const clock = options.clock ?? (() => new Date());
   const setIntervalImpl = options.setIntervalImpl ?? setInterval;
   const clearIntervalImpl = options.clearIntervalImpl ?? clearInterval;
@@ -93,6 +97,11 @@ function createSyncWorker(options = {}) {
   }
   if (enabled && (!client || typeof client.insertRecord !== "function" || !ownerUserId)) {
     throw new TypeError("An enabled sync worker requires a client and owner user id");
+  }
+  if (enabled && !remoteAuditSchemaVersions.includes(AUDIT_RECORD_SCHEMA_VERSION)) {
+    throw new TypeError(
+      `An enabled sync worker requires verified remote support for audit schema ${AUDIT_RECORD_SCHEMA_VERSION}`
+    );
   }
 
   let activeRun = null;
@@ -202,6 +211,14 @@ function createSyncWorker(options = {}) {
 
   async function projectRecord(item, records) {
     const record = findLocalRecord(records, item.recordId, item.recordType);
+
+    if (!remoteAuditSchemaVersions.includes(record.schemaVersion)) {
+      throw new SyncWorkerFailure(
+        "retryable_failure",
+        "REMOTE_SCHEMA_INCOMPATIBLE",
+        `Remote projection compatibility for audit schema ${record.schemaVersion} is not verified`
+      );
+    }
 
     if (
       record.clientEventId !== item.clientEventId
@@ -482,7 +499,13 @@ function createSyncWorker(options = {}) {
     return {
       provider: "supabase",
       configured: Boolean(configured),
-      enabled: Boolean(enabled && configured),
+      enabled: Boolean(
+        enabled
+        && configured
+        && remoteAuditSchemaVersions.includes(AUDIT_RECORD_SCHEMA_VERSION)
+      ),
+      auditSchemaVersion: AUDIT_RECORD_SCHEMA_VERSION,
+      schemaCompatible: remoteAuditSchemaVersions.includes(AUDIT_RECORD_SCHEMA_VERSION),
       started,
       running: Boolean(activeRun),
       pending: outbox.pending.length,

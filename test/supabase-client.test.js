@@ -48,8 +48,11 @@ test("Supabase status reports missing configuration without returning values", (
     missing: [
       "SUPABASE_URL",
       "SUPABASE_SERVICE_ROLE_KEY",
-      "SUPABASE_OWNER_USER_ID"
+      "SUPABASE_OWNER_USER_ID",
+      "SUPABASE_AUDIT_SCHEMA_VERSION"
     ],
+    requiredAuditSchemaVersion: "2.1.0",
+    schemaCompatible: false,
     secretReturned: false
   });
 });
@@ -58,16 +61,31 @@ test("Supabase status reports complete configuration without leaking the service
   const env = {
     SUPABASE_URL,
     SUPABASE_SERVICE_ROLE_KEY: SERVICE_ROLE_KEY,
-    SUPABASE_OWNER_USER_ID: OWNER_USER_ID
+    SUPABASE_OWNER_USER_ID: OWNER_USER_ID,
+    SUPABASE_AUDIT_SCHEMA_VERSION: "2.1.0"
   };
   const status = getSupabaseSyncStatus(env);
 
   assert.equal(status.configured, true);
   assert.deepEqual(status.missing, []);
+  assert.equal(status.schemaCompatible, true);
   assert.equal(status.secretReturned, false);
   assert.equal(JSON.stringify(status).includes(SERVICE_ROLE_KEY), false);
   assert.equal(JSON.stringify(status).includes(SUPABASE_URL), false);
   assert.equal(JSON.stringify(status).includes(OWNER_USER_ID), false);
+});
+
+test("Supabase status blocks configured credentials when live v2.1 support is not attested", () => {
+  const status = getSupabaseSyncStatus({
+    SUPABASE_URL,
+    SUPABASE_SERVICE_ROLE_KEY: SERVICE_ROLE_KEY,
+    SUPABASE_OWNER_USER_ID: OWNER_USER_ID,
+    SUPABASE_AUDIT_SCHEMA_VERSION: "2.0.0"
+  });
+
+  assert.equal(status.configured, false);
+  assert.equal(status.schemaCompatible, false);
+  assert.deepEqual(status.missing, []);
 });
 
 test("Supabase service-role values are redacted by shared error handling", () => {
@@ -94,6 +112,7 @@ test("insertRecord sends the required server-side REST headers", async () => {
     return response(201, [{ id: "remote-id", content_digest: CONTENT_DIGEST }]);
   };
   const client = createSupabaseClient({
+    auditSchemaVersion: "2.1.0",
     supabaseUrl: SUPABASE_URL,
     serviceRoleKey: SERVICE_ROLE_KEY,
     ownerUserId: OWNER_USER_ID,
@@ -134,6 +153,7 @@ test("an ignored duplicate with a matching digest is already synchronized", asyn
     }]);
   };
   const client = createSupabaseClient({
+    auditSchemaVersion: "2.1.0",
     supabaseUrl: SUPABASE_URL,
     serviceRoleKey: SERVICE_ROLE_KEY,
     ownerUserId: OWNER_USER_ID,
@@ -167,6 +187,7 @@ test("an ignored duplicate with a different digest is a terminal conflict", asyn
     }]);
   };
   const client = createSupabaseClient({
+    auditSchemaVersion: "2.1.0",
     supabaseUrl: SUPABASE_URL,
     serviceRoleKey: SERVICE_ROLE_KEY,
     ownerUserId: OWNER_USER_ID,
@@ -186,12 +207,14 @@ test("timeouts and service failures are retryable without leaking secrets", asyn
   };
   const unavailableFetch = async () => response(503, { message: SERVICE_ROLE_KEY }, "Unavailable");
   const timeoutClient = createSupabaseClient({
+    auditSchemaVersion: "2.1.0",
     supabaseUrl: SUPABASE_URL,
     serviceRoleKey: SERVICE_ROLE_KEY,
     ownerUserId: OWNER_USER_ID,
     fetchImpl: timeoutFetch
   });
   const unavailableClient = createSupabaseClient({
+    auditSchemaVersion: "2.1.0",
     supabaseUrl: SUPABASE_URL,
     serviceRoleKey: SERVICE_ROLE_KEY,
     ownerUserId: OWNER_USER_ID,
@@ -210,12 +233,14 @@ test("timeouts and service failures are retryable without leaking secrets", asyn
 
 test("authentication and schema rejections are terminal and body-safe", async () => {
   const authClient = createSupabaseClient({
+    auditSchemaVersion: "2.1.0",
     supabaseUrl: SUPABASE_URL,
     serviceRoleKey: SERVICE_ROLE_KEY,
     ownerUserId: OWNER_USER_ID,
     fetchImpl: async () => response(401, { message: SERVICE_ROLE_KEY }, "Unauthorized")
   });
   const schemaClient = createSupabaseClient({
+    auditSchemaVersion: "2.1.0",
     supabaseUrl: SUPABASE_URL,
     serviceRoleKey: SERVICE_ROLE_KEY,
     ownerUserId: OWNER_USER_ID,
@@ -234,6 +259,7 @@ test("authentication and schema rejections are terminal and body-safe", async ()
 
 test("client rejects unknown tables and rows outside the configured owner", async () => {
   const client = createSupabaseClient({
+    auditSchemaVersion: "2.1.0",
     supabaseUrl: SUPABASE_URL,
     serviceRoleKey: SERVICE_ROLE_KEY,
     ownerUserId: OWNER_USER_ID,

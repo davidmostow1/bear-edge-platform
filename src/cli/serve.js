@@ -93,7 +93,8 @@ function createRuntimeSyncWorker() {
         client,
         ownerUserId: settings.ownerUserId,
         configured: true,
-        enabled: true
+        enabled: true,
+        remoteAuditSchemaVersions: ["2.0.0", settings.auditSchemaVersion]
       }),
       configurationError: null
     };
