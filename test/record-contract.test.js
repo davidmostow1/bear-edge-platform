@@ -180,6 +180,27 @@ test("createEvaluationRecord emits stable identifiers and excludes digest from i
   assert.deepEqual(validateAuditRecord(record), { valid: true, issues: [] });
 });
 
+test("canonical non-BET records zero counterfactual recommended stake", () => {
+  const input = structuredClone(VALID_EVALUATION_INPUT);
+  input.stake.recommendedStake = 121.23;
+
+  const record = createEvaluationRecord(input, EVALUATION_CONTEXT);
+  assert.equal(record.verdict, "WAIT");
+  assert.equal(record.permission, "PRICE_CHECK_ONLY");
+  assert.equal(record.stake.recommendedStake, 0);
+
+  const tampered = {
+    ...record,
+    stake: { ...record.stake, recommendedStake: 121.23 }
+  };
+  assert.ok(
+    validateAuditRecord(tampered).issues.some((issue) => (
+      issue.path === "stake.recommendedStake"
+      && /must be zero/.test(issue.message)
+    ))
+  );
+});
+
 test("validateAuditRecord rejects digest changes, unsupported verdicts, and research-only BET records", () => {
   const valid = createEvaluationRecord(VALID_EVALUATION_INPUT, EVALUATION_CONTEXT);
   const changed = { ...valid, verdict: "PASS" };

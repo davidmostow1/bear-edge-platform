@@ -191,6 +191,10 @@ function createEvaluationRecord(input, context = {}) {
     record.audit.warnings = cloneJson(record.audit.warnings);
   }
 
+  if (record.verdict !== "BET" || record.permission !== "VERIFIED_BETS_ALLOWED") {
+    record.stake.recommendedStake = 0;
+  }
+
   return finalizeRecord(record);
 }
 
@@ -635,6 +639,17 @@ function validateAuditRecord(record) {
     if (isPlainObject(record.stake)) {
       validateFinite(record.stake.recommendedStake, "stake.recommendedStake", { min: 0 });
       validateFinite(record.stake.bankroll, "stake.bankroll", { min: 0 });
+
+      if (
+        (record.verdict !== "BET" || record.permission !== "VERIFIED_BETS_ALLOWED")
+        && typeof record.stake.recommendedStake === "number"
+        && record.stake.recommendedStake > 0
+      ) {
+        addIssue(
+          "stake.recommendedStake",
+          "must be zero unless verdict is BET and permission is VERIFIED_BETS_ALLOWED."
+        );
+      }
     }
 
     if (isPlainObject(record.audit)) {

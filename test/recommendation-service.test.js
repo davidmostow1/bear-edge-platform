@@ -171,6 +171,7 @@ test("persistDisplayedTargets never labels research-only output BET", async (t) 
   assert.notEqual(persisted.best[0].auditRecord.verdict, "BET");
   assert.equal(persisted.best[0].auditRecord.verdict, "WAIT");
   assert.equal(persisted.best[0].auditRecord.model.modelStatus, "research_only");
+  assert.equal(persisted.best[0].auditRecord.stake.recommendedStake, 0);
 });
 
 test("persistDisplayedTargets keeps stale verified prices in PRICE_CHECK_ONLY mode", async (t) => {

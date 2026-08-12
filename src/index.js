@@ -667,7 +667,9 @@ function createStraightEvaluationAuditRecord(input, result, context = {}) {
       kellyFraction: result.kelly.fraction
     },
     stake: {
-      recommendedStake: result.stakeRecommendation.recommendedStake,
+      recommendedStake: verdict === "BET" && permission === "VERIFIED_BETS_ALLOWED"
+        ? result.stakeRecommendation.recommendedStake
+        : 0,
       bankroll: input.bankroll,
       stakePolicyVersion: "1.0.0"
     },

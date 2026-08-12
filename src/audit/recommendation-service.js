@@ -294,7 +294,9 @@ function createDisplayedTargetRecord(result, target, context = {}) {
       kellyFraction: finiteOrNull(target.evaluation?.kellyFraction)
     },
     stake: {
-      recommendedStake: finiteOrNull(target.evaluation?.recommendedStake),
+      recommendedStake: verdict === "BET" && permission === "VERIFIED_BETS_ALLOWED"
+        ? finiteOrNull(target.evaluation?.recommendedStake)
+        : 0,
       bankroll: finiteOrNull(target.ticketDraft?.bankroll),
       stakePolicyVersion: "best_target_policy_v1"
     },

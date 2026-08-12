@@ -370,7 +370,7 @@ test("shadow evaluation is stable, canonical-over, prestart, and incapable of au
     kellyFraction: null
   });
   assert.deepEqual(first.stake, {
-    recommendedStake: null,
+    recommendedStake: 0,
     bankroll: null,
     stakePolicyVersion: null
   });

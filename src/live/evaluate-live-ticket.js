@@ -230,7 +230,9 @@ function createLiveEvaluationAuditRecord(ticket, result, context = {}) {
       kellyFraction: finiteOrNull(result.kelly?.fraction)
     },
     stake: {
-      recommendedStake: finiteOrNull(result.stakeRecommendation?.recommendedStake),
+      recommendedStake: verdict === "BET" && permission === "VERIFIED_BETS_ALLOWED"
+        ? finiteOrNull(result.stakeRecommendation?.recommendedStake)
+        : 0,
       bankroll: ticket.bankroll,
       stakePolicyVersion: "live_policy_v1"
     },
