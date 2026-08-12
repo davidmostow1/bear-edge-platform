@@ -1,0 +1,1193 @@
+{
+  "schemaVersion": "professional-betting-factory-requirements/v1",
+  "title": "Professional Betting Factory Requirement Ledger",
+  "source": {
+    "title": "The real answer: how professional betting operations created edge",
+    "sha256": "2263a4f1900c2a5458404daf0d1df9850e13045cf0b1e7c4dba7f005837381f5",
+    "lineCount": 600,
+    "pathHint": "governance/source/professional-betting-factory-source.txt"
+  },
+  "statusDefinitions": {
+    "implemented_local": "Implemented in local source with a retained code or test artifact.",
+    "partial_local": "A concrete local foundation exists, but one or more required operational behaviors remain incomplete.",
+    "blocked_external": "Completion depends on licensed data, credentials, settled production history, capital, or human operations that this repository cannot manufacture.",
+    "prohibited_by_design": "The source explicitly rejects this tactic and Bear Edge records it as a forbidden behavior rather than an implementation target."
+  },
+  "requirements": [
+    {
+      "id": "OPERATING-INDUSTRIAL-PROCESS",
+      "category": "operating_thesis",
+      "requirement": "Treat durable betting advantage as an industrial process combining probability quality, price quality, information speed, specialization, selectivity, execution, recordkeeping, and patient capital rather than as a single prediction formula.",
+      "sourceLines": [{ "start": 1, "end": 21 }],
+      "status": "partial_local",
+      "evidence": [{ "kind": "architecture", "path": "docs/superpowers/specs/2026-07-17-bear-edge-elite-audit-design.md", "claim": "The approved architecture covers decision integrity, local records, calibration, execution evidence, and external gates." }]
+    },
+    {
+      "id": "ARCH-MODEL-PLUS-MARKET",
+      "category": "architecture",
+      "requirement": "Combine independent model information with information contained in sportsbook prices instead of treating either source as complete by itself.",
+      "sourceLines": [{ "start": 22, "end": 45 }],
+      "status": "implemented_local",
+      "evidence": [{ "kind": "code", "path": "src/live/best-mlb-targets.js", "claim": "The priced-candidate path combines model probability with de-vigged market intelligence." }]
+    },
+    {
+      "id": "DATA-LARGE-HISTORICAL-FOUNDATION",
+      "category": "data_engineering",
+      "requirement": "Build and maintain a sufficiently large historical database for the specialized market before claiming predictive superiority.",
+      "sourceLines": [{ "start": 46, "end": 54 }],
+      "status": "blocked_external",
+      "blocker": "A licensed historical odds and outcomes corpus with sufficient settled volume has not been supplied to this checkout.",
+      "evidence": [{ "kind": "release_gate", "path": "docs/PRODUCTION_READINESS.md", "claim": "Production readiness identifies provider and settled-history evidence as external gates." }]
+    },
+    {
+      "id": "DATA-CLEAN-NORMALIZE",
+      "category": "data_engineering",
+      "requirement": "Clean, normalize, validate, and preserve source identity before information enters model training or decision logic.",
+      "sourceLines": [{ "start": 46, "end": 54 }],
+      "status": "implemented_local",
+      "evidence": [{ "kind": "code", "path": "src/calibration/dataset.js", "claim": "Calibration dataset validation rejects malformed, duplicated, and time-inconsistent observations." }]
+    },
+    {
+      "id": "MODEL-PROBABILISTIC-OUTPUT",
+      "category": "independent_probability_engine",
+      "requirement": "Produce probabilities rather than only categorical winner or loser labels.",
+      "sourceLines": [{ "start": 46, "end": 54 }],
+      "status": "implemented_local",
+      "evidence": [{ "kind": "code", "path": "src/live/estimate-prop.js", "claim": "The research estimator emits count-market probabilities." }]
+    },
+    {
+      "id": "DECISION-DISCREPANCY-SIZING",
+      "category": "decision_and_risk_engine",
+      "requirement": "Size exposure according to the magnitude and reliability of the model-market discrepancy, subject to conservative stake caps.",
+      "sourceLines": [{ "start": 46, "end": 54 }],
+      "status": "implemented_local",
+      "evidence": [{ "kind": "code", "path": "src/index.js", "claim": "Expected value, Kelly fraction, Kelly multipliers, and bankroll caps determine recommended stake." }]
+    },
+    {
+      "id": "LEARNING-ACTUAL-RESULTS",
+      "category": "learning_system",
+      "requirement": "Update evaluation and model evidence from actual settled results rather than from anecdotes or unrecorded outcomes.",
+      "sourceLines": [{ "start": 46, "end": 67 }],
+      "status": "implemented_local",
+      "evidence": [{ "kind": "code", "path": "src/analytics.js", "claim": "Settlements and amendments are reconstructed from immutable records for performance analysis." }]
+    },
+    {
+      "id": "ARCH-ACTIONABLE-PROBABILITY",
+      "category": "architecture",
+      "requirement": "Derive actionable probability from independent projection, market consensus, calibration evidence, and an uncertainty discount.",
+      "sourceLines": [{ "start": 56, "end": 67 }],
+      "status": "implemented_local",
+      "evidence": [{ "kind": "code", "path": "src/live/best-mlb-targets.js", "claim": "The evaluation path applies market weighting, model registry evidence, conservative adjustments, and uncertainty-sensitive gates." }]
+    },
+    {
+      "id": "MARKET-INDEPENDENT-FAIR-PRICE",
+      "category": "market_consensus_engine",
+      "requirement": "Construct an independent fair price for a narrowly defined market before comparing it with tradable sportsbook offers.",
+      "sourceLines": [{ "start": 68, "end": 97 }],
+      "status": "implemented_local",
+      "evidence": [{ "kind": "code", "path": "src/live/candidates.js", "claim": "Research candidates include a model probability and fair American odds before provider pricing is attached." }]
+    },
+    {
+      "id": "MARKET-COMPARABLE-PROBABILITIES",
+      "category": "market_consensus_engine",
+      "requirement": "Translate model forecasts and sportsbook prices into comparable probability quantities before measuring disagreement.",
+      "sourceLines": [{ "start": 68, "end": 95 }],
+      "status": "implemented_local",
+      "evidence": [{ "kind": "code", "path": "src/live/market-intelligence.js", "claim": "American prices are converted to implied and two-way no-vig probabilities." }]
+    },
+    {
+      "id": "MARKET-DISCREPANCY-REVIEW",
+      "category": "market_consensus_engine",
+      "requirement": "Review whether a material disagreement reflects information, noise, stale data, high hold, or market inconsistency before acting.",
+      "sourceLines": [{ "start": 68, "end": 95 }],
+      "status": "implemented_local",
+      "evidence": [{ "kind": "code", "path": "src/live/market-intelligence.js", "claim": "Market intelligence emits hold, freshness, dispersion, movement, and sharp-confirmation evidence and risk flags." }]
+    },
+    {
+      "id": "MARKET-MULTI-BOOK",
+      "category": "market_consensus_engine",
+      "requirement": "Collect equivalent offers from multiple sportsbooks rather than evaluating a single default book in isolation.",
+      "sourceLines": [{ "start": 98, "end": 120 }],
+      "status": "implemented_local",
+      "evidence": [{ "kind": "test", "path": "test/price-discipline.test.js", "claim": "The price-selection test proves best-price selection across multiple returned books." }]
+    },
+    {
+      "id": "MARKET-REMOVE-VIG",
+      "category": "market_consensus_engine",
+      "requirement": "Remove two-way market vig before treating sportsbook prices as fair-probability evidence.",
+      "sourceLines": [{ "start": 121, "end": 121 }],
+      "status": "implemented_local",
+      "evidence": [{ "kind": "code", "path": "src/live/market-intelligence.js", "claim": "normalizeTwoWayMarket divides each implied probability by total implied probability." }]
+    },
+    {
+      "id": "MARKET-WEIGHT-BOOKS",
+      "category": "market_consensus_engine",
+      "requirement": "Weight sportsbooks according to demonstrated historical information quality, with transparent and versioned weighting evidence.",
+      "sourceLines": [{ "start": 122, "end": 122 }],
+      "status": "partial_local",
+      "evidence": [{ "kind": "code", "path": "src/live/market-intelligence.js", "claim": "The current engine supports sharp-book and explicit weights, but does not yet learn weights from a production movement history." }]
+    },
+    {
+      "id": "MARKET-CONSENSUS",
+      "category": "market_consensus_engine",
+      "requirement": "Calculate a timestamp-filtered weighted consensus probability for each exactly matched market.",
+      "sourceLines": [{ "start": 123, "end": 123 }],
+      "status": "implemented_local",
+      "evidence": [{ "kind": "code", "path": "src/live/market-intelligence.js", "claim": "Fresh unique bookmaker entries feed a weighted consensus probability." }]
+    },
+    {
+      "id": "MARKET-OUTLIER-DETECTION",
+      "category": "market_consensus_engine",
+      "requirement": "Identify offers that are materially out of alignment with the informed market consensus.",
+      "sourceLines": [{ "start": 124, "end": 124 }],
+      "status": "implemented_local",
+      "evidence": [{ "kind": "code", "path": "src/live/market-intelligence.js", "claim": "Consensus dispersion, offered price, and reference probability are retained for discrepancy evaluation." }]
+    },
+    {
+      "id": "MARKET-REJECT-STALE-SUSPENDED-MISMATCHED",
+      "category": "market_consensus_engine",
+      "requirement": "Exclude stale, future-dated, suspended, unavailable, and mismatched market observations from consensus and decision authority.",
+      "sourceLines": [{ "start": 125, "end": 125 }],
+      "status": "partial_local",
+      "evidence": [{ "kind": "code", "path": "src/live/market-intelligence.js", "claim": "Stale and invalid timestamps are excluded; provider suspension semantics still depend on the external adapter payload." }]
+    },
+    {
+      "id": "MARKET-SUFFICIENT-CONSENSUS-EDGE",
+      "category": "decision_and_risk_engine",
+      "requirement": "Recommend only when the offered price clears a registered minimum advantage over the consensus and adjusted model probabilities.",
+      "sourceLines": [{ "start": 126, "end": 126 }],
+      "status": "implemented_local",
+      "evidence": [{ "kind": "code", "path": "src/live/best-mlb-targets.js", "claim": "Fair-edge, price-edge, expected-value, and minimum-price gates can each reject an offer." }]
+    },
+    {
+      "id": "LEARNING-OUTLIER-CONVERGENCE",
+      "category": "learning_system",
+      "requirement": "Measure whether selected outlier prices later converge toward the broader market and closing number.",
+      "sourceLines": [{ "start": 127, "end": 132 }],
+      "status": "implemented_local",
+      "evidence": [{ "kind": "code", "path": "src/calibration/report.js", "claim": "Calibration reports require final closing prices and calculate closing-line value with uncertainty intervals." }]
+    },
+    {
+      "id": "EXECUTION-PROPRIETARY-LINE-COMPARISON",
+      "category": "execution",
+      "requirement": "Compare the system fair line with the live bookmaker line and increase consideration only when the verified discrepancy grows.",
+      "sourceLines": [{ "start": 133, "end": 145 }],
+      "status": "implemented_local",
+      "evidence": [{ "kind": "code", "path": "src/live/best-mlb-targets.js", "claim": "Candidate rank and verdict use fair edge, price edge, expected value, and risk evidence." }]
+    },
+    {
+      "id": "DECISION-EXACT-PRICE",
+      "category": "execution",
+      "requirement": "Every actionable recommendation must state the exact offered American price used in its calculation.",
+      "sourceLines": [{ "start": 145, "end": 159 }],
+      "status": "implemented_local",
+      "evidence": [{ "kind": "code", "path": "src/live/best-mlb-targets.js", "claim": "Priced ticket selections include the exact sportsbook price." }]
+    },
+    {
+      "id": "DECISION-EXACT-SPORTSBOOK",
+      "category": "execution",
+      "requirement": "Every actionable recommendation must identify the sportsbook offering the evaluated price and support an exact required-book constraint.",
+      "sourceLines": [{ "start": 145, "end": 159 }],
+      "status": "implemented_local",
+      "evidence": [{ "kind": "test", "path": "test/price-discipline.test.js", "claim": "A focused test proves exact required-sportsbook selection." }]
+    },
+    {
+      "id": "DECISION-MINIMUM-PRICE",
+      "category": "execution",
+      "requirement": "Calculate and publish the worst acceptable price that still satisfies price edge, expected value, Kelly, minimum stake, and stake-cap constraints.",
+      "sourceLines": [{ "start": 145, "end": 159 }],
+      "status": "implemented_local",
+      "evidence": [{ "kind": "code", "path": "src/live/price-discipline.js", "claim": "calculateMinimumAcceptablePrice solves strict economic and stake boundaries and fails closed when infeasible." }]
+    },
+    {
+      "id": "DECISION-EDGE-DECAY",
+      "category": "execution",
+      "requirement": "Attach a time-dependent validity boundary to every priced recommendation so the user can see how quickly the captured edge expires.",
+      "sourceLines": [{ "start": 145, "end": 159 }],
+      "status": "implemented_local",
+      "evidence": [{ "kind": "code", "path": "src/live/price-discipline.js", "claim": "Price discipline calculates validUntil from freshness and event-cutoff boundaries." }]
+    },
+    {
+      "id": "DECISION-MARKET-MOVED",
+      "category": "execution",
+      "requirement": "Detect whether the market moved toward or against the selected side after the first observed price.",
+      "sourceLines": [{ "start": 145, "end": 159 }],
+      "status": "implemented_local",
+      "evidence": [{ "kind": "code", "path": "src/live/market-intelligence.js", "claim": "Line-movement history produces STEAM_WITH or STEAM_AGAINST evidence." }]
+    },
+    {
+      "id": "DECISION-PRICE-AVAILABILITY",
+      "category": "execution",
+      "requirement": "Treat an offered price as actionable only while the provider reports it with a valid fresh timestamp and exact market match.",
+      "sourceLines": [{ "start": 145, "end": 159 }],
+      "status": "partial_local",
+      "evidence": [{ "kind": "code", "path": "src/live/best-mlb-targets.js", "claim": "The engine verifies provider capture and freshness at evaluation time, but cannot guarantee the book screen remains unchanged after delivery." }]
+    },
+    {
+      "id": "RISK-JUSTIFIED-STAKE",
+      "category": "capital_and_risk",
+      "requirement": "Calculate a conservative stake from adjusted probability, odds, expected value, Kelly fraction, bankroll, and hard caps.",
+      "sourceLines": [{ "start": 145, "end": 159 }],
+      "status": "implemented_local",
+      "evidence": [{ "kind": "test", "path": "test/index.test.js", "claim": "Core decision tests cover Kelly staking and cap enforcement." }]
+    },
+    {
+      "id": "MODEL-UNCERTAINTY",
+      "category": "independent_probability_engine",
+      "requirement": "Represent uncertainty explicitly and use it to discount or block recommendations rather than presenting a point estimate as certainty.",
+      "sourceLines": [{ "start": 145, "end": 159 }],
+      "status": "implemented_local",
+      "evidence": [{ "kind": "test", "path": "test/probability-uncertainty.test.js", "claim": "Each MLB count candidate carries an observed-count probability interval, and the lower bound controls decision probability with independently checked reference values." }]
+    },
+    {
+      "id": "RISK-CORRELATED-EXPOSURE",
+      "category": "capital_and_risk",
+      "requirement": "Reject a new recommendation when open positions would create excessive correlated exposure.",
+      "sourceLines": [{ "start": 145, "end": 159 }],
+      "status": "implemented_local",
+      "evidence": [{ "kind": "test", "path": "test/portfolio-risk.test.js", "claim": "Portfolio tests reject duplicate and event-correlated exposure over configured caps." }]
+    },
+    {
+      "id": "COMPLIANCE-TRANSPARENT-LEGAL-OPERATION",
+      "category": "compliance",
+      "requirement": "Keep execution transparent, legal, contract-compatible, and suitable for customer and acquisition diligence.",
+      "sourceLines": [{ "start": 133, "end": 162 }],
+      "status": "partial_local",
+      "evidence": [{ "kind": "policy", "path": "docs/superpowers/specs/2026-07-17-bear-edge-elite-audit-design.md", "claim": "The approved non-goals reject automatic wagering, access-control bypass, and unverified odds; legal review remains external." }]
+    },
+    {
+      "id": "DECISION-PRICE-NOT-PICK",
+      "category": "decision_and_risk_engine",
+      "requirement": "Treat the line and price as the product and never emit a naked player or team selection as an actionable bet.",
+      "sourceLines": [{ "start": 163, "end": 186 }],
+      "status": "implemented_local",
+      "evidence": [{ "kind": "code", "path": "src/audit/recommendation-service.js", "claim": "Unpriced targets are forced to WAIT with PRICE_CHECK_ONLY permission." }]
+    },
+    {
+      "id": "DECISION-FAIR-PROBABILITY-DISPLAY",
+      "category": "decision_and_risk_engine",
+      "requirement": "Retain fair probability, market probability, adjusted probability, and edge quantities with the exact price decision.",
+      "sourceLines": [{ "start": 163, "end": 186 }],
+      "status": "implemented_local",
+      "evidence": [{ "kind": "code", "path": "src/audit/record-contract.js", "claim": "Immutable evaluation records preserve probability, price, fair edge, price edge, expected value, and Kelly fields." }]
+    },
+    {
+      "id": "SPECIALIZATION-NARROW-WEDGE",
+      "category": "specialization",
+      "requirement": "Launch with one narrow, provable market family before expanding to additional sports or prop families.",
+      "sourceLines": [{ "start": 187, "end": 221 }],
+      "status": "partial_local",
+      "evidence": [{ "kind": "registry", "path": "models/registry.json", "claim": "Models are scoped by market family, but the research candidate surface still contains more than one sport and market family." }]
+    },
+    {
+      "id": "SPECIALIZATION-CLEANER-DATA",
+      "category": "specialization",
+      "requirement": "Use specialization to obtain cleaner data, stable feature definitions, meaningful samples, and faster diagnostics.",
+      "sourceLines": [{ "start": 187, "end": 221 }],
+      "status": "partial_local",
+      "evidence": [{ "kind": "code", "path": "src/calibration/report.js", "claim": "Calibration and promotion are market-family specific, but sufficient production sample evidence is not yet available." }]
+    },
+    {
+      "id": "SPECIALIZATION-RELIABLE-ODDS",
+      "category": "specialization",
+      "requirement": "Choose a launch market only when reliable live odds are legally available.",
+      "sourceLines": [{ "start": 212, "end": 221 }],
+      "status": "blocked_external",
+      "blocker": "Reliable live odds require a configured licensed provider and current account entitlements.",
+      "evidence": [{ "kind": "provider_gate", "path": "src/config/provider-requirements.js", "claim": "Provider requirements classify verified odds as an external configuration dependency." }]
+    },
+    {
+      "id": "SPECIALIZATION-HISTORICAL-LINES",
+      "category": "specialization",
+      "requirement": "Choose a launch market only when reliable historical opening, movement, and closing lines are available.",
+      "sourceLines": [{ "start": 212, "end": 221 }],
+      "status": "blocked_external",
+      "blocker": "No complete licensed historical line archive is present in the repository.",
+      "evidence": [{ "kind": "release_gate", "path": "docs/PRODUCTION_READINESS.md", "claim": "Historical and closing-line evidence remains a data acquisition gate." }]
+    },
+    {
+      "id": "SPECIALIZATION-PLAYER-AVAILABILITY",
+      "category": "specialization",
+      "requirement": "Choose a player market only when lineups, injuries, roles, and availability can be verified with legally usable data.",
+      "sourceLines": [{ "start": 212, "end": 221 }],
+      "status": "blocked_external",
+      "blocker": "Licensed, timely lineup and injury verification is not configured for all supported events.",
+      "evidence": [{ "kind": "provider_gate", "path": "src/config/provider-requirements.js", "claim": "Lineup, injury, and roster providers are explicit setup requirements." }]
+    },
+    {
+      "id": "SPECIALIZATION-CLOSING-PRICES",
+      "category": "specialization",
+      "requirement": "Choose a launch market only when final closing prices can be captured for evaluation.",
+      "sourceLines": [{ "start": 212, "end": 221 }],
+      "status": "blocked_external",
+      "blocker": "The code validates closing prices, but a continuous external closing-price feed and settled production history are not available.",
+      "evidence": [
+        { "kind": "code", "path": "src/calibration/dataset.js", "claim": "The dataset contract validates final closing price and market-close timestamps when supplied." },
+        { "kind": "code", "path": "src/calibration/ledger-projection.js", "claim": "Authoritative settlements become settled calibration rows only when exact-book final closing evidence and retained source provenance are complete." },
+        { "kind": "test", "path": "test/calibration-ledger-projection.test.js", "claim": "Projection tests prove missing closing provenance remains unresolved and valid amendments control the effective closing line." }
+      ]
+    },
+    {
+      "id": "SPECIALIZATION-SUFFICIENT-EVENTS",
+      "category": "specialization",
+      "requirement": "Require enough events and settled observations to support calibration and promotion before expansion.",
+      "sourceLines": [{ "start": 212, "end": 221 }],
+      "status": "blocked_external",
+      "blocker": "The registered minimum sample thresholds have not been met with real settled out-of-sample records.",
+      "evidence": [{ "kind": "registry", "path": "models/registry.json", "claim": "Promotion policy declares minimum settled observations and bucket counts." }]
+    },
+    {
+      "id": "SPECIALIZATION-LEGALLY-USABLE-DATA",
+      "category": "compliance",
+      "requirement": "Use only data whose license, terms, and acquisition method permit the intended commercial use.",
+      "sourceLines": [{ "start": 212, "end": 224 }],
+      "status": "blocked_external",
+      "blocker": "Commercial licensing and legal sufficiency require provider contracts and counsel review outside this repository.",
+      "evidence": [{ "kind": "provider_gate", "path": "docs/API_PROVIDER_REQUIREMENTS.md", "claim": "Provider documentation separates configured APIs from sources that are not verified commercial feeds." }]
+    },
+    {
+      "id": "MARKET-STRONG-NOT-PERFECT-PRIOR",
+      "category": "market_consensus_engine",
+      "requirement": "Treat the sportsbook market as a strong ensemble prior and require strong evidence before overruling it.",
+      "sourceLines": [{ "start": 225, "end": 249 }],
+      "status": "implemented_local",
+      "evidence": [{ "kind": "code", "path": "src/index.js", "claim": "Model probability is shrunk toward the no-vig market probability before edge is calculated." }]
+    },
+    {
+      "id": "MODEL-INDEPENDENT-PROBABILITY",
+      "category": "independent_probability_engine",
+      "requirement": "Produce an independent sport-specific model probability before market blending.",
+      "sourceLines": [{ "start": 249, "end": 257 }],
+      "status": "implemented_local",
+      "evidence": [{ "kind": "code", "path": "src/live/candidates.js", "claim": "Candidate construction estimates model probability from sport-specific official context before odds matching." }]
+    },
+    {
+      "id": "MODEL-DEVIGGED-MARKET-PROBABILITY",
+      "category": "market_consensus_engine",
+      "requirement": "Retain a de-vigged market probability separately from raw implied probability.",
+      "sourceLines": [{ "start": 249, "end": 257 }],
+      "status": "implemented_local",
+      "evidence": [{ "kind": "code", "path": "src/audit/record-contract.js", "claim": "Evaluation records preserve marketImpliedProbability and marketNoVigProbability separately." }]
+    },
+    {
+      "id": "MODEL-SHARP-CONSENSUS",
+      "category": "market_consensus_engine",
+      "requirement": "Identify informative or sharp books and retain how their observations affect consensus confidence.",
+      "sourceLines": [{ "start": 249, "end": 257 }],
+      "status": "partial_local",
+      "evidence": [{ "kind": "code", "path": "src/live/market-intelligence.js", "claim": "Sharp-book flags and multipliers exist, but historical information-quality learning is not yet production-trained." }]
+    },
+    {
+      "id": "MODEL-HISTORICAL-RELIABILITY",
+      "category": "learning_system",
+      "requirement": "Use market-family-specific historical reliability and calibration evidence to govern model authority.",
+      "sourceLines": [{ "start": 249, "end": 257 }],
+      "status": "implemented_local",
+      "evidence": [{ "kind": "code", "path": "src/calibration/model-evidence.js", "claim": "Decision authority resolves immutable registry and calibration-report evidence for the candidate market family." }]
+    },
+    {
+      "id": "MODEL-SHRINKAGE",
+      "category": "independent_probability_engine",
+      "requirement": "Shrink weak or uncertain forecasts toward market consensus and allow greater independence only after market-specific reliability is demonstrated.",
+      "sourceLines": [{ "start": 249, "end": 262 }],
+      "status": "implemented_local",
+      "evidence": [{ "kind": "code", "path": "src/live/market-intelligence.js", "claim": "Market confidence adjusts blend weight and conservative market-specific penalties." }]
+    },
+    {
+      "id": "MODEL-CALIBRATION",
+      "category": "learning_system",
+      "requirement": "Calibrate probabilities with chronological out-of-sample evidence and block production authority until registered thresholds are satisfied.",
+      "sourceLines": [{ "start": 249, "end": 262 }],
+      "status": "implemented_local",
+      "evidence": [{ "kind": "test", "path": "test/calibration-report.test.js", "claim": "Calibration tests cover chronological evidence, metrics, uncertainty intervals, and promotion thresholds." }]
+    },
+    {
+      "id": "INFORMATION-INJURY-WINDOW",
+      "category": "information_speed",
+      "requirement": "Re-evaluate affected markets after injury information changes and before relying on any previously captured edge.",
+      "sourceLines": [{ "start": 263, "end": 276 }],
+      "status": "partial_local",
+      "evidence": [{ "kind": "code", "path": "src/live/price-discipline.js", "claim": "Injury change is an invalidation condition, but a licensed push feed is required for continuous automatic detection." }]
+    },
+    {
+      "id": "INFORMATION-LINEUP-WINDOW",
+      "category": "information_speed",
+      "requirement": "Re-evaluate affected markets when a lineup is released or changes.",
+      "sourceLines": [{ "start": 263, "end": 276 }],
+      "status": "partial_local",
+      "evidence": [{ "kind": "code", "path": "src/live/price-discipline.js", "claim": "Lineup change is an explicit invalidation condition, but automated detection depends on an external verified lineup feed." }]
+    },
+    {
+      "id": "INFORMATION-WEATHER-WINDOW",
+      "category": "information_speed",
+      "requirement": "Re-evaluate weather-sensitive markets when material weather conditions change.",
+      "sourceLines": [{ "start": 263, "end": 276 }],
+      "status": "blocked_external",
+      "blocker": "A verified event-linked weather provider is not configured for continuous decision invalidation.",
+      "evidence": [{ "kind": "provider_gate", "path": "src/config/provider-requirements.js", "claim": "Weather context is an explicit provider requirement." }]
+    },
+    {
+      "id": "INFORMATION-SHARP-MOVE-WINDOW",
+      "category": "information_speed",
+      "requirement": "Detect and record when an informative market moves before slower books or derivative markets.",
+      "sourceLines": [{ "start": 263, "end": 276 }],
+      "status": "partial_local",
+      "evidence": [{ "kind": "code", "path": "src/live/market-intelligence.js", "claim": "Line movement and sharp-book participation are recorded; cross-market lead-lag learning needs historical provider data." }]
+    },
+    {
+      "id": "DECISION-EXPLICIT-EXPIRY",
+      "category": "execution",
+      "requirement": "Every priced recommendation must expose an explicit expiration timestamp and the condition that controls it.",
+      "sourceLines": [{ "start": 277, "end": 290 }],
+      "status": "implemented_local",
+      "evidence": [{ "kind": "test", "path": "test/price-discipline.test.js", "claim": "The price-discipline test proves expiration at the earliest freshness or event-time boundary." }]
+    },
+    {
+      "id": "EXPIRY-PRICE-BELOW-MINIMUM",
+      "category": "execution",
+      "requirement": "Invalidate the recommendation when the available price becomes worse than the calculated minimum acceptable price.",
+      "sourceLines": [{ "start": 277, "end": 290 }],
+      "status": "implemented_local",
+      "evidence": [{ "kind": "code", "path": "src/live/price-discipline.js", "claim": "A below_minimum status blocks the recommendation when current odds fail the price floor." }]
+    },
+    {
+      "id": "EXPIRY-LINEUP-CHANGE",
+      "category": "execution",
+      "requirement": "Invalidate the recommendation after a material lineup change.",
+      "sourceLines": [{ "start": 277, "end": 290 }],
+      "status": "partial_local",
+      "evidence": [{ "kind": "code", "path": "src/live/price-discipline.js", "claim": "The invalidation vocabulary includes lineup_changed; live trigger wiring depends on a verified lineup stream." }]
+    },
+    {
+      "id": "EXPIRY-INJURY-CHANGE",
+      "category": "execution",
+      "requirement": "Invalidate the recommendation after a material injury-status change.",
+      "sourceLines": [{ "start": 277, "end": 290 }],
+      "status": "partial_local",
+      "evidence": [{ "kind": "code", "path": "src/live/price-discipline.js", "claim": "The invalidation vocabulary includes injury_status_changed; live trigger wiring depends on a verified injury stream." }]
+    },
+    {
+      "id": "EXPIRY-STALE-MARKET",
+      "category": "execution",
+      "requirement": "Invalidate the recommendation when the offered market or its supporting consensus exceeds freshness limits.",
+      "sourceLines": [{ "start": 277, "end": 290 }],
+      "status": "implemented_local",
+      "evidence": [{ "kind": "code", "path": "src/live/market-intelligence.js", "claim": "Stale offered and consensus timestamps create risk flags and cannot support an active BET." }]
+    },
+    {
+      "id": "EXPIRY-EVENT-CUTOFF",
+      "category": "execution",
+      "requirement": "Expire recommendations before the event enters a configured prohibited pre-start or live window.",
+      "sourceLines": [{ "start": 277, "end": 290 }],
+      "status": "implemented_local",
+      "evidence": [{ "kind": "code", "path": "src/live/price-discipline.js", "claim": "eventStartAt minus prohibitedWindowMinutes is an explicit validity boundary." }]
+    },
+    {
+      "id": "EXPIRY-DATA-FRESHNESS",
+      "category": "execution",
+      "requirement": "Invalidate a recommendation when required source data exceeds its registered freshness limit or loses verification.",
+      "sourceLines": [{ "start": 277, "end": 293 }],
+      "status": "partial_local",
+      "evidence": [{ "kind": "code", "path": "src/live/live-data-health.js", "claim": "Provider freshness is measured, while recommendation-specific automatic invalidation across every upstream source is not fully wired." }]
+    },
+    {
+      "id": "DECISION-BEST-PRICE",
+      "category": "execution",
+      "requirement": "Select the best fresh available number across returned sportsbooks rather than the first or preferred book by default.",
+      "sourceLines": [{ "start": 294, "end": 315 }],
+      "status": "implemented_local",
+      "evidence": [{ "kind": "test", "path": "test/price-discipline.test.js", "claim": "The focused test proves that the highest fresh American price is selected." }]
+    },
+    {
+      "id": "DECISION-MAXIMUM-LINE",
+      "category": "execution",
+      "requirement": "For spread and total markets, define the maximum acceptable line in addition to the minimum acceptable price.",
+      "sourceLines": [{ "start": 294, "end": 315 }],
+      "status": "partial_local",
+      "evidence": [{ "kind": "code", "path": "src/live/price-discipline.js", "claim": "Line change is an invalidation condition, but a general maximum spread or total tolerance is not yet calculated for all market types." }]
+    },
+    {
+      "id": "EXECUTION-EDGE-DISAPPEARANCE-NOTIFICATION",
+      "category": "execution",
+      "requirement": "Generate an operator or customer notification when an active edge disappears because price, line, or evidence changes.",
+      "sourceLines": [{ "start": 294, "end": 318 }],
+      "status": "partial_local",
+      "evidence": [{ "kind": "code", "path": "src/live/auto-update.js", "claim": "Automatic refresh snapshots exist, but durable per-recommendation disappearance notifications are not yet delivered." }]
+    },
+    {
+      "id": "DECISION-PASS-WAIT-BET",
+      "category": "decision_and_risk_engine",
+      "requirement": "Use deterministic PASS, WAIT, and BET outcomes and accept that most evaluated markets should not become bets.",
+      "sourceLines": [{ "start": 319, "end": 330 }],
+      "status": "implemented_local",
+      "evidence": [{ "kind": "code", "path": "src/index.js", "claim": "Canonical deterministic verdict logic emits only PASS, WAIT, or BET." }]
+    },
+    {
+      "id": "GATE-INSUFFICIENT-EDGE",
+      "category": "selectivity_gate",
+      "requirement": "Issue PASS when registered fair-edge or price-edge thresholds are not cleared.",
+      "sourceLines": [{ "start": 331, "end": 346 }],
+      "status": "implemented_local",
+      "evidence": [{ "kind": "code", "path": "src/live/best-mlb-targets.js", "claim": "Fair-edge and price-edge gates emit explicit reasons and risk flags." }]
+    },
+    {
+      "id": "GATE-EXCESSIVE-UNCERTAINTY",
+      "category": "selectivity_gate",
+      "requirement": "Issue WAIT or PASS when predictive or market uncertainty exceeds registered limits.",
+      "sourceLines": [{ "start": 331, "end": 346 }],
+      "status": "implemented_local",
+      "evidence": [{ "kind": "code", "path": "src/live/best-mlb-targets.js", "claim": "Observed predictive intervals and market dispersion have registered limits; missing or excessive uncertainty forces WAIT." }]
+    },
+    {
+      "id": "GATE-STALE-PRICE",
+      "category": "selectivity_gate",
+      "requirement": "Issue WAIT when the offered price is stale, missing a timestamp, invalid, or future-dated.",
+      "sourceLines": [{ "start": 331, "end": 346 }],
+      "status": "implemented_local",
+      "evidence": [{ "kind": "code", "path": "src/live/market-intelligence.js", "claim": "Timestamp status produces high-severity freshness risk flags." }]
+    },
+    {
+      "id": "GATE-MISSING-COUNTERPART",
+      "category": "selectivity_gate",
+      "requirement": "Block full market authority when the opposite side needed to remove vig is absent.",
+      "sourceLines": [{ "start": 331, "end": 346 }],
+      "status": "implemented_local",
+      "evidence": [{ "kind": "code", "path": "src/index.js", "claim": "The core decision path requires two-way odds for no-vig evaluation." }]
+    },
+    {
+      "id": "GATE-UNRESOLVED-INJURY",
+      "category": "selectivity_gate",
+      "requirement": "Issue WAIT when relevant injury evidence is stale, unresolved, contradictory, or missing.",
+      "sourceLines": [{ "start": 331, "end": 346 }],
+      "status": "partial_local",
+      "evidence": [{ "kind": "code", "path": "src/index.js", "claim": "The decision engine contains stale-injury gates, but complete coverage depends on a licensed injury provider." }]
+    },
+    {
+      "id": "GATE-UNCLEAR-LINEUP",
+      "category": "selectivity_gate",
+      "requirement": "Issue WAIT when a lineup-sensitive market lacks verified lineup confirmation.",
+      "sourceLines": [{ "start": 331, "end": 346 }],
+      "status": "partial_local",
+      "evidence": [{ "kind": "provider_gate", "path": "src/config/provider-requirements.js", "claim": "Lineup verification is tracked as a required external source rather than inferred from screenshots." }]
+    },
+    {
+      "id": "GATE-INSUFFICIENT-MODEL-SAMPLE",
+      "category": "selectivity_gate",
+      "requirement": "Prevent BET authority when market-family sample size or probability-bucket support is below registered minimums.",
+      "sourceLines": [{ "start": 331, "end": 346 }],
+      "status": "implemented_local",
+      "evidence": [{ "kind": "registry", "path": "models/registry.json", "claim": "Promotion policy registers minimum settled observations and bucket support." }]
+    },
+    {
+      "id": "GATE-CALIBRATION-FAILURE",
+      "category": "selectivity_gate",
+      "requirement": "Prevent a research-only or calibration-failing model from authorizing a BET verdict.",
+      "sourceLines": [{ "start": 331, "end": 346 }],
+      "status": "implemented_local",
+      "evidence": [{ "kind": "test", "path": "test/api.test.js", "claim": "API tests prove caller-forged calibration authority is rejected and research models remain WAIT." }]
+    },
+    {
+      "id": "GATE-EXCESSIVE-MARKET-MOVEMENT",
+      "category": "selectivity_gate",
+      "requirement": "Block or discount a recommendation after material adverse market movement.",
+      "sourceLines": [{ "start": 331, "end": 346 }],
+      "status": "implemented_local",
+      "evidence": [{ "kind": "code", "path": "src/live/market-intelligence.js", "claim": "Adverse movement produces STEAM_AGAINST evidence considered by the risk path." }]
+    },
+    {
+      "id": "GATE-CORRELATED-EXPOSURE",
+      "category": "selectivity_gate",
+      "requirement": "Block a recommendation when projected event, participant, market-family, or correlation exposure exceeds policy.",
+      "sourceLines": [{ "start": 331, "end": 346 }],
+      "status": "implemented_local",
+      "evidence": [{ "kind": "code", "path": "src/risk/portfolio-risk.js", "claim": "Portfolio policy evaluates event, participant, market-family, and correlation caps." }]
+    },
+    {
+      "id": "GATE-UNRELIABLE-PROVIDER",
+      "category": "selectivity_gate",
+      "requirement": "Block verified betting authority when a required provider is missing, stale, degraded, or unverified.",
+      "sourceLines": [{ "start": 331, "end": 346 }],
+      "status": "implemented_local",
+      "evidence": [{ "kind": "code", "path": "src/live/source-status.js", "claim": "Provider status distinguishes okay, degraded, and blocked sources and preserves warnings." }]
+    },
+    {
+      "id": "GATE-CONTRADICTORY-EVIDENCE",
+      "category": "selectivity_gate",
+      "requirement": "Issue WAIT when material evidence sources disagree beyond registered tolerance.",
+      "sourceLines": [{ "start": 331, "end": 346 }],
+      "status": "implemented_local",
+      "evidence": [{ "kind": "code", "path": "src/live/market-intelligence.js", "claim": "Excessive consensus dispersion creates a high-severity MARKET_DISAGREEMENT flag." }]
+    },
+    {
+      "id": "GATE-SUSPICIOUS-OUTLIER",
+      "category": "selectivity_gate",
+      "requirement": "Review rather than blindly bet an outlier price when sharp confirmation, timestamp quality, or counterpart evidence is inadequate.",
+      "sourceLines": [{ "start": 331, "end": 346 }],
+      "status": "implemented_local",
+      "evidence": [{ "kind": "code", "path": "src/live/market-intelligence.js", "claim": "The engine discounts unconfirmed longshots and flags unverified, stale, high-hold, or disputed market evidence." }]
+    },
+    {
+      "id": "RISK-DAILY-CAP",
+      "category": "capital_and_risk",
+      "requirement": "Reject a recommendation when projected total stake for the risk date exceeds the configured bankroll fraction.",
+      "sourceLines": [{ "start": 331, "end": 351 }],
+      "status": "implemented_local",
+      "evidence": [{ "kind": "test", "path": "test/portfolio-risk.test.js", "claim": "A focused test proves rejection when projected daily exposure exceeds the cap." }]
+    },
+    {
+      "id": "LEARNING-CONTINUOUS-FEEDBACK",
+      "category": "learning_system",
+      "requirement": "Operate a continuous feedback loop because fixed market inefficiencies and fixed algorithms decay.",
+      "sourceLines": [{ "start": 352, "end": 377 }],
+      "status": "partial_local",
+      "evidence": [
+        { "kind": "code", "path": "src/calibration/report.js", "claim": "Repeatable calibration reports exist, but scheduled model retraining and promotion remain operator-controlled." },
+        { "kind": "operator", "path": "script/build_calibration_readiness.js", "claim": "The operator can deterministically project the authoritative ledger, audit every exclusion and blocker, and emit report-ready JSON Lines without automatic promotion." }
+      ]
+    },
+    {
+      "id": "LEARNING-CLOSING-LINE-VALUE",
+      "category": "learning_system",
+      "requirement": "Measure closing-line value for settled predictions and retain uncertainty around the mean value.",
+      "sourceLines": [{ "start": 366, "end": 375 }],
+      "status": "implemented_local",
+      "evidence": [{ "kind": "code", "path": "src/calibration/report.js", "claim": "Reports calculate closing-line value and a registered percentile bootstrap interval." }]
+    },
+    {
+      "id": "LEARNING-MODEL-DRIFT",
+      "category": "learning_system",
+      "requirement": "Detect which models are degrading and prevent stale historical performance from preserving production authority indefinitely.",
+      "sourceLines": [{ "start": 366, "end": 375 }],
+      "status": "partial_local",
+      "evidence": [{ "kind": "registry", "path": "models/registry.json", "claim": "Versioned model status and report evidence exist, but automated drift alarms over rolling production windows are not yet implemented." }]
+    },
+    {
+      "id": "LEARNING-MARKET-SEGMENTS",
+      "category": "learning_system",
+      "requirement": "Measure calibration and performance by line range, participant role, context, season, league, and market segment.",
+      "sourceLines": [{ "start": 366, "end": 375 }],
+      "status": "partial_local",
+      "evidence": [{ "kind": "code", "path": "src/calibration/report.js", "claim": "Reports include line-range and configured segment breakdowns; production role and season coverage depend on supplied data." }]
+    },
+    {
+      "id": "LEARNING-BOOK-MOVE-SPEED",
+      "category": "learning_system",
+      "requirement": "Learn which sportsbooks move first and use that history to improve consensus weighting.",
+      "sourceLines": [{ "start": 366, "end": 375 }],
+      "status": "blocked_external",
+      "blocker": "Minute-level multi-book historical movement data has not been supplied.",
+      "evidence": [{ "kind": "code", "path": "src/live/market-intelligence.js", "claim": "The line-movement schema can consume history, but there is no licensed long-horizon movement corpus in the repository." }]
+    },
+    {
+      "id": "LEARNING-FEATURE-DECAY",
+      "category": "learning_system",
+      "requirement": "Measure whether registered features stop improving out-of-sample performance and retire or revise degraded model versions.",
+      "sourceLines": [{ "start": 366, "end": 375 }],
+      "status": "partial_local",
+      "evidence": [{ "kind": "registry", "path": "models/registry.json", "claim": "Feature descriptions and immutable model versions are registered, but automated feature-ablation monitoring is not yet implemented." }]
+    },
+    {
+      "id": "LEARNING-OVERCONFIDENCE",
+      "category": "learning_system",
+      "requirement": "Measure and penalize model overconfidence using calibration error, slope, intercept, and reliability buckets.",
+      "sourceLines": [{ "start": 366, "end": 375 }],
+      "status": "implemented_local",
+      "evidence": [{ "kind": "code", "path": "src/calibration/metrics.js", "claim": "The metric library calculates expected calibration error, calibration slope and intercept, and reliability buckets." }]
+    },
+    {
+      "id": "LEARNING-VOLUME-EROSION",
+      "category": "learning_system",
+      "requirement": "Evaluate whether measured advantage erodes as recommendation volume or market participation grows.",
+      "sourceLines": [{ "start": 366, "end": 380 }],
+      "status": "blocked_external",
+      "blocker": "This requires a sufficiently long production history linking recommendation volume, limits, execution, and closing prices.",
+      "evidence": [{ "kind": "release_gate", "path": "docs/PRODUCTION_READINESS.md", "claim": "The current product does not claim production predictive superiority without sufficient settled history." }]
+    },
+    {
+      "id": "DATA-CONSISTENT-NAMING",
+      "category": "data_engineering",
+      "requirement": "Normalize teams, players, markets, sides, and books to stable identities instead of relying on display text alone.",
+      "sourceLines": [{ "start": 381, "end": 399 }],
+      "status": "implemented_local",
+      "evidence": [{ "kind": "code", "path": "src/audit/record-contract.js", "claim": "Canonical records preserve stable event, participant, market-family, side, and sportsbook identity fields." }]
+    },
+    {
+      "id": "DATA-HISTORICAL-ODDS",
+      "category": "data_engineering",
+      "requirement": "Retain historical opening, intermediate, offered, and closing odds with source timestamps.",
+      "sourceLines": [{ "start": 381, "end": 399 }],
+      "status": "partial_local",
+      "evidence": [
+        { "kind": "code", "path": "src/calibration/dataset.js", "claim": "The dataset contract retains offered and closing prices, but a complete historical provider archive is externally blocked." },
+        { "kind": "code", "path": "src/audit/record-contract.js", "claim": "Settlement records can retain exact sportsbook, capture time, market-close time, finality, source locator, and source digest for a closing line." }
+      ]
+    },
+    {
+      "id": "DATA-EVENT-MATCHING",
+      "category": "data_engineering",
+      "requirement": "Match sportsbook observations to the exact event before attaching any market price.",
+      "sourceLines": [{ "start": 381, "end": 399 }],
+      "status": "implemented_local",
+      "evidence": [{ "kind": "code", "path": "src/live/best-mlb-targets.js", "claim": "Candidate pricing requires same-game matching before event-level market matching." }]
+    },
+    {
+      "id": "DATA-PLAYER-IDENTITY",
+      "category": "data_engineering",
+      "requirement": "Resolve player identity deterministically and retain the provider participant identifier.",
+      "sourceLines": [{ "start": 381, "end": 399 }],
+      "status": "implemented_local",
+      "evidence": [{ "kind": "code", "path": "src/audit/recommendation-service.js", "claim": "Displayed-target records resolve and preserve participant identifiers separately from names." }]
+    },
+    {
+      "id": "DATA-SOURCE-TIMESTAMPS",
+      "category": "data_engineering",
+      "requirement": "Retain capture time and source time for every decision-relevant observation.",
+      "sourceLines": [{ "start": 381, "end": 399 }],
+      "status": "implemented_local",
+      "evidence": [{ "kind": "code", "path": "src/audit/record-contract.js", "claim": "Source envelopes require capturedAt and sourceTime fields." }]
+    },
+    {
+      "id": "DATA-CORRECTIONS",
+      "category": "data_engineering",
+      "requirement": "Represent corrections as immutable amendments rather than silently rewriting prior decisions.",
+      "sourceLines": [{ "start": 381, "end": 399 }],
+      "status": "implemented_local",
+      "evidence": [{ "kind": "test", "path": "test/analytics.test.js", "claim": "Analytics tests reconstruct amended state from append-only records." }]
+    },
+    {
+      "id": "DATA-MISSING-DATA-HANDLING",
+      "category": "data_engineering",
+      "requirement": "Fail closed or classify missing data explicitly instead of silently imputing decision authority.",
+      "sourceLines": [{ "start": 381, "end": 399 }],
+      "status": "implemented_local",
+      "evidence": [
+        { "kind": "code", "path": "src/calibration/dataset.js", "claim": "Dataset and decision validation report missing required fields and block invalid rows." },
+        { "kind": "code", "path": "src/calibration/ledger-projection.js", "claim": "Legacy, malformed, incomplete, non-binary, and missing-closing-line evidence is explicitly excluded or blocked without inferred values." }
+      ]
+    },
+    {
+      "id": "DATA-MODEL-VERSION-CONTROL",
+      "category": "data_engineering",
+      "requirement": "Retain stable immutable model identifiers, versions, training cutoffs, and calculation policy evidence.",
+      "sourceLines": [{ "start": 381, "end": 399 }],
+      "status": "implemented_local",
+      "evidence": [{ "kind": "registry", "path": "models/registry.json", "claim": "The model registry stores model identity, version, market family, feature set, training cutoff, and status." }]
+    },
+    {
+      "id": "DATA-RESULT-SETTLEMENT",
+      "category": "data_engineering",
+      "requirement": "Attach immutable settlement outcomes to prior evaluations and reject orphan settlement references.",
+      "sourceLines": [{ "start": 381, "end": 400 }],
+      "status": "implemented_local",
+      "evidence": [
+        { "kind": "test", "path": "test/api.test.js", "claim": "API tests prove settlement persistence, final closing-line provenance retention, and orphan-reference rejection." },
+        { "kind": "test", "path": "test/calibration-ledger-projection.test.js", "claim": "Projection tests prove immutable settlement amendments are applied in sequence and incomplete closing evidence cannot become a settled calibration outcome." }
+      ]
+    },
+    {
+      "id": "QUANT-EXPECTED-VALUE",
+      "category": "quantitative_discipline",
+      "requirement": "Calculate expected value from probability and exact offered price for every priced decision.",
+      "sourceLines": [{ "start": 401, "end": 415 }],
+      "status": "implemented_local",
+      "evidence": [{ "kind": "code", "path": "src/index.js", "claim": "calculateExpectedValue returns expected profit and return on stake." }]
+    },
+    {
+      "id": "QUANT-PRICE-SENSITIVITY",
+      "category": "quantitative_discipline",
+      "requirement": "Evaluate how a decision changes as price changes and expose a strict minimum acceptable price.",
+      "sourceLines": [{ "start": 401, "end": 415 }],
+      "status": "implemented_local",
+      "evidence": [{ "kind": "code", "path": "src/live/price-discipline.js", "claim": "The price boundary solves expected-value and Kelly constraints as functions of odds." }]
+    },
+    {
+      "id": "QUANT-SAMPLE-SIZE",
+      "category": "quantitative_discipline",
+      "requirement": "Retain sample size and prevent unsupported small samples from receiving production authority.",
+      "sourceLines": [{ "start": 401, "end": 415 }],
+      "status": "implemented_local",
+      "evidence": [{ "kind": "registry", "path": "models/registry.json", "claim": "Promotion rules require minimum settled counts and bucket support." }]
+    },
+    {
+      "id": "QUANT-BANKROLL-RISK",
+      "category": "capital_and_risk",
+      "requirement": "Apply conservative bankroll fractions, stake caps, minimum stakes, and Kelly multipliers.",
+      "sourceLines": [{ "start": 401, "end": 415 }],
+      "status": "implemented_local",
+      "evidence": [{ "kind": "code", "path": "src/index.js", "claim": "applyStakeCaps enforces bankroll and absolute stake limits." }]
+    },
+    {
+      "id": "QUANT-CORRELATION",
+      "category": "capital_and_risk",
+      "requirement": "Measure and cap correlated risk rather than summing positions as independent exposures.",
+      "sourceLines": [{ "start": 401, "end": 415 }],
+      "status": "implemented_local",
+      "evidence": [{ "kind": "code", "path": "src/risk/portfolio-risk.js", "claim": "Correlation keys and configured exposure caps are evaluated before a BET can pass." }]
+    },
+    {
+      "id": "QUANT-DRAWDOWN",
+      "category": "capital_and_risk",
+      "requirement": "Track drawdown and use registered loss-control policy rather than chasing losses.",
+      "sourceLines": [{ "start": 401, "end": 415 }],
+      "status": "implemented_local",
+      "evidence": [{ "kind": "test", "path": "test/drawdown-risk.test.js", "claim": "The authoritative settlement and amendment history drives high-water-mark drawdown, loss-streak stake reduction, and hard exposure stops." }]
+    },
+    {
+      "id": "ORGANIZATION-DOMAIN-SPECIALISTS",
+      "category": "organization",
+      "requirement": "Combine quantitative modelers, data engineers, sport analysts, market analysts, execution specialists, and risk management rather than relying on one discipline.",
+      "sourceLines": [{ "start": 416, "end": 428 }],
+      "status": "blocked_external",
+      "blocker": "Human staffing, role separation, and operating procedures cannot be established by repository code alone.",
+      "evidence": [{ "kind": "source", "path": "$SOURCE", "claim": "The attachment defines the required cross-functional operating structure." }]
+    },
+    {
+      "id": "CAPITAL-CONSERVATIVE-SIZING",
+      "category": "capital_and_risk",
+      "requirement": "Size positions conservatively so small estimated edges can survive variance.",
+      "sourceLines": [{ "start": 429, "end": 440 }],
+      "status": "implemented_local",
+      "evidence": [{ "kind": "code", "path": "src/index.js", "claim": "Fractional Kelly and hard bankroll caps reduce model stake recommendations." }]
+    },
+    {
+      "id": "CAPITAL-DIVERSIFICATION",
+      "category": "capital_and_risk",
+      "requirement": "Diversify exposure across events, participants, market families, and correlation groups within registered caps.",
+      "sourceLines": [{ "start": 429, "end": 440 }],
+      "status": "implemented_local",
+      "evidence": [{ "kind": "code", "path": "src/risk/portfolio-risk.js", "claim": "Portfolio risk retains and caps four distinct exposure dimensions." }]
+    },
+    {
+      "id": "CAPITAL-NO-CHASING-LOSSES",
+      "category": "capital_and_risk",
+      "requirement": "Never increase risk merely to recover prior losses or override a tilt lock.",
+      "sourceLines": [{ "start": 429, "end": 440 }],
+      "status": "implemented_local",
+      "evidence": [{ "kind": "code", "path": "src/index.js", "claim": "TILT_LOCK is a hard PASS gate." }]
+    },
+    {
+      "id": "CAPITAL-SUFFICIENT-RESERVES",
+      "category": "capital_and_risk",
+      "requirement": "Maintain sufficient capital and liquidity to survive variance without weakening risk policy.",
+      "sourceLines": [{ "start": 429, "end": 440 }],
+      "status": "blocked_external",
+      "blocker": "Actual capitalization, liquidity, and customer suitability are operator and financial governance responsibilities outside source code.",
+      "evidence": [{ "kind": "source", "path": "$SOURCE", "claim": "The source identifies capital sufficiency as an operating requirement." }]
+    },
+    {
+      "id": "CAPITAL-JUDGE-LONG-SAMPLES",
+      "category": "learning_system",
+      "requirement": "Judge process over long registered out-of-sample histories rather than short winning or losing streaks.",
+      "sourceLines": [{ "start": 429, "end": 440 }],
+      "status": "implemented_local",
+      "evidence": [{ "kind": "registry", "path": "models/registry.json", "claim": "Promotion thresholds require large settled samples and cannot be satisfied by a three-win streak." }]
+    },
+    {
+      "id": "EXECUTION-RAPID-REFRESH",
+      "category": "execution",
+      "requirement": "Refresh source, market, candidate, and decision health rapidly enough to avoid presenting known-stale opportunities.",
+      "sourceLines": [{ "start": 441, "end": 455 }],
+      "status": "implemented_local",
+      "evidence": [{ "kind": "code", "path": "src/live/auto-update.js", "claim": "The auto-update service refreshes provider, game, candidate, and decision-log snapshots." }]
+    },
+    {
+      "id": "EXECUTION-AUTOMATIC-MARKET-MATCHING",
+      "category": "execution",
+      "requirement": "Automatically match event, participant, market family, side, line, and sportsbook before evaluating an offer.",
+      "sourceLines": [{ "start": 441, "end": 455 }],
+      "status": "implemented_local",
+      "evidence": [{ "kind": "code", "path": "src/live/best-mlb-targets.js", "claim": "Best-target pricing performs event and exact outcome matching before serialization." }]
+    },
+    {
+      "id": "EXECUTION-IMMEDIATE-ALERTING",
+      "category": "execution",
+      "requirement": "Deliver immediate, unambiguous alerts containing exact line, price, sportsbook, minimum price, timestamp, and expiry.",
+      "sourceLines": [{ "start": 441, "end": 455 }],
+      "status": "partial_local",
+      "evidence": [{ "kind": "code", "path": "src/dashboard/app.js", "claim": "The dashboard can display refreshed recommendations, but push notification delivery is not implemented." }]
+    },
+    {
+      "id": "EXECUTION-CLEAR-MINIMUM-PRICES",
+      "category": "execution",
+      "requirement": "Make the calculated minimum acceptable price clear and machine-readable in recommendation and audit output.",
+      "sourceLines": [{ "start": 441, "end": 455 }],
+      "status": "implemented_local",
+      "evidence": [{ "kind": "test", "path": "test/api.test.js", "claim": "API tests require a priceDiscipline object with minimumAcceptableAmericanOdds and validUntil." }]
+    },
+    {
+      "id": "EXECUTION-FAST-CUSTOMER-DELIVERY",
+      "category": "execution",
+      "requirement": "Provide a usable local and private-LAN delivery path without making remote services mandatory.",
+      "sourceLines": [{ "start": 441, "end": 455 }],
+      "status": "implemented_local",
+      "evidence": [{ "kind": "runtime", "path": "Open Bear Edge On Phone.command", "claim": "The repository contains the private-LAN launch path for phone access." }]
+    },
+    {
+      "id": "EXECUTION-AUTOMATIC-WITHDRAWAL",
+      "category": "execution",
+      "requirement": "Automatically withdraw or mark inactive any recommendation whose price, line, source evidence, lineup, injury, or time validity is no longer acceptable.",
+      "sourceLines": [{ "start": 441, "end": 455 }],
+      "status": "partial_local",
+      "evidence": [{ "kind": "code", "path": "src/live/price-discipline.js", "claim": "Machine-readable invalidation conditions and expiry status exist, but a durable lifecycle worker has not yet withdrawn previously delivered records." }]
+    },
+    {
+      "id": "COPY-INDEPENDENT-PROBABILITIES",
+      "category": "approved_practice",
+      "requirement": "Retain independent fair probabilities as a distinct input rather than replacing them with sportsbook consensus.",
+      "sourceLines": [{ "start": 456, "end": 472 }],
+      "status": "implemented_local",
+      "evidence": [{ "kind": "code", "path": "src/live/candidates.js", "claim": "Independent modelProbability and fairAmericanOdds are emitted before pricing." }]
+    },
+    {
+      "id": "COPY-MARKET-PRIOR",
+      "category": "approved_practice",
+      "requirement": "Use market consensus as an intelligent prior without pretending the market is infallible.",
+      "sourceLines": [{ "start": 456, "end": 471 }],
+      "status": "implemented_local",
+      "evidence": [{ "kind": "code", "path": "src/live/market-intelligence.js", "claim": "Market confidence controls blend weight while independent probability remains present." }]
+    },
+    {
+      "id": "COPY-IMMUTABLE-TIMESTAMPS",
+      "category": "approved_practice",
+      "requirement": "Timestamp and content-digest every decision so later evidence cannot be inserted retrospectively without detection.",
+      "sourceLines": [{ "start": 456, "end": 471 }],
+      "status": "implemented_local",
+      "evidence": [{ "kind": "test", "path": "test/authoritative-ledger.test.js", "claim": "Ledger tests cover immutable records, digest conflicts, duplicate identifiers, and append behavior." }]
+    },
+    {
+      "id": "DATA-IMMUTABLE-RECORDS",
+      "category": "approved_practice",
+      "requirement": "Persist every displayed evaluation in the authoritative append-only ledger before returning it to a user-facing workflow.",
+      "sourceLines": [{ "start": 456, "end": 471 }],
+      "status": "implemented_local",
+      "evidence": [{ "kind": "test", "path": "test/api.test.js", "claim": "The best-target endpoint returns no recommendation when authoritative persistence fails." }]
+    },
+    {
+      "id": "COPY-CONSERVATIVE-STAKING",
+      "category": "approved_practice",
+      "requirement": "Use conservative fractional Kelly and portfolio caps rather than full-Kelly or conviction-based manual sizing.",
+      "sourceLines": [{ "start": 456, "end": 471 }],
+      "status": "implemented_local",
+      "evidence": [{ "kind": "code", "path": "src/index.js", "claim": "Fractional Kelly multipliers and stake caps are part of deterministic policy." }]
+    },
+    {
+      "id": "PROHIBIT-AUTOMATIC-WAGERING",
+      "category": "prohibited_practice",
+      "requirement": "Do not place wagers automatically; the product is decision support and requires human execution.",
+      "sourceLines": [{ "start": 133, "end": 162 }, { "start": 473, "end": 489 }],
+      "status": "prohibited_by_design",
+      "prohibitionReason": "Automatic wagering increases legal, contractual, safety, and user-control risk and is outside the approved product scope.",
+      "evidence": [{ "kind": "policy", "path": "docs/superpowers/specs/2026-07-17-bear-edge-elite-audit-design.md", "claim": "Automatic wager placement is an explicit non-goal." }]
+    },
+    {
+      "id": "PROHIBIT-CONCEALED-IDENTITIES",
+      "category": "prohibited_practice",
+      "requirement": "Do not conceal betting identities or construct networks intended to evade sportsbook controls.",
+      "sourceLines": [{ "start": 473, "end": 489 }],
+      "status": "prohibited_by_design",
+      "prohibitionReason": "Identity concealment is legally, ethically, and contractually incompatible with transparent customer software.",
+      "evidence": [{ "kind": "policy", "path": "docs/superpowers/specs/2026-07-17-bear-edge-elite-audit-design.md", "claim": "The architecture prohibits bypassing sportsbook terms, access controls, or technical protections." }]
+    },
+    {
+      "id": "PROHIBIT-ACCOUNT-SHARING",
+      "category": "prohibited_practice",
+      "requirement": "Do not facilitate account sharing or multi-account evasion.",
+      "sourceLines": [{ "start": 473, "end": 489 }],
+      "status": "prohibited_by_design",
+      "prohibitionReason": "Account sharing may violate law and sportsbook terms and creates identity and consumer-protection risk.",
+      "evidence": [{ "kind": "policy", "path": "docs/superpowers/specs/2026-07-17-bear-edge-elite-audit-design.md", "claim": "Access-control and sportsbook-term bypass is excluded from the system." }]
+    },
+    {
+      "id": "PROHIBIT-LINE-MANIPULATION",
+      "category": "prohibited_practice",
+      "requirement": "Do not manipulate lines through deceptive wagers, spoofing, or coordinated false signals.",
+      "sourceLines": [{ "start": 473, "end": 489 }],
+      "status": "prohibited_by_design",
+      "prohibitionReason": "Manipulative execution is unethical, potentially unlawful, and incompatible with auditable decision support.",
+      "evidence": [{ "kind": "policy", "path": "docs/superpowers/specs/2026-07-17-bear-edge-elite-audit-design.md", "claim": "The approved system is analytical and does not execute or manipulate markets." }]
+    },
+    {
+      "id": "PROHIBIT-UNLICENSED-DATA",
+      "category": "prohibited_practice",
+      "requirement": "Do not acquire, scrape, redistribute, or commercialize data without the required legal rights and licenses.",
+      "sourceLines": [{ "start": 473, "end": 489 }],
+      "status": "prohibited_by_design",
+      "prohibitionReason": "Unlicensed data acquisition threatens legality, provider relationships, and acquisition diligence.",
+      "evidence": [{ "kind": "provider_policy", "path": "docs/API_PROVIDER_REQUIREMENTS.md", "claim": "The provider plan calls for configured, attributable data sources and keeps unsupported lanes manual-only." }]
+    },
+    {
+      "id": "PROHIBIT-INSIDE-INFORMATION",
+      "category": "prohibited_practice",
+      "requirement": "Do not solicit, store, or exploit material nonpublic inside information.",
+      "sourceLines": [{ "start": 473, "end": 489 }],
+      "status": "prohibited_by_design",
+      "prohibitionReason": "Inside information creates legal, ethical, privacy, and integrity risk and is unnecessary for the approved architecture.",
+      "evidence": [{ "kind": "source", "path": "$SOURCE", "claim": "The attachment explicitly lists inside information among tactics Bear Edge must not copy." }]
+    },
+    {
+      "id": "PROHIBIT-RETROSPECTIVE-INSERTION",
+      "category": "prohibited_practice",
+      "requirement": "Do not insert recommendations after outcomes or market movement are known.",
+      "sourceLines": [{ "start": 473, "end": 489 }],
+      "status": "prohibited_by_design",
+      "prohibitionReason": "Retrospective insertion destroys auditability and creates deceptive performance history.",
+      "evidence": [{ "kind": "test", "path": "test/authoritative-ledger.test.js", "claim": "Immutable timestamps, identifiers, and content digests provide tamper evidence for appended records." }]
+    },
+    {
+      "id": "PROHIBIT-DELETING-LOSSES",
+      "category": "prohibited_practice",
+      "requirement": "Do not delete losing recommendations or rewrite settlements to improve reported performance.",
+      "sourceLines": [{ "start": 473, "end": 489 }],
+      "status": "prohibited_by_design",
+      "prohibitionReason": "Deleting losses falsifies model performance and violates the authoritative append-only evidence model.",
+      "evidence": [{ "kind": "code", "path": "src/audit/authoritative-ledger.js", "claim": "The authoritative store appends immutable evaluation, settlement, and amendment records instead of updating history." }]
+    },
+    {
+      "id": "PROHIBIT-UNPROVEN-WIN-RATE",
+      "category": "prohibited_practice",
+      "requirement": "Do not advertise a win rate, predictive advantage, or profitability claim that lacks sufficient settled out-of-sample evidence.",
+      "sourceLines": [{ "start": 473, "end": 489 }],
+      "status": "prohibited_by_design",
+      "prohibitionReason": "Unproven performance advertising is misleading and can create regulatory and consumer-protection exposure.",
+      "evidence": [{ "kind": "policy", "path": "docs/PRODUCTION_READINESS.md", "claim": "Readiness language separates local functionality from unproven predictive performance." }]
+    },
+    {
+      "id": "PROHIBIT-BET-EVERY-DISCREPANCY",
+      "category": "prohibited_practice",
+      "requirement": "Do not convert every model-market discrepancy into a bet; all evidence, calibration, price, and risk gates must still pass.",
+      "sourceLines": [{ "start": 473, "end": 489 }],
+      "status": "prohibited_by_design",
+      "prohibitionReason": "A discrepancy can result from noise, stale data, mismatch, high hold, or uncertainty and therefore is not sufficient evidence by itself.",
+      "evidence": [{ "kind": "code", "path": "src/live/best-mlb-targets.js", "claim": "The evaluation path retains numerous independent PASS and WAIT gates after discrepancy calculation." }]
+    },
+    {
+      "id": "PROHIBIT-HISTORICAL-ROI-ONLY",
+      "category": "prohibited_practice",
+      "requirement": "Do not optimize or promote a model solely because historical return on investment is positive.",
+      "sourceLines": [{ "start": 473, "end": 489 }],
+      "status": "prohibited_by_design",
+      "prohibitionReason": "Historical return alone is vulnerable to leakage, overfitting, price assumptions, and unstable small samples.",
+      "evidence": [{ "kind": "registry", "path": "models/registry.json", "claim": "Promotion requires calibration, proper scoring, sample, coverage, closing-line, and data-integrity evidence rather than ROI alone." }]
+    },
+    {
+      "id": "ARCH-THREE-ENGINES",
+      "category": "architecture",
+      "requirement": "Structure the product as a market consensus engine, an independent probability engine, and a decision and risk engine with explicit contracts between them.",
+      "sourceLines": [{ "start": 490, "end": 495 }],
+      "status": "implemented_local",
+      "evidence": [{ "kind": "architecture", "path": "docs/PROFESSIONAL_BETTING_FACTORY.md", "claim": "The operating document maps the three source engines to concrete modules and external gates." }]
+    },
+    {
+      "id": "ENGINE-MARKET-CONSENSUS",
+      "category": "market_consensus_engine",
+      "requirement": "Observe multiple books, remove vig, identify informative books, calculate consensus, and detect stale or outlying offers.",
+      "sourceLines": [{ "start": 496, "end": 507 }],
+      "status": "partial_local",
+      "evidence": [{ "kind": "code", "path": "src/live/market-intelligence.js", "claim": "All engine components exist locally except historically learned book-quality weights and a production movement corpus." }]
+    },
+    {
+      "id": "ENGINE-INDEPENDENT-PROBABILITY",
+      "category": "independent_probability_engine",
+      "requirement": "Use sport-specific data to model player or team performance and relevant lineup, matchup, rest, pace, weather, injury, and role context while outputting uncertainty.",
+      "sourceLines": [{ "start": 508, "end": 518 }],
+      "status": "partial_local",
+      "evidence": [{ "kind": "code", "path": "src/live/candidates.js", "claim": "Sport-specific estimators and official context exist, but the full contextual feature set and per-prediction uncertainty require additional licensed data and model work." }]
+    },
+    {
+      "id": "ENGINE-DECISION-AND-RISK",
+      "category": "decision_and_risk_engine",
+      "requirement": "Compare model and market, apply calibration and shrinkage, calculate edge and expected value, inspect data quality, enforce risk, issue PASS WAIT or BET, publish a minimum price, and lock the timestamped record.",
+      "sourceLines": [{ "start": 519, "end": 536 }],
+      "status": "implemented_local",
+      "evidence": [{ "kind": "code", "path": "src/audit/recommendation-service.js", "claim": "Displayed recommendations retain gates and are appended to the immutable ledger before API return." }]
+    },
+    {
+      "id": "EXAMPLE-OUTLIER-BOOK-ONLY",
+      "category": "decision_example",
+      "requirement": "Allow one outlier sportsbook offer to qualify while rejecting consensus-priced offers on the same selection when only the outlier clears the minimum price.",
+      "sourceLines": [{ "start": 537, "end": 571 }],
+      "status": "implemented_local",
+      "evidence": [{ "kind": "test", "path": "test/price-discipline.test.js", "claim": "Best-price selection and minimum-price tests demonstrate that the sportsbook price, not selection identity alone, controls qualification." }]
+    },
+    {
+      "id": "EXAMPLE-CALIBRATION-REDUCTION",
+      "category": "decision_example",
+      "requirement": "Reduce an historically overconfident raw model estimate before comparing the adjusted probability with the outlier offer.",
+      "sourceLines": [{ "start": 537, "end": 568 }],
+      "status": "partial_local",
+      "evidence": [{ "kind": "code", "path": "src/calibration/model-evidence.js", "claim": "Calibration authority and reports are enforced, but current research models have not accumulated real evidence for a production recalibration transform." }]
+    },
+    {
+      "id": "TRUTH-PROBABILITY-RANGE",
+      "category": "operating_thesis",
+      "requirement": "Answer the true probability as a calibrated range or uncertainty-aware estimate rather than a falsely exact point.",
+      "sourceLines": [{ "start": 572, "end": 583 }],
+      "status": "implemented_local",
+      "evidence": [{ "kind": "code", "path": "src/live/probability-uncertainty.js", "claim": "Candidate output includes point, lower, and upper probabilities, interval width, observed evidence, approximation method, and limitations." }]
+    },
+    {
+      "id": "TRUTH-MARKET-CHARGE",
+      "category": "operating_thesis",
+      "requirement": "Answer what raw and no-vig probability the exact available market price is charging.",
+      "sourceLines": [{ "start": 572, "end": 583 }],
+      "status": "implemented_local",
+      "evidence": [{ "kind": "code", "path": "src/live/market-intelligence.js", "claim": "The offered market record contains implied probability, no-vig probability, hold, and timestamp status." }]
+    },
+    {
+      "id": "TRUTH-REAL-TRADABLE-LARGE-ENOUGH",
+      "category": "operating_thesis",
+      "requirement": "Determine whether the difference is supported by verified evidence, tradable at the exact book, and large enough after uncertainty and risk constraints.",
+      "sourceLines": [{ "start": 572, "end": 583 }],
+      "status": "implemented_local",
+      "evidence": [{ "kind": "code", "path": "src/live/best-mlb-targets.js", "claim": "The decision path combines verified price, calibration, minimum price, expected value, and portfolio gates." }]
+    },
+    {
+      "id": "TRUTH-CAPTURE-BEFORE-DISAPPEARS",
+      "category": "operating_thesis",
+      "requirement": "Identify the best fresh offer and explicit expiration quickly enough that a user can determine whether the price still exists.",
+      "sourceLines": [{ "start": 572, "end": 583 }],
+      "status": "partial_local",
+      "evidence": [{ "kind": "code", "path": "src/live/price-discipline.js", "claim": "Best fresh price and expiration are computed, but post-delivery sportsbook availability cannot be guaranteed." }]
+    },
+    {
+      "id": "TRUTH-BAD-PRICE-REJECTS-GOOD-PREDICTION",
+      "category": "operating_thesis",
+      "requirement": "Reject a directionally strong prediction when the available price eliminates expected value.",
+      "sourceLines": [{ "start": 584, "end": 585 }],
+      "status": "implemented_local",
+      "evidence": [{ "kind": "test", "path": "test/price-discipline.test.js", "claim": "The minimum-price boundary rejects a price that cannot satisfy expected-value and Kelly requirements." }]
+    },
+    {
+      "id": "TRUTH-STALE-PRICE-CAN-BE-VALUE",
+      "category": "operating_thesis",
+      "requirement": "Permit market-consensus mispricing logic to identify value without claiming the independent model predicts every event better than the market.",
+      "sourceLines": [{ "start": 586, "end": 587 }],
+      "status": "implemented_local",
+      "evidence": [{ "kind": "code", "path": "src/live/market-intelligence.js", "claim": "Consensus and outlier analysis are distinct from independent model direction." }]
+    },
+    {
+      "id": "TRUTH-SPEED-IS-PART-OF-EDGE",
+      "category": "operating_thesis",
+      "requirement": "Treat detection latency and price freshness as part of edge rather than as presentation metadata.",
+      "sourceLines": [{ "start": 586, "end": 587 }],
+      "status": "implemented_local",
+      "evidence": [{ "kind": "code", "path": "src/live/market-intelligence.js", "claim": "Timestamp freshness directly changes confidence, risk flags, and verdict eligibility." }]
+    },
+    {
+      "id": "TRUTH-AUDITABLE-BUSINESS-ASSET",
+      "category": "operating_thesis",
+      "requirement": "Preserve enough immutable evidence to prove each edge, decision, price, model version, and outcome afterward.",
+      "sourceLines": [{ "start": 588, "end": 591 }],
+      "status": "implemented_local",
+      "evidence": [{ "kind": "code", "path": "src/audit/record-contract.js", "claim": "Canonical immutable records retain source, model, probability, price, edge, stake, gate, and audit evidence." }]
+    },
+    {
+      "id": "SOURCE-REFERENCE-PROVENANCE",
+      "category": "source_integrity",
+      "requirement": "Retain the source references supporting the operating thesis without treating private-system anecdotes as audited proof of future Bear Edge performance.",
+      "sourceLines": [{ "start": 592, "end": 600 }],
+      "status": "implemented_local",
+      "evidence": [{ "kind": "source", "path": "$SOURCE", "claim": "The exact source document and its SHA-256 digest are retained in this requirement ledger." }]
+    }
+  ]
+}

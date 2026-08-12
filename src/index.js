@@ -4,11 +4,37 @@ const {
   validateBetInput
 } = require("./validate-bet-input.js");
 const {
+  AUDIT_RECORD_SCHEMA_VERSION,
+  createAmendmentRecord,
+  createClosingPriceRecord,
+  createEvaluationRecord,
+  createPredictionOutcomeRecord,
+  createSettlementAuditRecord,
+  validateAuditRecord
+} = require("./audit/record-contract.js");
+const {
+  EvidenceIntegrityError,
+  appendClosingPrice,
+  appendPredictionOutcome
+} = require("./audit/evidence-ledger.js");
+const {
+  buildEvidenceQueue,
+  getEvidenceQueue
+} = require("./audit/evidence-queue.js");
+const {
+  appendAuthoritativeRecord
+} = require("./audit/authoritative-ledger.js");
+const { contentDigest } = require("./audit/canonical-json.js");
+const {
+  projectCalibrationLedger
+} = require("./calibration/ledger-projection.js");
+const {
   DEFAULT_DECISION_LOG_PATH,
   appendDecisionLog,
   resolveDecisionLogPath
 } = require("./decision-log.js");
 const {
+  appendAmendment,
   appendSettlement,
   buildValidationGate,
   calculateClosingLineValue,
@@ -25,6 +51,7 @@ const {
 } = require("./live/evaluate-live-ticket.js");
 const { LiveDataCache } = require("./live/cache.js");
 const { generateResearchCandidates } = require("./live/candidates.js");
+const { resolveOfficialMlbOutcomes } = require("./live/official-mlb-outcomes.js");
 const {
   fetchGamesForWindow,
   fetchMlbGamesForDate,
@@ -40,10 +67,20 @@ const {
   validateLiveTicket
 } = require("./validate-live-ticket.js");
 const {
+  AMENDMENT_INPUT_SCHEMA,
   BET_DECISION_SCHEMA,
+  CLOSING_PRICE_INPUT_SCHEMA,
   LIVE_DECISION_SCHEMA,
-  RESEARCH_PACKET_SCHEMA
+  PREDICTION_OUTCOME_INPUT_SCHEMA,
+  RESEARCH_PACKET_SCHEMA,
+  SETTLEMENT_INPUT_SCHEMA
 } = require("./schemas.js");
+const {
+  americanToDecimal,
+  americanToImpliedProbability,
+  getTwoWayNoVigProbabilities,
+  normalizeTwoWayNoVig
+} = require("./odds-math.js");
 
 /**
  * @typedef {object} ExpectedValueInput
@@ -71,7 +108,7 @@ const {
 
 const DEFAULT_THRESHOLDS = Object.freeze({
   minEdge: 0.02,
-  minEvRoi: 0,
+  minEvRoi: 0.01,
   minKellyFraction: 0.005
 });
 
@@ -155,6 +192,14 @@ function assertPositiveNumber(value, name) {
   }
 }
 
+function assertDecimalOdds(value, name) {
+  assertFiniteNumber(value, name);
+
+  if (value <= 1) {
+    throw new RangeError(`${name} must be greater than 1.`);
+  }
+}
+
 function assertNonNegativeNumber(value, name) {
   assertFiniteNumber(value, name);
 
@@ -173,64 +218,6 @@ function addRiskFlag(flags, code, severity, message) {
   }
 }
 
-function americanToDecimal(americanOdds) {
-  assertFiniteNumber(americanOdds, "americanOdds");
-
-  if (americanOdds === 0) {
-    throw new RangeError("americanOdds cannot be 0.");
-  }
-
-  if (americanOdds > 0) {
-    return 1 + americanOdds / 100;
-  }
-
-  return 1 + 100 / Math.abs(americanOdds);
-}
-
-function americanToImpliedProbability(americanOdds) {
-  assertFiniteNumber(americanOdds, "americanOdds");
-
-  if (americanOdds === 0) {
-    throw new RangeError("americanOdds cannot be 0.");
-  }
-
-  if (americanOdds > 0) {
-    return 100 / (americanOdds + 100);
-  }
-
-  return Math.abs(americanOdds) / (Math.abs(americanOdds) + 100);
-}
-
-function normalizeTwoWayNoVig(probabilityA, probabilityB) {
-  assertProbability(probabilityA, "probabilityA");
-  assertProbability(probabilityB, "probabilityB");
-
-  const total = probabilityA + probabilityB;
-
-  if (total <= 0) {
-    throw new RangeError("probabilityA and probabilityB cannot both be 0.");
-  }
-
-  return {
-    sideA: probabilityA / total,
-    sideB: probabilityB / total
-  };
-}
-
-function getTwoWayNoVigProbabilities(americanOddsA, americanOddsB) {
-  const impliedA = americanToImpliedProbability(americanOddsA);
-  const impliedB = americanToImpliedProbability(americanOddsB);
-  const normalized = normalizeTwoWayNoVig(impliedA, impliedB);
-
-  return {
-    impliedA,
-    impliedB,
-    marketVig: impliedA + impliedB - 1,
-    noVigA: normalized.sideA,
-    noVigB: normalized.sideB
-  };
-}
-
 function shrinkProbabilityTowardMarket(modelProbability, marketProbability, marketWeight = 0.35) {
   assertProbability(modelProbability, "modelProbability");
   assertProbability(marketProbability, "marketProbability");
@@ -247,7 +234,7 @@ function calculateExpectedValue({ winProbability, americanOdds, decimalOdds, sta
   assertPositiveNumber(stake, "stake");
 
   const resolvedDecimalOdds = decimalOdds ?? americanToDecimal(americanOdds);
-  assertPositiveNumber(resolvedDecimalOdds, "decimalOdds");
+  assertDecimalOdds(resolvedDecimalOdds, "decimalOdds");
 
   const netWinMultiple = resolvedDecimalOdds - 1;
   const expectedProfit = stake * (winProbability * netWinMultiple - (1 - winProbability));
@@ -268,7 +255,7 @@ function calculateKellyFraction({ winProbability, americanOdds, decimalOdds }) {
   assertProbability(winProbability, "winProbability");
 
   const resolvedDecimalOdds = decimalOdds ?? americanToDecimal(americanOdds);
-  assertPositiveNumber(resolvedDecimalOdds, "decimalOdds");
+  assertDecimalOdds(resolvedDecimalOdds, "decimalOdds");
 
   const netWinMultiple = resolvedDecimalOdds - 1;
   const lossProbability = 1 - winProbability;
@@ -370,7 +357,7 @@ function evaluateBetDecision(input) {
   };
 
   assertProbability(resolvedThresholds.minEdge, "thresholds.minEdge");
-  assertFiniteNumber(resolvedThresholds.minEvRoi, "thresholds.minEvRoi");
+  assertNonNegativeNumber(resolvedThresholds.minEvRoi, "thresholds.minEvRoi");
   assertProbability(resolvedThresholds.minKellyFraction, "thresholds.minKellyFraction");
   assertNonNegativeNumber(resolvedStakePolicy.minStake, "stakePolicy.minStake");
 
@@ -461,7 +448,7 @@ function evaluateBetDecision(input) {
     verdict = "PASS";
   } else if (hasStaleInjuryGate) {
     verdict = "WAIT";
-  } else if (edge < resolvedThresholds.minEdge) {
+  } else if (edge <= resolvedThresholds.minEdge) {
     verdict = "PASS";
     addRiskFlag(
       riskFlags,
@@ -470,7 +457,7 @@ function evaluateBetDecision(input) {
       "Adjusted fair edge versus the no-vig market does not clear the minimum edge threshold."
     );
     reasons.push("Adjusted fair edge versus the no-vig market is below threshold.");
-  } else if (unitEv.roi < resolvedThresholds.minEvRoi) {
+  } else if (unitEv.roi <= resolvedThresholds.minEvRoi) {
     verdict = "PASS";
     addRiskFlag(
       riskFlags,
@@ -479,7 +466,7 @@ function evaluateBetDecision(input) {
       "Expected value versus the offered odds does not clear the minimum ROI threshold."
     );
     reasons.push("Expected value versus the offered odds is below threshold.");
-  } else if (kelly.fraction < resolvedThresholds.minKellyFraction) {
+  } else if (kelly.fraction <= resolvedThresholds.minKellyFraction) {
     verdict = "PASS";
     addRiskFlag(
       riskFlags,
@@ -488,7 +475,7 @@ function evaluateBetDecision(input) {
       "Kelly fraction does not clear the minimum staking threshold."
     );
     reasons.push("Kelly fraction is below threshold.");
-  } else if (stakeRecommendation.recommendedStake < resolvedStakePolicy.minStake) {
+  } else if (stakeRecommendation.recommendedStake <= resolvedStakePolicy.minStake) {
     verdict = "PASS";
     addRiskFlag(
       riskFlags,
@@ -571,12 +558,167 @@ function evaluateBetDecision(input) {
   };
 }
 
+function createStraightEvaluationAuditRecord(input, result, context = {}) {
+  const createdAt = context.createdAt ?? new Date().toISOString();
+  const modelStatus = context.model?.modelStatus ?? "research_only";
+  const permission = context.permission ?? "PRICE_CHECK_ONLY";
+  const reasons = [...result.reasons];
+  const riskFlags = result.riskFlags.map((flag) => ({ ...flag }));
+  let verdict = result.verdict;
+
+  if (modelStatus !== "validated") {
+    addRiskFlag(
+      riskFlags,
+      "MODEL_CALIBRATION_REQUIRED",
+      "high",
+      "The supplied probability is not linked to a validated model and calibration report."
+    );
+  }
+
+  if (permission !== "VERIFIED_BETS_ALLOWED") {
+    addRiskFlag(
+      riskFlags,
+      "ODDS_PROVIDER_UNVERIFIED",
+      "high",
+      "The offered price was entered manually and is not authorized as verified sportsbook evidence."
+    );
+  }
+
+  if (verdict === "BET" && (modelStatus !== "validated" || permission !== "VERIFIED_BETS_ALLOWED")) {
+    verdict = "WAIT";
+
+    if (modelStatus !== "validated" && !reasons.includes("Model calibration is required before a BET verdict.")) {
+      reasons.push("Model calibration is required before a BET verdict.");
+    }
+
+    if (permission !== "VERIFIED_BETS_ALLOWED" && !reasons.includes("Verified sportsbook evidence is required before a BET verdict.")) {
+      reasons.push("Verified sportsbook evidence is required before a BET verdict.");
+    }
+  }
+
+  const sourceDigest = contentDigest({
+    selection: input.selection,
+    marketType: input.marketType,
+    marketOdds: input.marketOdds,
+    oppositeOdds: input.oppositeOdds,
+    modelProbability: input.modelProbability,
+    bankroll: input.bankroll
+  });
+  const configurationDigest = contentDigest({
+    marketWeight: result.decisionLog.inputs.marketWeight,
+    thresholds: result.decisionLog.inputs.thresholds,
+    stakePolicy: result.decisionLog.inputs.stakePolicy
+  });
+
+  return createEvaluationRecord({
+    origin: {
+      channel: context.origin?.channel ?? "internal",
+      actorType: context.origin?.actorType ?? "operator",
+      sessionId: context.origin?.sessionId ?? null,
+      requestId: context.origin?.requestId ?? null
+    },
+    event: context.event ?? {},
+    market: {
+      marketFamily: context.market?.marketFamily ?? input.marketType,
+      marketType: context.market?.marketType ?? input.marketType,
+      participantId: context.market?.participantId ?? null,
+      participantName: context.market?.participantName ?? null,
+      selection: input.selection,
+      side: context.market?.side ?? null,
+      line: context.market?.line ?? null
+    },
+    price: {
+      sportsbook: context.price?.sportsbook ?? null,
+      marketOdds: input.marketOdds,
+      oppositeOdds: input.oppositeOdds,
+      priceCapturedAt: context.price?.priceCapturedAt ?? createdAt,
+      priceSourceTime: context.price?.priceSourceTime ?? null
+    },
+    sources: context.sources ?? [{
+      provider: "operator_input",
+      sourceType: "manual_input",
+      sourceLocator: context.sourceLocator ?? null,
+      parserVersion: "1.0.0",
+      capturedAt: createdAt,
+      sourceTime: null,
+      digest: sourceDigest,
+      freshness: "unknown",
+      verificationStatus: "unverified"
+    }],
+    model: {
+      modelId: context.model?.modelId ?? "operator_probability_input",
+      modelVersion: context.model?.modelVersion ?? "1.0.0",
+      probabilityMethod: context.model?.probabilityMethod ?? "operator_supplied",
+      modelStatus,
+      calibrationReportId: context.model?.calibrationReportId ?? null,
+      trainingCutoff: context.model?.trainingCutoff ?? null,
+      sampleSize: context.model?.sampleSize ?? null
+    },
+    probability: {
+      rawModelProbability: input.modelProbability,
+      adjustedProbability: result.adjustedProbability,
+      marketImpliedProbability: result.market.impliedA,
+      marketNoVigProbability: result.market.noVigA
+    },
+    edge: {
+      fairEdge: result.fairEdge,
+      priceEdge: result.priceEdge,
+      expectedValueRoi: result.expectedValue.roi,
+      kellyFraction: result.kelly.fraction
+    },
+    stake: {
+      recommendedStake: verdict === "BET" && permission === "VERIFIED_BETS_ALLOWED"
+        ? result.stakeRecommendation.recommendedStake
+        : 0,
+      bankroll: input.bankroll,
+      stakePolicyVersion: "1.0.0"
+    },
+    decision: {
+      verdict,
+      permission,
+      reasons,
+      riskFlags,
+      gateResults: [
+        {
+          gate: "model_calibration",
+          passed: modelStatus === "validated",
+          reasonCode: modelStatus === "validated" ? null : "MODEL_CALIBRATION_REQUIRED"
+        },
+        {
+          gate: "operational_permission",
+          passed: permission === "VERIFIED_BETS_ALLOWED",
+          reasonCode: permission === "VERIFIED_BETS_ALLOWED" ? null : "ODDS_PROVIDER_UNVERIFIED"
+        }
+      ]
+    },
+    audit: {
+      codeVersion: context.codeVersion ?? null,
+      configurationDigest,
+      calculationVersion: "straight_evaluation_v2",
+      evidenceCompleteness: permission === "VERIFIED_BETS_ALLOWED" ? "verified" : "operator_input_unverified",
+      warnings: permission === "VERIFIED_BETS_ALLOWED"
+        ? []
+        : ["Manual odds input is retained as research evidence, not verified sportsbook authorization."]
+    }
+  }, {
+    clientEventId: context.clientEventId,
+    createdAt
+  });
+}
+
 module.exports = {
+  AMENDMENT_INPUT_SCHEMA,
+  AUDIT_RECORD_SCHEMA_VERSION,
+  appendAmendment,
+  appendAuthoritativeRecord,
+  appendClosingPrice,
   appendDecisionLog,
+  appendPredictionOutcome,
   appendSettlement,
   BET_DECISION_SCHEMA,
   BET_INPUT_SCHEMA,
   BetInputValidationError,
+  CLOSING_PRICE_INPUT_SCHEMA,
   createServer,
   DEFAULT_DECISION_LOG_TEMPLATE,
   DEFAULT_DECISION_LOG_PATH,
@@ -591,14 +733,22 @@ module.exports = {
   getTwoWayNoVigProbabilities,
   shrinkProbabilityTowardMarket,
   calculateExpectedValue,
+  buildEvidenceQueue,
   buildValidationGate,
   calculateClosingLineValue,
   calculateKellyFraction,
   applyStakeCaps,
   createDecisionLogTemplate,
+  createAmendmentRecord,
+  createClosingPriceRecord,
+  createEvaluationRecord,
+  createPredictionOutcomeRecord,
+  createStraightEvaluationAuditRecord,
   createId,
+  createSettlementAuditRecord,
   createSettlementRecord,
   evaluateBetDecision,
+  EvidenceIntegrityError,
   generateResearchCandidates,
   fetchGamesForWindow,
   fetchMlbGamesForDate,
@@ -606,13 +756,19 @@ module.exports = {
   evaluateLiveTicket,
   evaluateLiveTicketAndLog,
   getDecisionLogDashboard,
+  getEvidenceQueue,
   LiveTicketValidationError,
+  PREDICTION_OUTCOME_INPUT_SCHEMA,
   RESEARCH_PACKET_SCHEMA,
   readDecisionLogEntries,
+  projectCalibrationLedger,
+  resolveOfficialMlbOutcomes,
   resolveDecisionLogPath,
+  SETTLEMENT_INPUT_SCHEMA,
   describeCausalEvidence,
   simulateBetCard,
   summarizeDecisionLogRecords,
   validateLiveTicket,
+  validateAuditRecord,
   validateBetInput
 };

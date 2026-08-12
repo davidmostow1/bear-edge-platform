@@ -1,0 +1,74 @@
+{
+  "schemaVersion": "1.0.0",
+  "policyId": "bear-edge-system-boundaries",
+  "policyVersion": "1.0.0",
+  "effectiveAt": "2026-07-30T00:00:00.000Z",
+  "repositoryPackage": "betting-decision-engine",
+  "defaultAuthorization": "PRICE_CHECK_ONLY",
+  "predictiveImprovement": "NOT_EVALUATED",
+  "modelValidation": "NOT_ESTABLISHED",
+  "wageringAuthority": "UNCHANGED",
+  "lanes": [
+    {
+      "laneId": "bear_edge_core",
+      "ownership": "repository_owner",
+      "modelRegistry": "models/registry.json",
+      "ledgerRoots": [
+        "data/logs"
+      ],
+      "evidenceRoots": [
+        "data/evidence",
+        "data/calibration"
+      ],
+      "bankrollStorageKeys": [
+        "bearEdge.bankroll"
+      ],
+      "mayWriteBearEdge": true,
+      "mayAuthorizeWagers": false,
+      "allowedImportMode": "content_addressed_research_only"
+    },
+    {
+      "laneId": "sweet_bear_draftkings_predictions",
+      "ownership": "external_research_source",
+      "modelRegistry": null,
+      "ledgerRoots": [],
+      "evidenceRoots": [],
+      "bankrollStorageKeys": [],
+      "mayWriteBearEdge": false,
+      "mayAuthorizeWagers": false,
+      "allowedImportMode": "content_addressed_evidence_only"
+    },
+    {
+      "laneId": "sweet_bear_kalshi",
+      "ownership": "external_research_source",
+      "modelRegistry": null,
+      "ledgerRoots": [],
+      "evidenceRoots": [],
+      "bankrollStorageKeys": [],
+      "mayWriteBearEdge": false,
+      "mayAuthorizeWagers": false,
+      "allowedImportMode": "content_addressed_research_only"
+    }
+  ],
+  "crossLaneRules": {
+    "comparisonIsReadOnly": true,
+    "requireSourceLane": true,
+    "requireModelIdentity": true,
+    "requireFeatureCutoff": true,
+    "requireEvidenceDigest": true,
+    "allowLedgerWrites": false,
+    "allowBankrollReads": false,
+    "allowModelPromotion": false,
+    "allowAuthorizationTransfer": false
+  },
+  "bearEdgeProductionProhibitions": {
+    "sourceTokens": [
+      "kalshi"
+    ],
+    "scanRoots": [
+      "src"
+    ],
+    "allowedDraftKingsPredictionsRole": "evidence_and_price_check_only",
+    "allowContractPriceAsSportsbookAmericanOdds": false
+  }
+}

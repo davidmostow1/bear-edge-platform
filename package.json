@@ -8,11 +8,28 @@
     ".": "./src/index.js"
   },
   "files": [
+    ".env.example",
+    "AGENTS.md",
     "README.md",
     "Open Bear Edge.command",
+    "Open Bear Edge On Phone.command",
+    "docs/CALIBRATION_READINESS.md",
+    "docs/canonical/**/*",
+    "docs/ELITE_AUDIT_OPERATIONS.md",
+    "docs/INTEGRATION_INVENTORY.md",
+    "docs/NO_COST_DATA_WORKFLOW.md",
+    "docs/PROBABILITY_UNCERTAINTY_VALIDATION.md",
+    "docs/PRODUCTION_READINESS.md",
+    "docs/PROFESSIONAL_BETTING_FACTORY.md",
+    "docs/RECOVERY_VERIFICATION_2026-08-03.md",
+    "governance/**/*.json",
+    "governance/source/**/*.txt",
     "src/**/*.js",
     "src/native/**/*",
     "src/dashboard/**/*",
+    "models/**/*.json",
+    "script/**/*.js",
+    "supabase/migrations/**/*.sql",
     "examples/**/*.json",
     "data/logs/.gitkeep",
     "tsconfig.json"
@@ -22,19 +39,35 @@
     "bear-edge-live-evaluate": "./src/cli/evaluate-live.js",
     "bear-edge-live-watch": "./src/cli/watch-live.js",
     "bear-edge-launch": "./src/cli/launch.js",
-    "bear-edge-server": "./src/cli/serve.js"
+    "bear-edge-server": "./src/cli/serve.js",
+    "bear-edge-compare": "./src/cli/compare.js",
+    "bear-edge-shadow-capture": "./src/cli/shadow-capture.js",
+    "bear-edge-retrosheet-backtest": "./src/cli/retrosheet-backtest.js"
   },
   "scripts": {
     "test": "node --test",
     "typecheck": "tsc --project tsconfig.json",
-    "verify": "npm run typecheck && npm test",
+    "verify": "npm run typecheck && npm test && npm run audit:boundaries && npm run audit:canonical-status",
     "evaluate": "node ./src/cli/evaluate.js",
     "evaluate:live": "node ./src/cli/evaluate-live.js",
     "launch": "node ./src/cli/launch.js",
+    "launch:lan": "node ./src/cli/launch.js --lan",
     "watch:live": "node ./src/cli/watch-live.js",
     "serve": "node ./src/cli/serve.js",
+    "compare": "node ./src/cli/compare.js",
+    "shadow:capture": "node ./src/cli/shadow-capture.js",
+    "backtest:retrosheet": "node ./src/cli/retrosheet-backtest.js",
+    "ingest:props": "node ./src/cli/ingest-props.js",
+    "budget": "node ./src/cli/ingest-props.js --budget",
     "compare:recording": "node ./script/compare_recording_props_with_current_dk.js",
+    "calibrate": "node ./script/build_calibration_report.js",
+    "audit:boundaries": "node ./script/check_system_boundaries.js",
+    "audit:canonical-status": "node ./script/check_canonical_status.js",
+    "audit:factory": "node ./script/build_professional_betting_factory_audit.js",
+    "audit:calibration": "node ./script/build_calibration_readiness.js",
     "audit:protocol": "node ./script/build_protocol_audit.js",
+    "audit:release": "node ./script/build_release_readiness.js",
+    "rotate:operator-token": "node ./script/rotate_operator_token.js",
     "simulate:card": "node ./script/simulate_verified_card.js",
     "package:portable": "npm run verify && mkdir -p dist && npm pack --pack-destination dist"
   },
@@ -51,5 +84,8 @@
   "devDependencies": {
     "@types/node": "^24.0.0",
     "typescript": "^5.6.3"
+  },
+  "dependencies": {
+    "@statsig/statsig-node-core": "0.20.1"
   }
 }

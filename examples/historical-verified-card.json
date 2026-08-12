@@ -1,0 +1,44 @@
+{
+  "schemaVersion": "historical-simulation-source/v1",
+  "slateDate": "2026-06-27",
+  "visibleBankroll": 206.44,
+  "evidenceClassification": {
+    "date": "2026-06-27",
+    "timeWindow": "12:49:55 PM to 12:50:36 PM ET",
+    "sourceType": "sanitized historical screenshot-audit fixture",
+    "currentLiveSettledStale": "historical_fixture_not_current",
+    "visibleBankroll": 206.44,
+    "sourceFiles": [
+      "historical screenshot-audit fixture"
+    ],
+    "noInferenceRule": "Cropped or hidden prices are not inferred."
+  },
+  "recommendedCard": [
+    {
+      "section": "historicalResearchCandidates",
+      "matchup": "AZ @ TB",
+      "selection": "AZ",
+      "marketType": "MLB_side",
+      "visibleOdds": 127,
+      "visibleImpliedProbability": 0.4405,
+      "fairProbability": 0.5231363636363636,
+      "processGrade": "A-",
+      "status": "HISTORICAL_RESEARCH_FIXTURE",
+      "stake": 1.55,
+      "notes": "Sanitized historical input for deterministic simulation tests only."
+    },
+    {
+      "section": "historicalResearchCandidates",
+      "matchup": "CHC @ MIL",
+      "selection": "CHC",
+      "marketType": "MLB_side",
+      "visibleOdds": 150,
+      "visibleImpliedProbability": 0.4,
+      "fairProbability": 0.4726250000000001,
+      "processGrade": "B+",
+      "status": "HISTORICAL_RESEARCH_FIXTURE",
+      "stake": 1.03,
+      "notes": "Sanitized historical input for deterministic simulation tests only."
+    }
+  ]
+}

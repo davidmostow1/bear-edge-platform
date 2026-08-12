@@ -9,22 +9,30 @@ const SECRET_ENV_KEYS = Object.freeze([
   "SPORTDEVS_API_KEY",
   "OPENWEATHER_API_KEY",
   "EXA_API_KEY",
-  "OPENAI_API_KEY"
+  "OPENAI_API_KEY",
+  "STATSIG_SERVER_SDK_SECRET",
+  "BEAR_EDGE_OPERATOR_TOKEN",
+  "SUPABASE_SERVICE_ROLE_KEY"
 ]);
 
 function escapeRegExp(value) {
   return String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
-function redactSecrets(value) {
+function redactSecrets(value, extraSecrets = []) {
   let text = String(value ?? "");
 
   text = text
     .replace(/([?&](?:apiKey|api_key|key|token)=)[^&\s"']+/gi, "$1[REDACTED]")
     .replace(/(Bearer\s+)[A-Za-z0-9._~+/-]+/gi, "$1[REDACTED]");
 
-  for (const envKey of SECRET_ENV_KEYS) {
-    const secret = process.env[envKey];
+  const transientSecrets = Array.isArray(extraSecrets) ? extraSecrets : [extraSecrets];
+  const secrets = [
+    ...SECRET_ENV_KEYS.map((envKey) => process.env[envKey]),
+    ...transientSecrets
+  ];
+
+  for (const secret of secrets) {
 
     if (typeof secret !== "string" || secret.length < 4) {
       continue;
@@ -36,8 +44,8 @@ function redactSecrets(value) {
   return text;
 }
 
-function safeErrorMessage(error) {
-  return redactSecrets(error instanceof Error ? error.message : String(error));
+function safeErrorMessage(error, extraSecrets = []) {
+  return redactSecrets(error instanceof Error ? error.message : String(error), extraSecrets);
 }
 
 module.exports = {

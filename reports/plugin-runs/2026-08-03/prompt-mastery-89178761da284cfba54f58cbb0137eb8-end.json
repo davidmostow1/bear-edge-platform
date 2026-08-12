@@ -1,0 +1,112 @@
+{
+  "schemaVersion": "1.1",
+  "phase": "END",
+  "runId": "prompt-mastery-20260803T214252165725Z-be7ce700403d4b5aa1d9f2e5cbb12091",
+  "impactId": "89178761da284cfba54f58cbb0137eb8",
+  "createdAt": "2026-08-03T21:42:52.165725Z",
+  "plugin": {
+    "name": "prompt-mastery",
+    "version": "0.1.0+codex.20260730065217"
+  },
+  "skills": [
+    "pilot-prompt-mastery"
+  ],
+  "repository": {
+    "path": "/Users/davidbearmostow/Documents/Codex/2026-06-17-documents-openai-developers-google-drive-google",
+    "branch": "codex/pitcher-strikeout-complete-data-research",
+    "commit": "a4164e1e8b24fa6fc58d7e5505fc335076e526ff"
+  },
+  "request": {
+    "sha256": "e6fe1569d8d7cc06a48444b87ac2186e61f16205f2d20af224d66b4b0848890f"
+  },
+  "action": "Preserve the dirty checkout, create scoped commits on the existing research branch, verify, push, and open a draft pull request without merge or wagering changes.",
+  "beginReceipt": {
+    "path": "reports/plugin-runs/2026-08-03/prompt-mastery-89178761da284cfba54f58cbb0137eb8-begin.json",
+    "sha256": "0f086f86fc5d21620726b365d96f66199bedae3aa901d727af7c5c0811775fd1",
+    "runId": "prompt-mastery-20260803T213315298040Z-0203c19e82a34b1ea39dd98d9aaac0c8"
+  },
+  "evidenceArtifacts": [
+    {
+      "path": "governance/system-boundaries.json",
+      "sha256": "58978495978e6294730036e1416bc791758c31428f5308ea8921fd80b5047b63"
+    },
+    {
+      "path": "reports/plugin-runs/2026-08-03/bear-edge-operator-2026-08-03T21-41-19.504Z-518bc0bd-8d82-4de8-b2d7-2cc3f164e6fe.json",
+      "sha256": "b99cd807781afa123be52f9bfdd6bf7bb04a8d44a4ea55a627149eaac1f2a941"
+    }
+  ],
+  "valueEvidence": [
+    {
+      "claimClass": "directly_observed",
+      "claim": "Private account screenshots remain excluded from Git while the complete local worktree is preserved in the verified savepoint."
+    },
+    {
+      "claimClass": "computed",
+      "claim": "Repository verification passed 727 of 727 tests and the release audit scored 81 of 100."
+    },
+    {
+      "claimClass": "corroborated",
+      "claim": "The branch contains three scoped implementation commits and remains research-only with PRICE_CHECK_ONLY authorization."
+    }
+  ],
+  "impactGate": {
+    "ending": {
+      "helpingBear": {
+        "status": "SUPPORTED",
+        "basis": "Preserved the user-owned implementation and prevented account-specific runtime captures from entering the public branch without changing research-only wagering authority.",
+        "claimClass": "corroborated",
+        "evidenceArtifacts": [
+          {
+            "path": "governance/system-boundaries.json",
+            "sha256": "58978495978e6294730036e1416bc791758c31428f5308ea8921fd80b5047b63"
+          },
+          {
+            "path": ".gitignore",
+            "sha256": "0775c31912afc973c8b29173c0c890197d5ead7126dbe49d76ee09b3bf0d0f8a"
+          }
+        ]
+      },
+      "helpingSystem": {
+        "status": "SUPPORTED",
+        "basis": "Fresh dependency installation, repository verification, boundary audit, release audit, and operator doctor completed on the committed state.",
+        "claimClass": "computed",
+        "evidenceArtifacts": [
+          {
+            "path": "reports/plugin-runs/2026-08-03/bear-edge-operator-2026-08-03T21-41-19.504Z-518bc0bd-8d82-4de8-b2d7-2cc3f164e6fe.json",
+            "sha256": "b99cd807781afa123be52f9bfdd6bf7bb04a8d44a4ea55a627149eaac1f2a941"
+          }
+        ]
+      },
+      "helpingProject": {
+        "status": "SUPPORTED",
+        "basis": "The recovered implementation is organized as scoped commits on the existing research branch and is ready for draft review.",
+        "claimClass": "directly_observed",
+        "evidenceArtifacts": [
+          {
+            "path": "reports/plugin-runs/2026-08-03/bear-edge-operator-2026-08-03T21-41-19.504Z-518bc0bd-8d82-4de8-b2d7-2cc3f164e6fe.json",
+            "sha256": "b99cd807781afa123be52f9bfdd6bf7bb04a8d44a4ea55a627149eaac1f2a941"
+          }
+        ]
+      },
+      "degradationCheck": {
+        "status": "PASSED",
+        "evidenceArtifacts": [
+          {
+            "path": "governance/system-boundaries.json",
+            "sha256": "58978495978e6294730036e1416bc791758c31428f5308ea8921fd80b5047b63"
+          },
+          {
+            "path": "reports/plugin-runs/2026-08-03/bear-edge-operator-2026-08-03T21-41-19.504Z-518bc0bd-8d82-4de8-b2d7-2cc3f164e6fe.json",
+            "sha256": "b99cd807781afa123be52f9bfdd6bf7bb04a8d44a4ea55a627149eaac1f2a941"
+          }
+        ]
+      }
+    },
+    "completionEligible": true
+  },
+  "boundaries": {
+    "predictiveImprovement": "NOT_EVALUATED",
+    "wageringAuthority": "UNCHANGED",
+    "modelValidation": "NOT_ESTABLISHED"
+  }
+}

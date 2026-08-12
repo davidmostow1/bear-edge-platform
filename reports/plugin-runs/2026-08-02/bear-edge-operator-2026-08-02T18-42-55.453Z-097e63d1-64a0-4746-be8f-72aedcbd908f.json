@@ -1,0 +1,94 @@
+{
+  "schemaVersion": "1.0.0",
+  "runId": "097e63d1-64a0-4746-be8f-72aedcbd908f",
+  "createdAt": "2026-08-02T18:42:55.453Z",
+  "plugin": {
+    "name": "bear-edge-operator",
+    "manifestVersion": "0.1.0+codex.20260730065217",
+    "manifestPath": "/Users/davidbearmostow/.codex/plugins/cache/personal/bear-edge-operator/0.1.0+codex.20260730065217/.codex-plugin/plugin.json",
+    "manifestSha256": "20cee0aa0d512587e8f2c83d4105d8bf487b1eeb1f6173037722d2e47cf8e0c6"
+  },
+  "skill": "bear-edge-operator",
+  "route": {
+    "profile": "canonical-app",
+    "selection": "EXPLICIT_REPO",
+    "verification": "FULL"
+  },
+  "invocation": {
+    "command": "/Users/davidbearmostow/Documents/Codex/2026-06-17-documents-openai-developers-google-drive-google/.tools/node-v24.16.0-darwin-arm64/bin/node /Users/davidbearmostow/.codex/plugins/cache/personal/bear-edge-operator/0.1.0+codex.20260730065217/scripts/bear-edge-doctor.mjs --repo /Users/davidbearmostow/Documents/Codex/2026-06-17-documents-openai-developers-google-drive-google",
+    "exact": true,
+    "secretsRedacted": true
+  },
+  "repo": {
+    "rootDir": "/Users/davidbearmostow/Documents/Codex/2026-06-17-documents-openai-developers-google-drive-google",
+    "branch": "codex/pitcher-strikeout-complete-data-research",
+    "commit": "083d933cfebade6fac1304a880da9483a838bf4f"
+  },
+  "nativeOutputReports": [
+    {
+      "path": "/Users/davidbearmostow/Documents/Codex/2026-06-17-documents-openai-developers-google-drive-google/data/reports/bear_edge_operator_doctor.json",
+      "sha256": "1a2b06e56a231e3f6e5fef2dd544c9866896035d381b4bd1067418c759aca8ed"
+    },
+    {
+      "path": "/Users/davidbearmostow/Documents/Codex/2026-06-17-documents-openai-developers-google-drive-google/data/reports/bear_edge_operator_doctor.md",
+      "sha256": "72dcb987c0722332b1382773b1ba4efa7553c5963f9c4952b0c374ef77f72575"
+    }
+  ],
+  "valueEvidence": [
+    {
+      "claimClass": "ROUTING_EXECUTION",
+      "claim": "profile_route_executed",
+      "value": "canonical-app",
+      "evidence": {
+        "nativeDoctorOk": null,
+        "nativeOutputReportCount": 2
+      }
+    },
+    {
+      "claimClass": "LOCAL_CORRECTNESS",
+      "claim": "native_verification_status",
+      "value": "CHECKS_COMPLETE",
+      "evidence": {
+        "total": 2,
+        "passed": 2,
+        "failed": 0
+      }
+    },
+    {
+      "claimClass": "DISPLAYED_EVIDENCE",
+      "claim": "provider_or_artifact_state",
+      "value": "NOT_REPORTED",
+      "evidence": {
+        "outputReportSha256": [
+          "1a2b06e56a231e3f6e5fef2dd544c9866896035d381b4bd1067418c759aca8ed",
+          "72dcb987c0722332b1382773b1ba4efa7553c5963f9c4952b0c374ef77f72575"
+        ],
+        "executionBookOdds": null
+      }
+    },
+    {
+      "claimClass": "AUTHORIZATION_BOUNDARY",
+      "claim": "native_bet_call_permission_preserved",
+      "value": "PRICE_CHECK_ONLY",
+      "evidence": {
+        "modelAuthorization": null,
+        "authorizedStake": null
+      }
+    }
+  ],
+  "boundaries": {
+    "predictiveImprovement": "NOT_EVALUATED",
+    "modelValidation": "NOT_ESTABLISHED",
+    "wageringAuthority": "UNCHANGED"
+  },
+  "operatorProvenance": {
+    "wrapperScriptPath": "/Users/davidbearmostow/.codex/plugins/cache/personal/bear-edge-operator/0.1.0+codex.20260730065217/scripts/bear-edge-doctor.mjs",
+    "wrapperScriptSha256": "6e6b6f3111182e7c789873b87dd74b077df8ba52313449673340c2e273b41851",
+    "activeNodeExecutable": "/Users/davidbearmostow/Documents/Codex/2026-06-17-documents-openai-developers-google-drive-google/.tools/node-v24.16.0-darwin-arm64/bin/node",
+    "executionNodeExecutable": "/Users/davidbearmostow/Documents/Codex/2026-06-17-documents-openai-developers-google-drive-google/.tools/node-v24.16.0-darwin-arm64/bin/node",
+    "npmCli": "/Users/davidbearmostow/Documents/Codex/2026-06-17-documents-openai-developers-google-drive-google/.tools/node-v24.16.0-darwin-arm64/lib/node_modules/npm/bin/npm-cli.js",
+    "runtimeSelection": "active",
+    "nativeDoctorCommand": null,
+    "persistedAfterNativeOutput": true
+  }
+}

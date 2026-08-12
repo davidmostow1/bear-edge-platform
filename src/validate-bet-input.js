@@ -161,7 +161,7 @@ function readThresholds(value, issues) {
 
   const normalized = {};
   const minEdge = readOptionalNumber(value.minEdge, "thresholds.minEdge", issues, { min: 0, max: 1 });
-  const minEvRoi = readOptionalNumber(value.minEvRoi, "thresholds.minEvRoi", issues);
+  const minEvRoi = readOptionalNumber(value.minEvRoi, "thresholds.minEvRoi", issues, { min: 0 });
   const minKellyFraction = readOptionalNumber(value.minKellyFraction, "thresholds.minKellyFraction", issues, {
     min: 0,
     max: 1
