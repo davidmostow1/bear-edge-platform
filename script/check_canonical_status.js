@@ -2,16 +2,14 @@
 
 const fs = require("node:fs");
 const path = require("node:path");
-const crypto = require("node:crypto");
 const { execFileSync } = require("node:child_process");
 
 const { contentDigest } = require("../src/audit/canonical-json.js");
 
 const REPO_ROOT = path.resolve(__dirname, "..");
 const DIGEST_PATTERN = /^[a-f0-9]{64}$/;
-const STATUS_DIGEST_SENTINEL = "SELF_REFERENTIAL_CANDIDATE_DIGEST";
 const PINNED_CANONICAL_STATUS_DIGEST =
-  "857558439207bdb49ff5b045a0675c5996952563cb0b882105104f06c812fe79";
+  "c8939f5dd8f494d8ed6e7aee3476450a0d7a419ba49b236e89db5983926e0a74";
 const REQUIRED_GRADES = Object.freeze([
   "CONFIRMED",
   "PARTIAL",
@@ -27,6 +25,11 @@ const REQUIRED_DOCUMENTS = Object.freeze([
   "docs/canonical/ROADMAP.md"
 ]);
 const REQUIRED_PERSISTENT_BLOCKERS = Object.freeze([
+  "CANONICAL_BRANCH_PROTECTION_UNCONFIGURED",
+  "SUPABASE_PROJECTION_INTEGRITY_HARDENING_NOT_DEPLOYED",
+  "SUPABASE_V2_1_SYNC_NOT_COMPATIBILITY_PROVEN",
+  "GIT_AND_LIVE_SUPABASE_MIGRATIONS_DIFFER",
+  "EXTERNAL_RECEIPT_SOURCE_ATTESTATION_UNAVAILABLE",
   "NO_VALIDATED_MODEL",
   "NO_CALIBRATION_REPORT",
   "NO_PROSPECTIVE_SETTLED_COHORT",
@@ -34,19 +37,21 @@ const REQUIRED_PERSISTENT_BLOCKERS = Object.freeze([
   "NO_ESPORTS_PROBABILITY_GENERATOR",
   "NO_ESPORTS_HISTORICAL_PIPELINE",
   "SOURCE_RIGHTS_AND_LINEAGE_UNRESOLVED",
-  "SUPABASE_AUTHORITY_CUTOVER_NOT_IMPLEMENTED",
-  "GIT_AND_LIVE_SUPABASE_MIGRATIONS_DIFFER",
-  "LIVE_SUPABASE_REJECTS_SCHEMA_2_1_SYNC",
-  "EXTERNAL_AUDIT_RAW_RECEIPTS_NOT_RETAINED"
+  "SUPABASE_AUTHORITY_CUTOVER_NOT_IMPLEMENTED"
 ]);
-const CANONICALIZATION_BLOCKER =
-  "CANONICALIZATION_REQUIRES_EXTERNAL_EXACT_SHA_CI_RECEIPT";
-const SUPPORTED_CANDIDATE_STATE = "CONSOLIDATION_CANDIDATE";
-const PINNED_CANDIDATE_BRANCH = "codex/bear-edge-canonicalize-20260812";
+const CANONICAL_BRANCH_PROTECTION_BLOCKER =
+  "CANONICAL_BRANCH_PROTECTION_UNCONFIGURED";
+const SUPPORTED_CANONICAL_STATE = "MERGED_RESEARCH_BASELINE";
+const PINNED_CANONICAL_BASELINE = Object.freeze({
+  commit: "3698869087ab95dc2890079d7b7c615a32cfc8c3",
+  tree: "3eda1f4fc2e847d491c8ec2615564eddaed23e73",
+  pullRequest: 31,
+  mergeMethod: "MERGE_COMMIT"
+});
 const PINNED_REPOSITORY_SNAPSHOT = Object.freeze({
   fullName: "davidmostow1/bear-edge-platform",
   defaultBranch: "master",
-  defaultBranchCommit: "738b3e462dd1e46264240006f72a843a04cc17cf",
+  defaultBranchCommit: PINNED_CANONICAL_BASELINE.commit,
   recoveryBaselineCommit: "5f284eb8cf66050f06601087ef04a267441f1958",
   recoveryBaselineRefs: Object.freeze([
     "codex/pitcher-strikeout-complete-data-research",
@@ -61,40 +66,55 @@ const PINNED_RECOVERY_VERIFICATION = Object.freeze({
   failed: 0,
   grade: "CONFIRMED"
 });
-const PINNED_LOCAL_CANDIDATE_VERIFICATION = Object.freeze({
+const PINNED_CANONICAL_VERIFICATION = Object.freeze({
+  commit: PINNED_CANONICAL_BASELINE.commit,
+  tree: PINNED_CANONICAL_BASELINE.tree,
+  environment: "LOCAL_CLEAN_CHECKOUT_AND_GITHUB_ACTIONS_NODE_20",
   command: "npm run verify",
-  commitBinding: "EXTERNAL_EXACT_SHA_REQUIRED",
-  environment: "LOCAL_CANDIDATE_CONTENT",
-  verificationNotBefore: "2026-08-12T12:05:00.000Z",
   passed: 756,
   failed: 0,
   grade: "CONFIRMED",
-  remoteRunUrl: null
+  remoteRunUrl: "https://github.com/davidmostow1/bear-edge-platform/actions/runs/31633987337",
+  packageSmoke: "PASS_ON_IDENTICAL_TREE_IN_SEPARATE_TEMP_INSTALL"
 });
 const PINNED_SUPABASE_SNAPSHOT = Object.freeze({
-  observedOn: "2026-08-12",
+  observedAt: "2026-08-12T19:56:11.035Z",
   projectRef: "anxouzruouyraumgjdju",
   decisionRecords: 12,
   settlementRecords: 0,
   recordAmendments: 0,
+  predictionOutcomes: 0,
+  closingPrices: 0,
   edgeFunctions: 0,
-  liveMigrationCount: 16,
-  gitMigrationCount: 17,
+  liveMigrationCount: 17,
+  gitMigrationCount: 18,
   currentAuditRecordSchemaVersion: "2.1.0",
-  liveAuditRecordSchemaVersions: Object.freeze(["2.0.0"]),
+  liveAuditRecordSchemaVersions: Object.freeze(["2.0.0", "2.1.0"]),
+  liveDecisionRecordSchemaVersions: Object.freeze({
+    "2.0.0": 12,
+    "2.1.0": 0
+  }),
+  shadowEvidenceMigrationApplied: true,
   currentRecordSyncCompatible: false,
-  liveMissingGitMigration: "20260718010000_shadow_evidence_v21.sql",
+  liveMissingGitMigrations: Object.freeze([
+    "20260812195952_harden_authoritative_projections.sql"
+  ]),
+  authenticatedProjectionInsertExposed: true,
+  snapshotChecksFailClosed: false,
+  shadowRetryIdempotencyProven: false,
+  canonicalParentDecisionRecords: 0,
   gitIncludesLiveLeanMigration: true,
   leakedPasswordProtectionWarning: true,
   grade: "PARTIAL"
 });
 const PINNED_EXTERNAL_EVIDENCE_SCOPE = Object.freeze({
-  snapshotId: "bear-edge.external-audit.2026-08-12.v1",
-  observationMode: "PINNED_READ_ONLY_SNAPSHOT",
-  receiptRetention: "SUMMARY_ONLY_RAW_CONNECTOR_OUTPUT_NOT_RETAINED",
-  receiptDigest: null,
+  snapshotId: "bear-edge.external-audit.2026-08-12.v2",
+  observationMode: "DIRECT_CONNECTOR_AND_LOCAL_EXACT_SHA",
+  receiptPath: "docs/canonical/receipts/p0-baseline-20260812.json",
+  receiptRetention: "NORMALIZED_CONTENT_ADDRESSED_FACTS_RAW_CONNECTOR_PAYLOAD_NOT_RETAINED",
+  receiptDigest: "adf30318999a99e81f6ace76da23d5941a8e5df250dd3ee05248ddb50204fe46",
   refreshRequiredBeforeClaimChange: true,
-  machineAuditScope: "LOCAL_INVARIANTS_AND_PINNED_SNAPSHOT_CONSISTENCY"
+  machineAuditScope: "LOCAL_INVARIANTS_CANONICAL_BASELINE_ANCESTRY_AND_PINNED_EXTERNAL_RECEIPT"
 });
 const REQUIRED_SAFETY_STATEMENT =
   "SAFETY_INVARIANT: authorization is RESEARCH_ONLY; authorized stake is $0; execution is disabled.";
@@ -125,31 +145,13 @@ function readJson(filePath) {
   return JSON.parse(fs.readFileSync(filePath, "utf8"));
 }
 
-function normalizeCanonicalStatusForDigest(status) {
-  const normalized = JSON.parse(JSON.stringify(status));
-
-  if (normalized?.repository) {
-    normalized.repository.candidateContentDigest = STATUS_DIGEST_SENTINEL;
-  }
-  if (normalized?.softwareVerification?.canonicalizationCandidate) {
-    normalized.softwareVerification.canonicalizationCandidate.candidateContentDigest =
-      STATUS_DIGEST_SENTINEL;
-  }
-
-  return normalized;
-}
-
 function canonicalStatusDigest(status) {
-  return contentDigest(normalizeCanonicalStatusForDigest(status));
-}
-
-function sha256File(filePath) {
-  return crypto.createHash("sha256").update(fs.readFileSync(filePath)).digest("hex");
+  return contentDigest(status);
 }
 
 function readGitRepositoryState(repoRoot) {
   try {
-    const baselineCommit = PINNED_REPOSITORY_SNAPSHOT.recoveryBaselineCommit;
+    const baselineCommit = PINNED_CANONICAL_BASELINE.commit;
     const headCommit = execFileSync(
       "git",
       ["-C", repoRoot, "rev-parse", "HEAD"],
@@ -165,50 +167,21 @@ function readGitRepositoryState(repoRoot) {
       ["-C", repoRoot, "merge-base", "--is-ancestor", baselineCommit, headCommit],
       { stdio: "ignore" }
     );
-    const committedPaths = execFileSync(
+    const baselineTree = execFileSync(
       "git",
-      ["-C", repoRoot, "diff", "--name-only", "-z", baselineCommit, headCommit],
+      ["-C", repoRoot, "rev-parse", `${baselineCommit}^{tree}`],
       { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }
-    ).split("\0").filter(Boolean);
-    const trackedWorktreePaths = execFileSync(
-      "git",
-      ["-C", repoRoot, "diff", "--name-only", "-z", "HEAD"],
-      { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }
-    ).split("\0").filter(Boolean);
-    const untrackedPaths = execFileSync(
-      "git",
-      ["-C", repoRoot, "ls-files", "--others", "--exclude-standard", "-z"],
-      { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }
-    ).split("\0").filter(Boolean);
-    const changedPaths = [...new Set([
-      ...committedPaths,
-      ...trackedWorktreePaths,
-      ...untrackedPaths
-    ])].sort();
+    ).trim();
     const workingTreeClean = execFileSync(
       "git",
       ["-C", repoRoot, "status", "--porcelain=v1", "-z", "--untracked-files=all"],
       { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }
     ).length === 0;
-    const statusPath = "docs/canonical/STATUS.json";
-    const statusDigest = canonicalStatusDigest(readJson(path.join(repoRoot, statusPath)));
-    const digestEntries = changedPaths
-      .map((relativePath) => ({
-        path: relativePath,
-        sha256: relativePath === statusPath
-          ? statusDigest
-          : fs.existsSync(path.join(repoRoot, relativePath))
-            ? sha256File(path.join(repoRoot, relativePath))
-            : null
-      }));
-
     return {
       branch,
-      canonicalStatusDigest: statusDigest,
-      candidateContentDigest: contentDigest(digestEntries),
-      changedPaths,
+      canonicalBaselineCommit: baselineCommit,
+      canonicalBaselineTree: baselineTree,
       headCommit,
-      recoveryBaselineCommit: baselineCommit,
       workingTreeClean
     };
   } catch (_error) {
@@ -256,7 +229,14 @@ function validateExpectedHead(repositoryState, expectedHeadSha) {
 }
 
 function validateCanonicalStatusDocument(status, context) {
-  const { boundaries, documents, migrationFiles, registry, repositoryState = null } = context;
+  const {
+    boundaries,
+    documents,
+    migrationFiles,
+    receipt,
+    registry,
+    repositoryState = null
+  } = context;
   const models = Array.isArray(registry?.models) ? registry.models : [];
   const counts = countByModelStatus(models);
   const reportCount = models.filter((model) => (
@@ -302,6 +282,8 @@ function validateCanonicalStatusDocument(status, context) {
     status?.repository?.fullName === PINNED_REPOSITORY_SNAPSHOT.fullName
       && status.repository.defaultBranch === PINNED_REPOSITORY_SNAPSHOT.defaultBranch
       && status.repository.defaultBranchCommit === PINNED_REPOSITORY_SNAPSHOT.defaultBranchCommit
+      && status.repository.canonicalBaselineCommit === PINNED_CANONICAL_BASELINE.commit
+      && status.repository.canonicalBaselineTree === PINNED_CANONICAL_BASELINE.tree
       && status.repository.recoveryBaselineCommit
         === PINNED_REPOSITORY_SNAPSHOT.recoveryBaselineCommit
       && objectsEqual(
@@ -314,34 +296,34 @@ function validateCanonicalStatusDocument(status, context) {
   requireCondition(
     status.repository.grade === "PARTIAL",
     "REPOSITORY_GRADE_DRIFT",
-    "The consolidation candidate repository state must remain PARTIAL."
+    "The merged research baseline must remain PARTIAL until branch protection is configured."
   );
   requireCondition(
-    status.repository.canonicalizationState === SUPPORTED_CANDIDATE_STATE,
-    "LIFECYCLE_REQUIRES_EXTERNAL_VERIFIER",
-    "The offline audit can certify only the consolidation-candidate content; exact commit and remote-green states require external receipts."
+    status.repository.canonicalizationState === SUPPORTED_CANONICAL_STATE,
+    "CANONICAL_LIFECYCLE_DRIFT",
+    "The canonical lifecycle must identify the reviewed merged research baseline."
   );
   requireCondition(
-    status.repository.commitIdentityMode === "RUNTIME_GIT_SHA_PLUS_CANDIDATE_CONTENT_DIGEST"
-      && status.repository.canonicalizationBranch === PINNED_CANDIDATE_BRANCH
-      && Array.isArray(status.repository.candidateChangedPaths)
-      && status.repository.candidateChangedPaths.length > 0
-      && DIGEST_PATTERN.test(status.repository.candidateContentDigest ?? ""),
-    "CANDIDATE_IDENTITY_INVALID",
-    "The pinned candidate must identify its branch, runtime commit-binding mode, complete changed-path set, and content digest."
+    status.repository.commitIdentityMode
+      === "CANONICAL_BASELINE_ANCESTRY_PLUS_RUNTIME_EXACT_SHA"
+      && status.repository.pullRequest === PINNED_CANONICAL_BASELINE.pullRequest
+      && status.repository.mergeMethod === PINNED_CANONICAL_BASELINE.mergeMethod
+      && status.repository.branchProtected === false
+      && status.repository.repositoryRulesetCount === 0,
+    "CANONICAL_IDENTITY_INVALID",
+    "The repository receipt must identify the merged baseline and its still-unprotected branch state."
   );
   if (repositoryState !== null) {
     requireCondition(
-      repositoryState.recoveryBaselineCommit === PINNED_REPOSITORY_SNAPSHOT.recoveryBaselineCommit
-        && objectsEqual(repositoryState.changedPaths, status.repository.candidateChangedPaths)
-        && repositoryState.candidateContentDigest
-          === status.repository.candidateContentDigest,
-      "CANDIDATE_CONTENT_EVIDENCE_DRIFT",
-      "Current Git ancestry, changed paths, and candidate content digest must match the pinned receipt."
+      repositoryState.canonicalBaselineCommit === PINNED_CANONICAL_BASELINE.commit
+        && repositoryState.canonicalBaselineTree === PINNED_CANONICAL_BASELINE.tree,
+      "CANONICAL_BASELINE_ANCESTRY_DRIFT",
+      "Current Git HEAD must descend from the reviewed canonical baseline merge commit."
     );
   }
   requireCondition(
-    objectsEqual(status?.externalEvidence, PINNED_EXTERNAL_EVIDENCE_SCOPE),
+    objectsEqual(status?.externalEvidence, PINNED_EXTERNAL_EVIDENCE_SCOPE)
+      && DIGEST_PATTERN.test(status.externalEvidence.receiptDigest),
     "EXTERNAL_EVIDENCE_SCOPE_DRIFT",
     "External facts must retain the pinned snapshot identity and explicit non-refresh scope."
   );
@@ -405,7 +387,10 @@ function validateCanonicalStatusDocument(status, context) {
   );
 
   requireCondition(
-    status?.esports?.independentProbabilityGeneratorImplemented === false
+    status?.esports?.sourceContractImplemented === false
+      && status.esports.syntheticDatasetProofImplemented === false
+      && status.esports.realCorpusAuthorized === false
+      && status.esports.independentProbabilityGeneratorImplemented === false
       && status.esports.historicalPointInTimeDatasetReady === false
       && status.esports.prospectiveSettledCohortSize === 0
       && status.esports.operationalBetAuthorityImplemented === false
@@ -444,11 +429,12 @@ function validateCanonicalStatusDocument(status, context) {
     status.supabaseSnapshot.gitMigrationCount === migrationFiles.length
       && migrationFiles.includes("20260718010000_shadow_evidence_v21.sql")
       && migrationFiles.includes("20260801173038_allow_lean_decision_verdict.sql")
-      && status.supabaseSnapshot.liveMissingGitMigration
-        === "20260718010000_shadow_evidence_v21.sql"
+      && status.supabaseSnapshot.shadowEvidenceMigrationApplied === true
+      && status.supabaseSnapshot.liveMissingGitMigrations.length === 1
+      && migrationFiles.includes(status.supabaseSnapshot.liveMissingGitMigrations[0])
       && status.supabaseSnapshot.gitIncludesLiveLeanMigration === true,
     "MIGRATION_SNAPSHOT_INVALID",
-    "Canonical migration snapshot must preserve the observed Git/live difference."
+    "Canonical migration snapshot must preserve the observed live deployment and pending hardening delta."
   );
 
   requireCondition(
@@ -458,9 +444,9 @@ function validateCanonicalStatusDocument(status, context) {
     "Canonical status must retain every P0 blocker."
   );
   requireCondition(
-    status.blockingIssues.includes(CANONICALIZATION_BLOCKER),
-    "CANDIDATE_BLOCKER_STATE_DRIFT",
-    "The offline candidate must require an external exact-SHA and remote-CI receipt."
+    status.blockingIssues.includes(CANONICAL_BRANCH_PROTECTION_BLOCKER),
+    "CANONICAL_PROTECTION_BLOCKER_DRIFT",
+    "The unprotected default branch must remain an explicit blocker."
   );
 
   for (const relativePath of REQUIRED_DOCUMENTS) {
@@ -502,10 +488,10 @@ function validateCanonicalStatusDocument(status, context) {
   );
   requireCondition(
     documents["docs/canonical/STATUS.md"].includes(
-      `**Candidate lifecycle:** \`${status.repository.canonicalizationState}\``
+      `**Baseline lifecycle:** \`${status.repository.canonicalizationState}\``
     ),
-    "CANDIDATE_DOCUMENT_STATE_DRIFT",
-    "Human-readable status must match the machine-readable candidate lifecycle."
+    "CANONICAL_DOCUMENT_STATE_DRIFT",
+    "Human-readable status must match the machine-readable baseline lifecycle."
   );
 
   requireCondition(
@@ -520,15 +506,15 @@ function validateCanonicalStatusDocument(status, context) {
     "Verification meaning must retain the software-versus-predictive evidence boundary."
   );
 
-  const candidateVerification = status?.softwareVerification?.canonicalizationCandidate;
-  const { candidateContentDigest: receiptContentDigest, ...candidateReceipt } =
-    candidateVerification ?? {};
   requireCondition(
-    objectsEqual(candidateReceipt, PINNED_LOCAL_CANDIDATE_VERIFICATION)
-      && receiptContentDigest === status.repository.candidateContentDigest
-      && Number.isFinite(Date.parse(candidateVerification?.verificationNotBefore ?? "")),
-    "CANDIDATE_VERIFICATION_EVIDENCE_DRIFT",
-    "Local verification must match the pinned run boundary/count and the exact candidate content digest."
+    objectsEqual(status?.softwareVerification?.canonicalBaseline, PINNED_CANONICAL_VERIFICATION),
+    "CANONICAL_VERIFICATION_EVIDENCE_DRIFT",
+    "Canonical baseline verification must match the exact merge commit, tree, test count, and CI receipt."
+  );
+  requireCondition(
+    contentDigest(receipt) === status.externalEvidence.receiptDigest,
+    "EXTERNAL_RECEIPT_DIGEST_DRIFT",
+    "The normalized external receipt digest must match its canonical JSON content."
   );
   requireCondition(
     canonicalStatusDigest(status) === PINNED_CANONICAL_STATUS_DIGEST,
@@ -541,7 +527,7 @@ function validateCanonicalStatusDocument(status, context) {
     auditScope: PINNED_EXTERNAL_EVIDENCE_SCOPE.machineAuditScope,
     repositoryStateChecked: repositoryState !== null,
     externalEvidenceAsOf: status.externalEvidenceAsOf,
-    recoveryBaselineCommit: status.repository.recoveryBaselineCommit,
+    canonicalBaselineCommit: status.repository.canonicalBaselineCommit,
     canonicalizationState: status.repository.canonicalizationState,
     runtimeHeadCommit: repositoryState?.headCommit ?? null,
     workingTreeClean: repositoryState?.workingTreeClean ?? null,
@@ -571,7 +557,7 @@ function auditCanonicalStatus(options = {}) {
   requireCondition(
     repositoryState !== null,
     "REPOSITORY_STATE_UNAVAILABLE",
-    "Canonical status cannot pass unless Git HEAD, branch, changed paths, and content digests are readable."
+    "Canonical status cannot pass unless Git HEAD and canonical-baseline ancestry are readable."
   );
   validateExpectedHead(repositoryState, process.env.BEAR_EDGE_EXPECTED_HEAD_SHA);
 
@@ -579,6 +565,7 @@ function auditCanonicalStatus(options = {}) {
     boundaries: readJson(path.join(repoRoot, "governance", "system-boundaries.json")),
     documents,
     migrationFiles,
+    receipt: readJson(path.join(repoRoot, "docs", "canonical", "receipts", "p0-baseline-20260812.json")),
     registry: readJson(path.join(repoRoot, "models", "registry.json")),
     repositoryState
   });
@@ -603,9 +590,9 @@ if (require.main === module) {
 }
 
 module.exports = {
-  CANONICALIZATION_BLOCKER,
+  CANONICAL_BRANCH_PROTECTION_BLOCKER,
   CanonicalStatusError,
-  PINNED_LOCAL_CANDIDATE_VERIFICATION,
+  PINNED_CANONICAL_VERIFICATION,
   REQUIRED_SAFETY_STATEMENT,
   REQUIRED_PERSISTENT_BLOCKERS,
   REQUIRED_DOCUMENTS,

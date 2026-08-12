@@ -26,6 +26,10 @@ function loadContext() {
     migrationFiles: fs.readdirSync(path.join(ROOT, "supabase", "migrations"))
       .filter((fileName) => fileName.endsWith(".sql"))
       .sort(),
+    receipt: JSON.parse(fs.readFileSync(
+      path.join(ROOT, "docs", "canonical", "receipts", "p0-baseline-20260812.json"),
+      "utf8"
+    )),
     registry: JSON.parse(fs.readFileSync(path.join(ROOT, "models", "registry.json"), "utf8"))
   };
 }
@@ -53,7 +57,7 @@ test("canonical status audit agrees with registry, migrations, authorization, an
   assert.equal(result.validatedModelCount, 0);
   assert.equal(result.authorizedStakeUsd, 0);
   assert.equal(result.executionEnabled, false);
-  assert.equal(result.gitMigrationCount, 17);
+  assert.equal(result.gitMigrationCount, 18);
   assert.ok(
     packageJson.files.includes("docs/canonical/**/*"),
     "portable packages must retain the machine-audited canonical status bundle"
@@ -212,11 +216,11 @@ test("canonical status audit rejects fabricated repository evidence", () => {
 
 test("canonical status audit rejects a fabricated verification count", () => {
   const status = loadStatus();
-  status.softwareVerification.canonicalizationCandidate.passed = 999999;
+  status.softwareVerification.canonicalBaseline.passed = 999999;
 
   assertFailureCode(
     () => validateCanonicalStatusDocument(status, loadContext()),
-    "CANDIDATE_VERIFICATION_EVIDENCE_DRIFT"
+    "CANONICAL_VERIFICATION_EVIDENCE_DRIFT"
   );
 });
 
@@ -281,40 +285,17 @@ test("canonical status audit rejects inverted authority prose", () => {
   );
 });
 
-test("canonical status audit rejects a syntactically plausible but unverified remote lifecycle", () => {
+test("canonical status audit rejects a lifecycle that overclaims P0 closure", () => {
   const status = loadStatus();
-  const context = loadContext();
-  const candidateCommit = "c".repeat(40);
-
-  status.repository.canonicalizationState = "REMOTE_GREEN";
-  status.repository.commitIdentityMode = candidateCommit;
-  status.blockingIssues = status.blockingIssues.filter(
-    (blocker) => blocker !== "CANONICALIZATION_REQUIRES_EXTERNAL_EXACT_SHA_CI_RECEIPT"
-  );
-  status.softwareVerification.canonicalizationCandidate = {
-    command: "npm run verify",
-    commitBinding: candidateCommit,
-    environment: "GITHUB_ACTIONS_NODE_20",
-    verificationNotBefore: "2026-08-12T08:45:00.000Z",
-    passed: 749,
-    failed: 0,
-    grade: "CONFIRMED",
-    remoteRunUrl: "https://github.com/davidmostow1/bear-edge-platform/actions/runs/123456"
-  };
-  context.documents["docs/canonical/STATUS.md"] = context.documents[
-    "docs/canonical/STATUS.md"
-  ].replace(
-    "**Candidate lifecycle:** `CONSOLIDATION_CANDIDATE`",
-    "**Candidate lifecycle:** `REMOTE_GREEN`"
-  );
+  status.repository.canonicalizationState = "P0_CLOSED";
 
   assertFailureCode(
-    () => validateCanonicalStatusDocument(status, context),
-    "LIFECYCLE_REQUIRES_EXTERNAL_VERIFIER"
+    () => validateCanonicalStatusDocument(status, loadContext()),
+    "CANONICAL_LIFECYCLE_DRIFT"
   );
 });
 
-test("canonical status validates the same aggregate content across logical commits", () => {
+test("canonical status accepts descendants of the reviewed merged baseline", () => {
   const repositoryState = readGitRepositoryState(ROOT);
   assert.ok(repositoryState);
 
@@ -328,7 +309,7 @@ test("canonical status validates the same aggregate content across logical commi
   }));
 });
 
-test("candidate receipt is branch-independent when ancestry and content are exact", () => {
+test("canonical baseline receipt is branch-independent for normal descendant development", () => {
   const repositoryState = readGitRepositoryState(ROOT);
   assert.ok(repositoryState);
 
@@ -355,7 +336,7 @@ test("canonical status binds the explicitly selected Dota 2 product lane", () =>
   });
 });
 
-test("canonical status rejects an extra path in the aggregate baseline diff", () => {
+test("canonical status rejects a checkout that does not descend from the merged baseline", () => {
   const repositoryState = readGitRepositoryState(ROOT);
   assert.ok(repositoryState);
 
@@ -364,9 +345,9 @@ test("canonical status rejects an extra path in the aggregate baseline diff", ()
       ...loadContext(),
       repositoryState: {
         ...repositoryState,
-        changedPaths: [...repositoryState.changedPaths, "unreviewed-file.txt"].sort()
+        canonicalBaselineCommit: "f".repeat(40)
       }
     }),
-    "CANDIDATE_CONTENT_EVIDENCE_DRIFT"
+    "CANONICAL_BASELINE_ANCESTRY_DRIFT"
   );
 });

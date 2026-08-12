@@ -22,11 +22,11 @@ The current decision lifecycle is local-authoritative:
 
 - executable code, schemas, migrations, registry entries, and release identity are owned by an exact Git commit;
 - the application appends canonical records to a local JSONL ledger;
-- the local outbox contains projection machinery, but current v2.1 records cannot synchronize to the observed live v2.0-only tables;
+- the local outbox contains projection machinery, but synchronization remains disabled because the observed v2.1 projection has unresolved authorization, snapshot-integrity, retry, mapper, and parent-compatibility defects;
 - live Supabase table comments and `authority = 'local'` constraints confirm projection semantics;
 - dashboards, reports, Drive documents, plugin output, and conversations are derived context, not operational authority.
 
-Supabase is live but incomplete relative to Git. It currently has decision, settlement, and amendment projection tables constrained to audit schema v2.0. The recovered application emits v2.1 records, and the v2.1 compatibility migration is not deployed, so current new-record synchronization is incompatible and now fails closed unless verified v2.1 support is explicitly configured. Live Supabase also has no deployed shadow outcome/closing-price tables, quote-event table, model registry, promotion table, or edge function.
+Supabase is live but remains a non-authoritative projection. The observed database has decision, settlement, amendment, prediction-outcome, and closing-price tables, and its three original journal tables accept schema v2.0 or v2.1. That version widening is not an operational compatibility receipt: authenticated clients can directly insert claimed verified evidence, missing JSON identity keys can satisfy the current snapshot checks through SQL `NULL`, duplicate retries can be rejected by the `BEFORE INSERT` lineage trigger before conflict handling, the decision mapper can emit market-family values outside the database enum, and none of the 12 retained v2.0 decisions can parent the new evidence rows. Synchronization therefore remains disabled. No quote-event table, model registry, promotion table, or edge function was observed.
 
 ## TARGET: architecture after an explicit authority cutover
 
@@ -77,7 +77,7 @@ Until that gate passes, the exact language is:
 | Negative-binomial pitcher-K lane | implemented research code | executable distribution/model mechanics | complete data, live lineup/price access, or validation |
 | Calibration system | implemented and tested | metric/report and promotion-gate mechanics | existence of a qualifying cohort |
 | Local audit ledger | implemented and tested | append-only record behavior and integrity checks | remote durability or truth of caller-entered evidence |
-| Supabase projection | implemented in code; deployed schema incompatible with current v2.1 records | a remote Bear Edge-shaped v2.0 projection exists | successful current-record synchronization, authority cutover, or complete event schema |
+| Supabase projection | implemented in code; v2.1 tables are deployed but fail integrity and compatibility review | a remote append-only-shaped projection exists with preserved row counts | safe retry, trusted-writer enforcement, current-record compatibility, authority cutover, or complete event schema |
 | Dashboard/PWA | implemented and tested | local research/operator interface behavior | physical-device installation or production deployment |
 | Source adapters | mixed | some official/public/manual research intake exists | licensed coverage, completeness, or live freshness |
 | Esports model | absent | nothing | no game-specific probability generator exists |

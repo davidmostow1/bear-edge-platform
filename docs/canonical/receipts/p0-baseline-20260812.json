@@ -1,0 +1,99 @@
+{
+  "schemaVersion": "bear-edge.external-receipt.v1",
+  "receiptId": "bear-edge.p0-baseline.2026-08-12.v1",
+  "observedAt": "2026-08-12T19:56:11.035Z",
+  "scope": "NORMALIZED_GITHUB_SUPABASE_AND_LOCAL_VERIFICATION_FACTS",
+  "github": {
+    "repository": "davidmostow1/bear-edge-platform",
+    "pullRequest": {
+      "number": 31,
+      "url": "https://github.com/davidmostow1/bear-edge-platform/pull/31",
+      "headCommit": "257ec7d44a0f8a8a4e44bc71b26b14f62e697321",
+      "headTree": "3eda1f4fc2e847d491c8ec2615564eddaed23e73",
+      "mergeMethod": "merge_commit",
+      "mergeCommit": "3698869087ab95dc2890079d7b7c615a32cfc8c3",
+      "mergeParents": [
+        "738b3e462dd1e46264240006f72a843a04cc17cf",
+        "257ec7d44a0f8a8a4e44bc71b26b14f62e697321"
+      ]
+    },
+    "defaultBranch": {
+      "name": "master",
+      "commit": "3698869087ab95dc2890079d7b7c615a32cfc8c3",
+      "tree": "3eda1f4fc2e847d491c8ec2615564eddaed23e73",
+      "protected": false,
+      "repositoryRulesetCount": 0
+    },
+    "continuousIntegration": [
+      {
+        "runId": 31633776181,
+        "url": "https://github.com/davidmostow1/bear-edge-platform/actions/runs/31633776181",
+        "commit": "257ec7d44a0f8a8a4e44bc71b26b14f62e697321",
+        "conclusion": "success"
+      },
+      {
+        "runId": 31633987337,
+        "url": "https://github.com/davidmostow1/bear-edge-platform/actions/runs/31633987337",
+        "commit": "3698869087ab95dc2890079d7b7c615a32cfc8c3",
+        "conclusion": "success"
+      }
+    ]
+  },
+  "localVerification": {
+    "commit": "3698869087ab95dc2890079d7b7c615a32cfc8c3",
+    "workingTree": "clean",
+    "command": "npm run verify",
+    "passed": 756,
+    "failed": 0,
+    "packageSmoke": {
+      "result": "pass",
+      "sourceCommit": "257ec7d44a0f8a8a4e44bc71b26b14f62e697321",
+      "sourceTree": "3eda1f4fc2e847d491c8ec2615564eddaed23e73",
+      "sameTreeAsMergeCommit": true,
+      "environment": "separate temporary install"
+    }
+  },
+  "supabase": {
+    "projectRef": "anxouzruouyraumgjdju",
+    "appliedMigrationCount": 17,
+    "shadowEvidenceMigration": {
+      "version": "20260718010000",
+      "name": "shadow_evidence_v21",
+      "applied": true
+    },
+    "rowCounts": {
+      "decisionRecords": 12,
+      "settlementRecords": 0,
+      "recordAmendments": 0,
+      "predictionOutcomes": 0,
+      "closingPrices": 0
+    },
+    "decisionSchemaVersions": {
+      "2.0.0": 12,
+      "2.1.0": 0
+    },
+    "hardeningPreflight": {
+      "decisionRecordsWithNonFiniteTimestamps": 0,
+      "decisionRecordsWithNonFiniteFloats": 0
+    },
+    "shadowEvidenceParentReadiness": {
+      "canonicalParentSnapshots": 0,
+      "parentsWithEventStart": 0,
+      "parentsWithSportsbook": 0
+    },
+    "verifiedControls": {
+      "rowLevelSecurityEnabledAndForced": true,
+      "anonymousTablePrivileges": false,
+      "mutationTriggersEnabled": true,
+      "authenticatedInsertPrivilegesPresent": true,
+      "emptySnapshotWouldPassCheck": true
+    },
+    "compatibilityConclusion": "SYNC_DISABLED_PENDING_VERSIONED_HARDENING_AND_POSTGRESQL_RUNTIME_PROOF"
+  },
+  "retention": {
+    "rawConnectorPayloadRetained": false,
+    "normalizedFactsRetained": true,
+    "sourceAttestationAvailable": false
+  },
+  "claimBoundary": "This receipt establishes observed software and deployment state only. It does not establish predictive validity, source rights, profitability, or wagering authority."
+}

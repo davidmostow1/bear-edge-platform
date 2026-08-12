@@ -24,6 +24,10 @@ const leanVerdictMigrationPath = path.resolve(
   __dirname,
   "../supabase/migrations/20260801173038_allow_lean_decision_verdict.sql"
 );
+const projectionHardeningMigrationPath = path.resolve(
+  __dirname,
+  "../supabase/migrations/20260812195952_harden_authoritative_projections.sql"
+);
 
 const versionControlledMigrationFiles = [
   "20260711021059_auth_user_state.sql",
@@ -42,7 +46,8 @@ const versionControlledMigrationFiles = [
   "20260717075721_allow_service_projection_20260717.sql",
   "20260717080017_remove_duplicate_client_event_index_20260717.sql",
   "20260718010000_shadow_evidence_v21.sql",
-  "20260801173038_allow_lean_decision_verdict.sql"
+  "20260801173038_allow_lean_decision_verdict.sql",
+  "20260812195952_harden_authoritative_projections.sql"
 ];
 
 function migrationSql() {
@@ -63,6 +68,10 @@ function shadowEvidenceMigrationSql() {
 
 function leanVerdictMigrationSql() {
   return fs.readFileSync(leanVerdictMigrationPath, "utf8");
+}
+
+function projectionHardeningMigrationSql() {
+  return fs.readFileSync(projectionHardeningMigrationPath, "utf8");
 }
 
 test("repository contains the complete version-controlled migration ledger", () => {
@@ -257,4 +266,212 @@ test("shadow evidence lineage trigger is private, claim-aware, serialized, and b
   assert.match(sql, /revoke all on function private\.enforce_shadow_evidence_lineage\(\) from public, anon, authenticated/i);
   assert.doesNotMatch(sql, /user_metadata/i);
   assert.doesNotMatch(sql, /raw_user_meta_data/i);
+});
+
+test("projection hardening makes authoritative projections service-write-only", () => {
+  const sql = projectionHardeningMigrationSql();
+
+  for (const table of [
+    "decision_records",
+    "settlement_records",
+    "record_amendments",
+    "prediction_outcomes",
+    "closing_prices"
+  ]) {
+    assert.match(
+      sql,
+      new RegExp(`revoke insert on table public\\.${table} from authenticated`, "i")
+    );
+    assert.match(
+      sql,
+      new RegExp(`grant select on table public\\.${table} to authenticated`, "i")
+    );
+    assert.match(
+      sql,
+      new RegExp(`grant select, insert on table public\\.${table} to service_role`, "i")
+    );
+    assert.match(
+      sql,
+      new RegExp(`drop policy if exists "${table}_insert_own" on public\\.${table}`, "i")
+    );
+    assert.doesNotMatch(
+      sql,
+      new RegExp(`grant[\\s\\S]{0,80}insert[\\s\\S]{0,80}public\\.${table}[\\s\\S]{0,80}to authenticated`, "i")
+    );
+  }
+});
+
+test("projection hardening binds every shadow snapshot field and rejects absent required keys", () => {
+  const sql = projectionHardeningMigrationSql();
+
+  for (const constraint of [
+    "prediction_outcomes_snapshot_check",
+    "closing_prices_snapshot_check"
+  ]) {
+    assert.match(sql, new RegExp(`drop constraint if exists ${constraint}`, "i"));
+    assert.match(sql, new RegExp(`add constraint ${constraint}[\\s\\S]*?check`, "i"));
+  }
+
+  for (const key of [
+    "schemaVersion",
+    "id",
+    "clientEventId",
+    "createdAt",
+    "authority",
+    "recordType",
+    "evaluationId",
+    "supersedesId",
+    "notes",
+    "contentDigest"
+  ]) {
+    assert.match(sql, new RegExp(`record_snapshot \\? '${key}'`, "i"));
+  }
+
+  for (const key of [
+    "provider",
+    "sourceType",
+    "sourceLocator",
+    "capturedAt",
+    "sourceTime",
+    "digest",
+    "verificationStatus"
+  ]) {
+    assert.match(sql, new RegExp(`record_snapshot->'source' \\? '${key}'`, "i"));
+  }
+
+  assert.match(sql, /record_snapshot->>'schemaVersion' = schema_version/i);
+  assert.match(sql, /record_snapshot->>'authority' = authority/i);
+  assert.match(sql, /record_snapshot->>'createdAt'\)::timestamptz = created_at/i);
+  assert.match(sql, /record_snapshot->'eventResult'->>'homeScore'/i);
+  assert.match(sql, /record_snapshot->'marketResult'->>'observedValue'/i);
+  assert.match(sql, /record_snapshot->'price'->>'marketOdds'/i);
+  assert.match(sql, /record_snapshot->'source'->>'digest' = source_digest/i);
+});
+
+test("projection hardening lets identical replays reach conflict handling and rejects digest conflicts", () => {
+  const sql = projectionHardeningMigrationSql();
+
+  assert.match(sql, /create or replace function private\.enforce_market_identity_and_duplicate/i);
+  assert.match(sql, /create or replace function private\.enforce_shadow_evidence_lineage/i);
+  for (const fn of [
+    "enforce_settlement_is_bet",
+    "enforce_amendment_link"
+  ]) {
+    assert.match(
+      sql,
+      new RegExp(`create or replace function private\\.${fn}[\\s\\S]*?security definer[\\s\\S]*?set search_path = ''`, "i")
+    );
+  }
+  assert.match(sql, /auth\.jwt\(\)->>'role'[\s\S]*is distinct from 'service_role'/i);
+  assert.match(sql, /where existing\.user_id = owner_id[\s\S]*existing\.client_event_id = event_id/i);
+  assert.match(sql, /existing_content_digest is distinct from projected_digest[\s\S]*digest conflict/i);
+  assert.match(sql, /existing_content_digest is null[\s\S]*return false/i);
+  assert.match(sql, /return true;[\s\S]*private\.is_idempotent_projection_replay[\s\S]*return new/i);
+  assert.doesNotMatch(sql, /private\.is_idempotent_projection_replay[\s\S]{0,300}return null/i);
+  assert.match(
+    sql,
+    /if new\.market_identity_status = 'COMPLETE'[\s\S]*new\.market_fingerprint :=[\s\S]*private\.is_idempotent_projection_replay/i
+  );
+
+  for (const index of [
+    "prediction_outcomes_initial_per_decision_uidx",
+    "prediction_outcomes_single_child_uidx",
+    "closing_prices_initial_per_decision_uidx",
+    "closing_prices_single_child_uidx"
+  ]) {
+    assert.match(sql, new RegExp(`create unique index if not exists ${index}`, "i"));
+  }
+});
+
+test("projection hardening preserves auth-user deletion across the shadow evidence graph", () => {
+  const sql = projectionHardeningMigrationSql();
+
+  for (const constraint of [
+    "prediction_outcomes_owned_decision",
+    "prediction_outcomes_supersedes_owned",
+    "closing_prices_owned_decision",
+    "closing_prices_supersedes_owned"
+  ]) {
+    assert.match(sql, new RegExp(`drop constraint if exists ${constraint}`, "i"));
+    assert.match(
+      sql,
+      new RegExp(`add constraint ${constraint}[\\s\\S]*?on delete cascade`, "i")
+    );
+  }
+});
+
+test("every authoritative BEFORE INSERT trigger remains replay-safe", () => {
+  const ledger = versionControlledMigrationFiles
+    .map((file) => fs.readFileSync(path.join(migrationDir, file), "utf8"))
+    .join("\n");
+  const hardening = projectionHardeningMigrationSql();
+  const probabilityFunction = ledger.match(
+    /create or replace function private\.enforce_bet_probability_provenance\(\)[\s\S]*?\$\$;/i
+  )?.[0];
+
+  assert.match(
+    ledger,
+    /create trigger decision_records_canonical_identity[\s\S]*before insert on public\.decision_records[\s\S]*enforce_market_identity_and_duplicate/i
+  );
+  assert.match(
+    hardening,
+    /create or replace function private\.enforce_market_identity_and_duplicate[\s\S]*private\.is_idempotent_projection_replay/i
+  );
+  assert.match(
+    ledger,
+    /create trigger decision_records_require_bet_probability_provenance[\s\S]*before insert on public\.decision_records[\s\S]*enforce_bet_probability_provenance/i
+  );
+  assert.ok(probabilityFunction);
+  assert.match(
+    probabilityFunction,
+    /create or replace function private\.enforce_bet_probability_provenance[\s\S]*new\.source = 'live_ui'[\s\S]*new\.verdict = 'BET'[\s\S]*new\.probability_provenance_status is distinct from 'COMPLETE'/i
+  );
+  assert.doesNotMatch(probabilityFunction, /client_event_id/i);
+  for (const [trigger, fn, table] of [
+    ["settlement_records_require_bet", "enforce_settlement_is_bet", "settlement_records"],
+    ["record_amendments_require_consistent_link", "enforce_amendment_link", "record_amendments"]
+  ]) {
+    assert.match(
+      ledger,
+      new RegExp(`create trigger ${trigger}[\\s\\S]*?before insert on public\\.${table}[\\s\\S]*?${fn}`, "i")
+    );
+    assert.match(
+      hardening,
+      new RegExp(`create or replace function private\\.${fn}[\\s\\S]*?private\\.is_idempotent_projection_replay`, "i")
+    );
+  }
+});
+
+test("projection hardening rejects non-finite values and covers every shadow foreign key", () => {
+  const sql = projectionHardeningMigrationSql();
+
+  for (const constraint of [
+    "decision_records_finite_timestamps_check",
+    "decision_records_finite_floats_check",
+    "settlement_records_finite_values_check",
+    "record_amendments_finite_timestamps_check",
+    "prediction_outcomes_finite_values_check",
+    "closing_prices_finite_timestamps_check"
+  ]) {
+    assert.match(sql, new RegExp(`add constraint ${constraint}`, "i"));
+  }
+
+  assert.match(sql, /isfinite\(created_at\)/i);
+  assert.match(sql, /'NaN'::double precision/i);
+  assert.match(sql, /recommended_stake is null or recommended_stake <> 'NaN'::numeric/i);
+  assert.match(sql, /stake is null or stake <> 'NaN'::numeric/i);
+  assert.match(sql, /profit is null or profit <> 'NaN'::numeric/i);
+  assert.match(sql, /'Infinity'::double precision/i);
+  assert.match(sql, /'-Infinity'::double precision/i);
+
+  for (const index of [
+    "prediction_outcomes_owned_decision_idx",
+    "prediction_outcomes_supersedes_owned_idx",
+    "closing_prices_owned_decision_idx",
+    "closing_prices_supersedes_owned_idx"
+  ]) {
+    assert.match(sql, new RegExp(`create index if not exists ${index}`, "i"));
+  }
+
+  assert.match(sql.trim(), /^begin;[\s\S]*commit;$/i);
 });

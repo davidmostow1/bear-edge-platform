@@ -8,31 +8,24 @@ SAFETY_INVARIANT: authorization is RESEARCH_ONLY; authorized stake is $0; execut
 
 ## P0 — establish one honest reproducible system
 
-**Goal:** one remotely reviewable canonicalization candidate with no ambiguity about what works.
+**Current result:** the consolidation/reproducibility portion is complete; two operational controls remain open.
 
-Work:
+Completed receipt:
 
-1. Start from immutable recovery baseline `5f284eb8cf66050f06601087ef04a267441f1958`.
-2. Make LAN launch resolve and bind one verified external IPv4 address, and fail closed when interface enumeration cannot prove one.
-3. Add the canonical status, architecture, source-of-truth, branch-disposition, and roadmap artifacts.
-4. Make the machine-readable pinned-status consistency audit part of `npm run verify` so model count, authorization, authority wording, and required documents cannot silently drift. It does not replace a fresh GitHub or Supabase observation.
-5. Reconcile the 17 Git migrations with the 16 live Supabase migrations. Current v2.1 records are incompatible with the observed v2.0-only live constraints; synchronization must remain disabled until the v2.1 migration and compatibility receipt are verified. Deploy nothing until the schema review and authority decision are complete.
-6. Leave all models `research_only`, authorization `PRICE_CHECK_ONLY`, stake `$0`, and execution disabled.
-7. Run `npm ci`, `npm run verify`, package, and smoke test from a separate clean checkout.
-8. Publish the explicitly authorized consolidation branch/PR and require green remote CI on its exact SHA. The offline status bundle binds content; the external GitHub receipt binds the self-referential commit SHA and CI run.
-9. Protect the selected canonical branch and freeze direct development on `master`.
+1. Recovery baseline `5f284eb8cf66050f06601087ef04a267441f1958` remains in ancestry.
+2. PR #31 was reviewed and merged normally as `3698869087ab95dc2890079d7b7c615a32cfc8c3`; its exact tree is `3eda1f4fc2e847d491c8ec2615564eddaed23e73`.
+3. LAN launch now binds a verified external IPv4 address or fails closed.
+4. Non-authorized decisions require authoritative stake exactly `0`, and permission cannot be promoted beyond `PRICE_CHECK_ONLY`.
+5. A clean exact-SHA checkout passed `npm run verify` with 756/756 tests; GitHub Actions passed on the same merge SHA; the identical tree passed a separate-install package smoke test.
+6. Canonical documents, machine status, and a normalized external receipt are committed to the audit surface.
 
-Exit gate:
+Remaining P0 work, in order:
 
-- one exact commit;
-- clean build tree;
-- fresh install and full verification pass;
-- separate-environment package smoke test;
-- remote CI on the same commit;
-- no unresolved P0 code or evidence finding;
-- canonical documents and machine status agree with code and runtime observations.
+1. Harden the already-deployed Supabase v2.1 projection with a new migration. Remove authenticated direct evidence insertion, make snapshot checks fail closed, restore conflict-safe retry, map research market families to the canonical remote kind, and add the missing indexes/finite-value checks. Do not rewrite the applied migration.
+2. Exercise the exact hardening SQL against PostgreSQL, deploy it from the reviewed version-controlled migration, refresh the live receipt, and keep synchronization disabled until every compatibility check passes.
+3. Configure branch protection or a repository ruleset for `master`, requiring the CI workflow and pull-request review. The current integration has read access to this state but no administration capability, so this step requires a repository administrator.
 
-P0 completion means the software state is reproducible. It does **not** mean a model predicts well.
+P0 exit requires the exact merged baseline receipt **plus** both remaining controls. P0 completion means the software state is reproducible and its projection/governance controls fail closed. It does **not** mean a model predicts well.
 
 ## P1 — build one real esports prediction vertical slice
 

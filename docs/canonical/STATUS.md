@@ -1,9 +1,10 @@
 # Bear Edge canonical status
 
-- **External evidence cutoff:** 2026-08-12 08:19 UTC
+- **External evidence cutoff:** 2026-08-12 19:56:11 UTC
 - **Recovery baseline:** `5f284eb8cf66050f06601087ef04a267441f1958`
-- **Canonicalization branch:** `codex/bear-edge-canonicalize-20260812`
-- **Candidate lifecycle:** `CONSOLIDATION_CANDIDATE`
+- **Merged canonical research baseline:** `3698869087ab95dc2890079d7b7c615a32cfc8c3`
+- **Baseline lifecycle:** `MERGED_RESEARCH_BASELINE`
+- **P0 status:** consolidation closed; branch-protection and Supabase-hardening gates open
 - **Release status:** not a release candidate
 - **Authorization:** `RESEARCH_ONLY` / `PRICE_CHECK_ONLY` / authorized stake `$0` / execution disabled
 
@@ -11,125 +12,70 @@ SAFETY_INVARIANT: authorization is RESEARCH_ONLY; authorized stake is $0; execut
 
 ## Bottom line
 
-Bear Edge contains substantial real software for decision gates, audit records, local append-only logging, synchronization, calibration analysis, dashboards, and MLB research. It does **not** contain a validated profitable prediction model. Passing tests establish software behavior; they do not establish predictive accuracy, calibration, closing-line value, profitability, licensed live-data access, or production readiness.
+PR #31 was reviewed, verified, and merged with a normal merge commit. The merge commit has the reviewed tree, preserves recovery commit `5f284eb8…` as an ancestor, passed 756/756 tests in a clean local checkout, and has green GitHub Actions on the same SHA. The same tree also passed a separate temporary-install package smoke test. This closes the P0 consolidation and reproducibility work.
 
-The exact PR #17 head above is the fullest immutable recovered implementation found during the audit. It is the recovery baseline, not yet the canonical release. The default `master` branch is older and its current Python and Deno workflows fail. The consolidation candidate is bound to its complete path set and content digest; its exact commit SHA and GitHub CI result must be recorded externally because a commit cannot contain its own SHA.
+P0 is not fully closed. GitHub reports `master` is unprotected with no repository ruleset, and the available integration cannot configure branch protection. A fresh Supabase review found that migration `20260718010000_shadow_evidence_v21` was applied and preserved all existing row counts, but the deployed projection still permits authenticated evidence forgery, accepts missing snapshot identity fields, breaks duplicate retry before conflict handling, and remains incompatible with lower-case research market families. Synchronization must stay disabled until a reviewed hardening migration is deployed and tested.
 
-## Claim matrix
+Passing tests establish software behavior; they do not establish predictive accuracy, calibration, closing-line value, profitability, source rights, or production readiness.
+
+## Exact baseline receipt
+
+| Evidence | Result |
+|---|---|
+| Pull request | PR #31, head `257ec7d…`, tree `3eda1f4…` |
+| Merge | `3698869…`, normal merge, reviewed tree preserved |
+| Clean local verification | `npm run verify`: 756 passed, 0 failed |
+| Remote verification | GitHub Actions run 31633987337: success on `3698869…` |
+| Package smoke | pass in a separate temporary install on the identical tree |
+| Branch governance | `master` unprotected; 0 repository rulesets |
+
+The normalized external receipt is retained at `docs/canonical/receipts/p0-baseline-20260812.json` and bound by the machine audit. Raw connector payloads and a provider-signed attestation were not retained, so the receipt is evidence of observed state, not an independently signed external audit.
+
+## Capability claims
 
 | Claim | Grade | Evidence-backed result |
 |---|---|---|
-| Substantial working application code exists | `CONFIRMED` | Recovery baseline CI passed `npm run verify` with 728/728 tests. |
-| A single canonical merged branch exists | `FAILED` | `master`, `reconcile`, PR #17, and later work remain fragmented. |
-| Default `master` is a verified runnable release | `FAILED` | Its active Python workflow requires a missing `requirements.txt`; current Python and Deno workflows failed. |
-| A validated Bear Edge model exists | `FAILED` | Registry policy 1.2.0 contains five models; all five are `research_only`. |
-| Predictive edge or profitability has been demonstrated | `UNVERIFIED` | No qualifying calibration report, prospective settled cohort, or closing-line validation exists. |
-| An esports prediction model exists | `FAILED` | No game-specific probability generator or historical feature pipeline exists in committed GitHub code. |
-| An esports evaluator draft exists | `PARTIAL` | A separate dirty worktree contains an uncommitted evidence/price gate, but it requires an external probability and has release-blocking defects. It was not imported. |
+| One merged reproducible research baseline exists | `CONFIRMED` | Exact merge/tree, local verification, package smoke, and remote CI receipts exist. |
+| Canonical branch governance is complete | `FAILED` | `master` is not protected and no repository ruleset exists. |
+| A validated Bear Edge model exists | `FAILED` | All five registered models remain `research_only`; 0 calibration reports exist. |
+| Predictive edge or profitability is demonstrated | `UNVERIFIED` | No qualifying prospective cohort, market comparison, or closing-line validation exists. |
+| An esports probability generator exists | `FAILED` | No committed game-specific generator or trained model exists. |
 | Bet execution is authorized | `FAILED` | Permission is `PRICE_CHECK_ONLY`; authorized stake is `$0`; execution is disabled. |
-| Local audit lifecycle is implemented | `CONFIRMED` | Code and tests implement an append-only local JSONL ledger and synchronization outbox. |
-| Supabase is the current operational authority | `FAILED` | Live schema comments and current code define Supabase as a projection from the local authoritative ledger. |
-| Supabase projection exists | `PARTIAL` | Live snapshot had 12 decisions, 0 settlements, 0 amendments, and no edge functions. Git and live migration sets differ. |
-| The requested personal plugins are usable here | `FAILED` | `prompt-mastery`, `bear-edge-operator`, and `ultimate-plugin` are not callable in this runtime. Historical receipts exist for the first two only. |
-| Prompt Perfect was available | `CONFIRMED` | It was used to turn the recovery request into an evidence-first audit and repair contract; it did not supply model evidence. |
+| Local audit lifecycle is implemented | `CONFIRMED` | The authoritative local JSONL ledger and outbox are implemented and tested. |
+| Supabase is operational authority | `FAILED` | Supabase remains a remote projection; cutover is incomplete. |
+| Supabase v2.1 projection is safe to enable | `FAILED` | Live schema integrity, retry, mapper, and parent-compatibility blockers remain. |
 
-Grades mean:
+Grades are `CONFIRMED`, `PARTIAL`, `FAILED`, or `UNVERIFIED`; they describe the available evidence, not intent.
 
-- `CONFIRMED`: directly supported by current inspected evidence.
-- `PARTIAL`: a real implementation or artifact exists, but a material part is missing or contradictory.
-- `FAILED`: the claimed capability is absent or contradicted by evidence.
-- `UNVERIFIED`: available evidence cannot establish the claim.
+## Supabase deployment snapshot
 
-## What is implemented
+At `2026-08-12T19:56:11.035Z`, project `anxouzruouyraumgjdju` reported 17 migrations. Migration `20260718010000_shadow_evidence_v21` was present even though this workstream did not apply it.
 
-- Node 20 application, local/private-LAN dashboard, authenticated write paths, and PWA assets.
-- Deterministic odds, expected-value, Kelly, price, exposure, and decision-gate mechanics.
-- Canonical evaluation, settlement, amendment, outcome, and closing-price record contracts.
-- Append-only local JSONL ledger, integrity checks, outbox, retries, and Supabase projection code.
-- Model registry, chronological data controls, calibration metrics, event-cluster bootstrap, promotion gates, and release-readiness reporting.
-- Five registered MLB research calculations, including the negative-binomial pitcher-strikeout lane.
-- Historical import/backtest, source provenance, shadow evidence, comparison, and manual capture tooling.
+| Table | Rows |
+|---|---:|
+| `decision_records` | 12 |
+| `settlement_records` | 0 |
+| `record_amendments` | 0 |
+| `prediction_outcomes` | 0 |
+| `closing_prices` | 0 |
 
-These are software capabilities. They are not a validated wagering advantage.
+All 12 decisions remain schema v2.0. None contains the canonical parent snapshot, event start, and sportsbook fields required by the new shadow-evidence trigger. The new tables have forced RLS and no anonymous grants, but authenticated users retain direct `INSERT`, `{}` can pass both snapshot checks through SQL `NULL`, and the insert trigger rejects normal replay before `ON CONFLICT DO NOTHING`. Current `market_kind` also rejects model-family values such as `pitcher_strikeouts` that the mapper can emit.
 
-## Selected next research slice
+The safe response is a new versioned hardening migration plus mapper correction, followed by real PostgreSQL checks. Do not edit or rewrite the already-applied migration. Do not enable `SUPABASE_AUDIT_SCHEMA_VERSION=2.1.0` merely because the version constraint now accepts it.
 
-On 2026-08-12 the user explicitly selected Dota 2 pre-match best-of-three series winner as the next bounded vertical slice. That decision fixes product scope only. It does not establish provider rights, point-in-time data availability, a trained model, calibrated probabilities, market evidence, or wagering authority. Until source-purpose rights are approved, Dota work is limited to source contracts, immutable evidence mechanics, dataset validation, and synthetic fixtures.
+## Selected Dota research slice
 
-## What is missing
+The user selected Dota 2 pre-match best-of-three series winner. Work may begin on contracts, immutable evidence mechanics, leakage validation, and synthetic fixtures. No OpenDota, Valve, GRID, organizer, or sportsbook data may be retained for a training corpus until the exact betting/model-development purpose is approved and upstream lineage is recorded. A present-day historical download is retrospective reconstruction; `capturedAt` today cannot masquerade as historical `availableAt`.
 
-- A model with immutable implementation identity, training cutoff, passing calibration report, and `validated` registry status.
-- A point-in-time, leakage-controlled, licensed or otherwise approved data pipeline covering the selected market.
-- A preregistered prospective cohort with complete predictions, official outcomes, exact closing prices, and unsuccessful/unselected rows.
-- Evidence that Bear Edge beats the registered no-vig market baseline or has non-negative closing-line-value uncertainty.
-- A completed Supabase authority cutover and migration reconciliation.
-- A live Supabase schema able to accept the v2.1 records emitted by the recovered application.
-- A committed, remotely verified canonicalization commit and protected canonical branch.
-- Any committed esports feature generator, training pipeline, calibrated probability model, or operational source adapter.
+The first proof must contain no odds, probability, recommendation, stake, Supabase projection, or execution path. A synthetic deterministic dataset proof is not a historical dataset, trained model, calibration result, or source-rights approval.
 
-## Verification ledger
+## Open blockers
 
-| Artifact | Command or observation | Result | Scope |
-|---|---|---|---|
-| Recovery baseline `5f284eb8…` | GitHub Actions, `npm run verify` | 728 passed, 0 failed | Exact committed baseline; software behavior only. |
-| Clean local checkout of the baseline | `npm run verify` | 727 passed, 1 failed | Failure was `os.networkInterfaces()` throwing in this restricted runtime. |
-| Local LAN portability fix | `node --test test/tooling.test.js` | 29 passed, 0 failed | Dirty canonicalization worktree; not a committed SHA. |
-| Canonicalization candidate full suite | `npm run verify` | 756 passed, 0 failed | Local candidate content; verification is declared not before 2026-08-12 12:05 UTC. The receipt binds the aggregate baseline diff even while its logical commits are created. Exact-SHA clean-checkout and remote CI evidence are still required. |
-| Live Supabase snapshot | catalog, migration, advisor, and aggregate inspection | partial | Runtime schema/row-count snapshot only; not model validation. |
+- Configure branch protection or a repository ruleset for `master`; the available GitHub integration can observe but cannot mutate this setting.
+- Review, merge, deploy, and exercise the versioned Supabase projection-hardening migration; keep synchronization disabled until then.
+- Retain a stronger externally attested audit receipt if one becomes available.
+- Resolve Dota source-purpose rights, upstream lineage, and point-in-time availability before any real corpus.
+- Build a genuine pre-cutoff dataset, model, prospective cohort, and calibration evidence before any model promotion.
+- Complete Supabase authority cutover only in its separately gated later phase.
 
-The earlier smaller `reconcile@8f0d6cb…` branch passed 414/414 in GitHub CI. A separate dirty recovery worktree based on that branch passed 415/415 after the same LAN fallback. Those results do not supersede the fuller PR #17 baseline.
-
-## Model state
-
-| Model | Market family | Status | Training cutoff | Calibration report |
-|---|---|---|---|---|
-| `poisson_count_v1@1.0.0` | pitcher strikeouts | `research_only` | none | none |
-| `negative_binomial_pitcher_strikeouts_v1@1.0.0` | pitcher strikeouts | `research_only` | none | none |
-| `poisson_count_v1@1.0.0` | batter hits | `research_only` | none | none |
-| `poisson_count_v1@1.0.0` | batter runs scored | `research_only` | none | none |
-| `poisson_count_v1@1.0.0` | batter total bases | `research_only` | none | none |
-
-The registered promotion policy requires at least 500 settled predictions, 100 distinct events, 100 observations per reliability bucket, 95% settlement coverage, a registered no-vig market baseline, event-atomic chronological splitting, and event-cluster bootstrap uncertainty. Meeting sample counts alone would still not guarantee promotion; every registered calibration, baseline, leakage, and closing-line check must pass.
-
-## Esports quarantine decision
-
-The uncommitted esports draft is not a prediction model. It blends caller-supplied lower/point/upper probabilities with cross-book consensus and classifies `PASS`, `WAIT`, or `LEAN`; operational `BET` authority is hard-disabled. It was not copied into this branch because adversarial review found all of the following:
-
-- a prediction is not cryptographically bound to the evidence and feature timestamps that supposedly produced it;
-- caller-computable digests and caller-entered `verified` labels can self-attest a `LEAN`;
-- source access method, domain, contract scope, expiry, and upstream lineage are not enforced;
-- Riot/GRID lineage could be double-counted, and PandaScore's public terms conflict with odds-product development;
-- the Supabase mapper and current market constraints reject the esports record shape;
-- the calibration projector excludes the esports record shape and does not quarantine replay mode;
-- malformed American odds with absolute values below 100 are accepted;
-- research-only `LEAN` records can retain a positive recommended stake, violating the `$0` authority boundary;
-- the prediction digest omits material market identity, and map scope can resolve against a series registry tuple;
-- the August 12 slate is a manual observation with missing UTC times, provider update times, executable size, and retained quote digests—not source authenticity or prediction evidence.
-
-The safe disposition is `QUARANTINED_NOT_IMPORTED`. Its concepts may be rebuilt only after these defects are closed with targeted tests.
-
-## Supabase snapshot
-
-As observed on 2026-08-12:
-
-- project ref: `anxouzruouyraumgjdju`;
-- `decision_records`: 12 rows;
-- `settlement_records`: 0 rows;
-- `record_amendments`: 0 rows;
-- edge functions: 0;
-- live migrations: 16;
-- recovery-baseline Git migrations: 17;
-- current application audit-record schema: v2.1;
-- observed live decision/settlement/amendment constraints: v2.0 only;
-- current new-record synchronization compatibility: **false**;
-- Git contains the deployed LEAN migration, while live Supabase lacks `20260718010000_shadow_evidence_v21.sql`;
-- no deployed `market_quote_events`, `prediction_outcomes`, `closing_prices`, model-registry, or promotion tables were observed.
-- leaked-password protection was reported disabled by the Supabase security advisor.
-
-This is a timestamped runtime snapshot. It must be refreshed before making a later deployment claim.
-
-The machine audit checks local invariants and consistency with this pinned snapshot. It does not contact GitHub or Supabase and cannot independently refresh or authenticate external facts; those require direct connector evidence before any claim changes. Raw connector responses were not retained as content-addressed receipts in this worktree, so the external snapshot remains `PARTIAL` and that gap is an explicit blocker.
-
-## Immediate state
-
-No bet was placed during the recovery audit. Through the external-evidence cutoff above, no external repository, branch, pull request, database, provider, or plugin was mutated by that audit. This historical statement does not describe later publication actions and does not deny historical wager records. The candidate remains non-canonical until an external receipt names its exact Git SHA, clean-checkout verification, pull request, and remote CI result.
+No bet was placed, no nonzero stake was authorized, and execution remains disabled by this work.

@@ -2,7 +2,7 @@
 
 - **Decision date:** 2026-08-12
 - **Recovery baseline:** `5f284eb8cf66050f06601087ef04a267441f1958`
-- **Canonicalization branch:** `codex/bear-edge-canonicalize-20260812`
+- **Merged research baseline:** `3698869087ab95dc2890079d7b7c615a32cfc8c3`
 
 SAFETY_INVARIANT: authorization is RESEARCH_ONLY; authorized stake is $0; execution is disabled.
 
@@ -12,11 +12,11 @@ Branch names are labels, not authority. Disposition is based on ancestry, exact 
 
 | Ref or lane | Exact observed state | Disposition | Reason |
 |---|---|---|---|
-| `master` | `738b3e462dd1e46264240006f72a843a04cc17cf` | `FREEZE_AS_DEFAULT_ONLY` | Older implementation surface; its current Python and Deno workflows fail. PR #17 already incorporates this commit. |
+| `master` | `3698869087ab95dc2890079d7b7c615a32cfc8c3` | `CANONICAL_RESEARCH_BASELINE_UNPROTECTED` | PR #31 merged with the reviewed tree and green exact-SHA CI. Direct development is forbidden, but GitHub reports the branch is not yet protected. |
 | `reconcile/bear-edge-canonical-v1` | `8f0d6cb7052db8ee3d6b29dc5994100956b09766` | `SUPERSEDED_INTEGRATION_BASELINE` | Green and useful, but diverged from the fuller recovery head: 1 commit ahead and 27 behind. It also lacks the promised canonical documents. |
 | PR #17 / `codex/pitcher-strikeout-complete-data-research` | `5f284eb8cf66050f06601087ef04a267441f1958` | `IMMUTABLE_RECOVERY_BASELINE` | Incorporates `master`, has the fullest recovered tree, and passed 728/728 in GitHub CI. Still draft, research-only, and not a release. |
 | `codex/reconcile-pr17-master` | same `5f284eb8…` | `DUPLICATE_POINTER` | Byte-identical branch head; preserve lineage, then archive after consolidation. |
-| `codex/bear-edge-canonicalize-20260812` | aggregate candidate content from `5f284eb8…` | `CANONICALIZATION_CANDIDATE` | Contains four separately committed recovery concerns in one consolidation PR. It is not canonical until exact-SHA clean-checkout verification, remote CI, review, and selection. |
+| PR #31 / `codex/bear-edge-canonicalize-20260812` | `257ec7d44a0f8a8a4e44bc71b26b14f62e697321`, tree `3eda1f4…` | `MERGED_CANONICALIZATION_HISTORY` | Reviewed and merged normally as `3698869…`; retain as immutable recovery/consolidation lineage. |
 | PR #19 / `codex/fix-unified-mlb-history-integrity` | `169f9acc…`, draft, non-mergeable | `QUARANTINE_RESEARCH` | Preserve history-repair work; do not merge into the canonicalization lane without a narrow reviewed extraction. |
 | PR #29 / `chore/bear-edge-create-state-continuity` | `3e6684e…`, 7 ahead of `reconcile`, CI green | `SELECTIVE_PORT_ONLY` | Continuity assets are useful, but their Supabase-authority wording contradicts current implementation and must be corrected before use. |
 | PR #30 / `data/kalshi-mlb-props-2026-08-06` | `8ffa8d5…`, CI failed | `PRESERVE_EVIDENCE_REDESIGN_SCHEMA` | Keep report/manifest evidence; do not import the undeployed quote migration until inventory, RLS, ingestion, and authority design are resolved. |
@@ -39,37 +39,37 @@ No code is copied across these repository boundaries merely because names overla
 
 ## Consolidation rules
 
-1. New implementation work targets only `codex/bear-edge-canonicalize-20260812` until a reviewed successor is chosen.
-2. Do not merge the giant PR #17 directly into `master`; use its exact head as the recovery baseline and create a narrowly documented consolidation PR.
-3. Do not fast-forward or rewrite `master` during forensic recovery.
+1. New implementation work starts from `3698869…` on a narrow feature branch; never develop directly on `master`.
+2. Preserve PR #17 and PR #31 as immutable recovery/consolidation history; do not squash, rebase, or rewrite their ancestry.
+3. Merge Supabase hardening before the Dota proof so normal descendant verification and the live-schema receipt remain ordered.
 4. Every imported branch artifact needs a claim, exact source SHA, scope, targeted tests, and an independent review note.
 5. Never import a stale report as current status; historical documents retain their original dates and claims.
 6. No branch may promote a model, enable wager execution, or authorize stake without the registry and calibration gates.
-7. Once consolidation is remotely green and selected, protect the canonical branch and stop direct work on `master`.
+7. Protect `master` with required CI and pull-request review as the remaining repository-administration P0 gate.
 
 The one-consolidation-PR decision is an explicit recovery exception to ordinary
 single-change delivery. The implementation remains split into logical commits:
 LAN portability, authoritative-stake safety, Supabase schema gating, and the
 truth/audit bundle. The final aggregate tree receives the full verification gate.
 
-## Exit receipt for canonical selection
+## Canonical baseline receipt
 
-The candidate becomes canonical only when all fields below are filled with direct evidence:
+The merged research baseline has the following direct evidence:
 
 ```text
 REPOSITORY: davidmostow1/bear-edge-platform
-BRANCH: <exact remote branch>
-COMMIT: <full SHA>
+BRANCH: master
+COMMIT: 3698869087ab95dc2890079d7b7c615a32cfc8c3
 WORKING_TREE_AT_BUILD: clean
 INSTALL: npm ci -> PASS
-VERIFY: npm run verify -> PASS on the same SHA
-PACKAGE/SMOKE: PASS in a separate clean environment
-REMOTE_CI: PASS on the same SHA
-MODEL_STATUS: 0 validated unless independently promoted under policy
+VERIFY: npm run verify -> 756 PASS / 0 FAIL on the same SHA
+PACKAGE/SMOKE: PASS in a separate clean environment on the identical tree
+REMOTE_CI: PASS, run 31633987337, on the same SHA
+MODEL_STATUS: 0 validated
 AUTHORIZATION: RESEARCH_ONLY / PRICE_CHECK_ONLY
 AUTHORIZED_STAKE: $0
 EXECUTION: disabled
-REVIEW: no unresolved P0 finding
+REVIEW: consolidation findings closed; Supabase hardening and branch protection remain open
 ```
 
-Until then, use the phrase **canonicalization candidate**, not **canonical release**.
+Use the phrase **merged canonical research baseline**, not **canonical release**. Branch protection and safe Supabase projection are still P0 gates; model validation and operational authority are later gates.

@@ -180,6 +180,27 @@ test("createEvaluationRecord emits stable identifiers and excludes digest from i
   assert.deepEqual(validateAuditRecord(record), { valid: true, issues: [] });
 });
 
+test("canonical evaluation optionally binds a source-supplied market period", () => {
+  const legacyRecord = createEvaluationRecord(VALID_EVALUATION_INPUT, EVALUATION_CONTEXT);
+  const periodInput = structuredClone(VALID_EVALUATION_INPUT);
+  periodInput.market.marketPeriod = "full_game";
+  const periodRecord = createEvaluationRecord(periodInput, EVALUATION_CONTEXT);
+
+  assert.equal(Object.hasOwn(legacyRecord.market, "marketPeriod"), false);
+  assert.equal(periodRecord.market.marketPeriod, "full_game");
+  assert.notEqual(periodRecord.contentDigest, legacyRecord.contentDigest);
+  assert.deepEqual(validateAuditRecord(periodRecord), { valid: true, issues: [] });
+
+  for (const invalidPeriod of [null, "", "x".repeat(81)]) {
+    const invalidInput = structuredClone(VALID_EVALUATION_INPUT);
+    invalidInput.market.marketPeriod = invalidPeriod;
+    assert.throws(
+      () => createEvaluationRecord(invalidInput, EVALUATION_CONTEXT),
+      /market\.marketPeriod/
+    );
+  }
+});
+
 test("canonical non-BET records zero counterfactual recommended stake", () => {
   const input = structuredClone(VALID_EVALUATION_INPUT);
   input.stake.recommendedStake = 121.23;

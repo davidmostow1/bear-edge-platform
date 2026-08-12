@@ -358,3 +358,25 @@ test("shadow evidence migration is append-only, owner-isolated, and correction-a
   assert.doesNotMatch(sql, /prediction_outcomes[\s\S]*\bprofit\b/i);
   assert.match(sql.trim(), /commit;$/i);
 });
+
+test("shadow evidence hardening keeps owner reads but reserves writes for the service role", async () => {
+  const migrationPath = path.resolve(
+    __dirname,
+    "../supabase/migrations/20260812195952_harden_authoritative_projections.sql"
+  );
+  const sql = await fs.readFile(migrationPath, "utf8");
+
+  for (const table of ["prediction_outcomes", "closing_prices"]) {
+    assert.match(sql, new RegExp(`grant select on table public\\.${table} to authenticated`, "i"));
+    assert.match(sql, new RegExp(`revoke insert on table public\\.${table} from authenticated`, "i"));
+    assert.match(sql, new RegExp(`grant select, insert on table public\\.${table} to service_role`, "i"));
+    assert.match(sql, new RegExp(`drop policy if exists "${table}_insert_own"`, "i"));
+  }
+
+  assert.match(sql, /identical retries continue to PostgreSQL conflict handling/i);
+  assert.match(sql, /Shadow evidence client event digest conflict/i);
+  assert.match(sql, /prediction_outcomes_owned_decision[\s\S]*on delete cascade/i);
+  assert.match(sql, /prediction_outcomes_supersedes_owned[\s\S]*on delete cascade/i);
+  assert.match(sql, /closing_prices_owned_decision[\s\S]*on delete cascade/i);
+  assert.match(sql, /closing_prices_supersedes_owned[\s\S]*on delete cascade/i);
+});
