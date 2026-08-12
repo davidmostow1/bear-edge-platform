@@ -9,7 +9,7 @@ const { contentDigest } = require("../src/audit/canonical-json.js");
 const REPO_ROOT = path.resolve(__dirname, "..");
 const DIGEST_PATTERN = /^[a-f0-9]{64}$/;
 const PINNED_CANONICAL_STATUS_DIGEST =
-  "c8939f5dd8f494d8ed6e7aee3476450a0d7a419ba49b236e89db5983926e0a74";
+  "4edd897e101907d22dd2d59b1f2eacd7b09a6c362c85e1fabc954b47f2365c8b";
 const REQUIRED_GRADES = Object.freeze([
   "CONFIRMED",
   "PARTIAL",
@@ -26,9 +26,7 @@ const REQUIRED_DOCUMENTS = Object.freeze([
 ]);
 const REQUIRED_PERSISTENT_BLOCKERS = Object.freeze([
   "CANONICAL_BRANCH_PROTECTION_UNCONFIGURED",
-  "SUPABASE_PROJECTION_INTEGRITY_HARDENING_NOT_DEPLOYED",
   "SUPABASE_V2_1_SYNC_NOT_COMPATIBILITY_PROVEN",
-  "GIT_AND_LIVE_SUPABASE_MIGRATIONS_DIFFER",
   "EXTERNAL_RECEIPT_SOURCE_ATTESTATION_UNAVAILABLE",
   "NO_VALIDATED_MODEL",
   "NO_CALIBRATION_REPORT",
@@ -48,10 +46,17 @@ const PINNED_CANONICAL_BASELINE = Object.freeze({
   pullRequest: 31,
   mergeMethod: "MERGE_COMMIT"
 });
+const PINNED_PROJECTION_HARDENING = Object.freeze({
+  pullRequest: 32,
+  headCommit: "52380ca495bb8ff2034031c377496e531d560f73",
+  mergeCommit: "b6c19292f96a0787fa6e198e8b8179db763390fe",
+  tree: "09b55d04f9b4f0bdc13069c5376f8e5e5a2a973f",
+  mergeMethod: "MERGE_COMMIT"
+});
 const PINNED_REPOSITORY_SNAPSHOT = Object.freeze({
   fullName: "davidmostow1/bear-edge-platform",
   defaultBranch: "master",
-  defaultBranchCommit: PINNED_CANONICAL_BASELINE.commit,
+  defaultBranchCommit: PINNED_PROJECTION_HARDENING.mergeCommit,
   recoveryBaselineCommit: "5f284eb8cf66050f06601087ef04a267441f1958",
   recoveryBaselineRefs: Object.freeze([
     "codex/pitcher-strikeout-complete-data-research",
@@ -77,16 +82,28 @@ const PINNED_CANONICAL_VERIFICATION = Object.freeze({
   remoteRunUrl: "https://github.com/davidmostow1/bear-edge-platform/actions/runs/31633987337",
   packageSmoke: "PASS_ON_IDENTICAL_TREE_IN_SEPARATE_TEMP_INSTALL"
 });
+const PINNED_PROJECTION_HARDENING_VERIFICATION = Object.freeze({
+  commit: PINNED_PROJECTION_HARDENING.mergeCommit,
+  tree: PINNED_PROJECTION_HARDENING.tree,
+  environment: "LOCAL_CLEAN_CHECKOUT_AND_GITHUB_ACTIONS_NODE_20",
+  command: "npm run verify",
+  passed: 776,
+  failed: 0,
+  grade: "CONFIRMED",
+  remoteRunUrl: "https://github.com/davidmostow1/bear-edge-platform/actions/runs/31639833629",
+  packageSmoke: "NOT_SEPARATELY_REPEATED_ON_HARDENED_TREE"
+});
 const PINNED_SUPABASE_SNAPSHOT = Object.freeze({
-  observedAt: "2026-08-12T19:56:11.035Z",
+  observedAt: "2026-08-12T21:06:21.958Z",
   projectRef: "anxouzruouyraumgjdju",
+  postgresVersion: "17.6",
   decisionRecords: 12,
   settlementRecords: 0,
   recordAmendments: 0,
   predictionOutcomes: 0,
   closingPrices: 0,
   edgeFunctions: 0,
-  liveMigrationCount: 17,
+  liveMigrationCount: 18,
   gitMigrationCount: 18,
   currentAuditRecordSchemaVersion: "2.1.0",
   liveAuditRecordSchemaVersions: Object.freeze(["2.0.0", "2.1.0"]),
@@ -95,24 +112,28 @@ const PINNED_SUPABASE_SNAPSHOT = Object.freeze({
     "2.1.0": 0
   }),
   shadowEvidenceMigrationApplied: true,
+  hardeningMigrationApplied: true,
   currentRecordSyncCompatible: false,
-  liveMissingGitMigrations: Object.freeze([
-    "20260812195952_harden_authoritative_projections.sql"
-  ]),
-  authenticatedProjectionInsertExposed: true,
-  snapshotChecksFailClosed: false,
-  shadowRetryIdempotencyProven: false,
+  liveMissingGitMigrations: Object.freeze([]),
+  authenticatedProjectionInsertExposed: false,
+  snapshotChecksFailClosed: true,
+  shadowRetryIdempotencyProven: true,
+  pgliteRuntimeProofPassed: true,
+  hostedSingleSessionRuntimeProofPassed: true,
+  hostedMultiSessionConcurrencyProven: false,
+  hostedPostgrestAuthProven: false,
+  catalogControlsVerified: true,
   canonicalParentDecisionRecords: 0,
   gitIncludesLiveLeanMigration: true,
   leakedPasswordProtectionWarning: true,
   grade: "PARTIAL"
 });
 const PINNED_EXTERNAL_EVIDENCE_SCOPE = Object.freeze({
-  snapshotId: "bear-edge.external-audit.2026-08-12.v2",
+  snapshotId: "bear-edge.external-audit.2026-08-12.v3",
   observationMode: "DIRECT_CONNECTOR_AND_LOCAL_EXACT_SHA",
-  receiptPath: "docs/canonical/receipts/p0-baseline-20260812.json",
+  receiptPath: "docs/canonical/receipts/p0-hardening-deployment-20260812.json",
   receiptRetention: "NORMALIZED_CONTENT_ADDRESSED_FACTS_RAW_CONNECTOR_PAYLOAD_NOT_RETAINED",
-  receiptDigest: "adf30318999a99e81f6ace76da23d5941a8e5df250dd3ee05248ddb50204fe46",
+  receiptDigest: "5a2dcbd99122fa9a4eaa67ac16a3e6c9b66679bb7f3c3cc8a43d4c31630716fb",
   refreshRequiredBeforeClaimChange: true,
   machineAuditScope: "LOCAL_INVARIANTS_CANONICAL_BASELINE_ANCESTRY_AND_PINNED_EXTERNAL_RECEIPT"
 });
@@ -233,6 +254,7 @@ function validateCanonicalStatusDocument(status, context) {
     boundaries,
     documents,
     migrationFiles,
+    predecessorReceipt,
     receipt,
     registry,
     repositoryState = null
@@ -308,6 +330,7 @@ function validateCanonicalStatusDocument(status, context) {
       === "CANONICAL_BASELINE_ANCESTRY_PLUS_RUNTIME_EXACT_SHA"
       && status.repository.pullRequest === PINNED_CANONICAL_BASELINE.pullRequest
       && status.repository.mergeMethod === PINNED_CANONICAL_BASELINE.mergeMethod
+      && objectsEqual(status.repository.projectionHardening, PINNED_PROJECTION_HARDENING)
       && status.repository.branchProtected === false
       && status.repository.repositoryRulesetCount === 0,
     "CANONICAL_IDENTITY_INVALID",
@@ -429,12 +452,14 @@ function validateCanonicalStatusDocument(status, context) {
     status.supabaseSnapshot.gitMigrationCount === migrationFiles.length
       && migrationFiles.includes("20260718010000_shadow_evidence_v21.sql")
       && migrationFiles.includes("20260801173038_allow_lean_decision_verdict.sql")
+      && migrationFiles.includes("20260812195952_harden_authoritative_projections.sql")
       && status.supabaseSnapshot.shadowEvidenceMigrationApplied === true
-      && status.supabaseSnapshot.liveMissingGitMigrations.length === 1
-      && migrationFiles.includes(status.supabaseSnapshot.liveMissingGitMigrations[0])
+      && status.supabaseSnapshot.hardeningMigrationApplied === true
+      && status.supabaseSnapshot.liveMigrationCount === migrationFiles.length
+      && status.supabaseSnapshot.liveMissingGitMigrations.length === 0
       && status.supabaseSnapshot.gitIncludesLiveLeanMigration === true,
     "MIGRATION_SNAPSHOT_INVALID",
-    "Canonical migration snapshot must preserve the observed live deployment and pending hardening delta."
+    "Canonical migration snapshot must preserve the observed complete hardening deployment."
   );
 
   requireCondition(
@@ -512,6 +537,21 @@ function validateCanonicalStatusDocument(status, context) {
     "Canonical baseline verification must match the exact merge commit, tree, test count, and CI receipt."
   );
   requireCondition(
+    objectsEqual(
+      status?.softwareVerification?.projectionHardening,
+      PINNED_PROJECTION_HARDENING_VERIFICATION
+    ),
+    "PROJECTION_HARDENING_VERIFICATION_EVIDENCE_DRIFT",
+    "Projection hardening verification must match the exact merge commit, tree, tests, and CI receipt."
+  );
+  requireCondition(
+    receipt?.predecessor?.path === "docs/canonical/receipts/p0-baseline-20260812.json"
+      && DIGEST_PATTERN.test(receipt.predecessor.contentDigest)
+      && contentDigest(predecessorReceipt) === receipt.predecessor.contentDigest,
+    "EXTERNAL_RECEIPT_CHAIN_DRIFT",
+    "The hardening receipt must bind the retained canonical predecessor receipt."
+  );
+  requireCondition(
     contentDigest(receipt) === status.externalEvidence.receiptDigest,
     "EXTERNAL_RECEIPT_DIGEST_DRIFT",
     "The normalized external receipt digest must match its canonical JSON content."
@@ -565,7 +605,14 @@ function auditCanonicalStatus(options = {}) {
     boundaries: readJson(path.join(repoRoot, "governance", "system-boundaries.json")),
     documents,
     migrationFiles,
-    receipt: readJson(path.join(repoRoot, "docs", "canonical", "receipts", "p0-baseline-20260812.json")),
+    predecessorReceipt: readJson(path.join(
+      repoRoot,
+      "docs",
+      "canonical",
+      "receipts",
+      "p0-baseline-20260812.json"
+    )),
+    receipt: readJson(path.join(repoRoot, PINNED_EXTERNAL_EVIDENCE_SCOPE.receiptPath)),
     registry: readJson(path.join(repoRoot, "models", "registry.json")),
     repositoryState
   });

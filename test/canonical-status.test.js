@@ -26,8 +26,18 @@ function loadContext() {
     migrationFiles: fs.readdirSync(path.join(ROOT, "supabase", "migrations"))
       .filter((fileName) => fileName.endsWith(".sql"))
       .sort(),
-    receipt: JSON.parse(fs.readFileSync(
+    predecessorReceipt: JSON.parse(fs.readFileSync(
       path.join(ROOT, "docs", "canonical", "receipts", "p0-baseline-20260812.json"),
+      "utf8"
+    )),
+    receipt: JSON.parse(fs.readFileSync(
+      path.join(
+        ROOT,
+        "docs",
+        "canonical",
+        "receipts",
+        "p0-hardening-deployment-20260812.json"
+      ),
       "utf8"
     )),
     registry: JSON.parse(fs.readFileSync(path.join(ROOT, "models", "registry.json"), "utf8"))
@@ -242,6 +252,55 @@ test("canonical status audit rejects fabricated Supabase evidence", () => {
   assertFailureCode(
     () => validateCanonicalStatusDocument(status, loadContext()),
     "SUPABASE_EVIDENCE_DRIFT"
+  );
+});
+
+test("canonical status binds deployed hardening while keeping synchronization disabled", () => {
+  const status = loadStatus();
+
+  assert.equal(status.supabaseSnapshot.liveMigrationCount, 18);
+  assert.deepEqual(status.supabaseSnapshot.liveMissingGitMigrations, []);
+  assert.equal(status.supabaseSnapshot.hardeningMigrationApplied, true);
+  assert.equal(status.supabaseSnapshot.authenticatedProjectionInsertExposed, false);
+  assert.equal(status.supabaseSnapshot.snapshotChecksFailClosed, true);
+  assert.equal(status.supabaseSnapshot.shadowRetryIdempotencyProven, true);
+  assert.equal(status.supabaseSnapshot.hostedSingleSessionRuntimeProofPassed, true);
+  assert.equal(status.supabaseSnapshot.hostedMultiSessionConcurrencyProven, false);
+  assert.equal(status.supabaseSnapshot.hostedPostgrestAuthProven, false);
+  assert.equal(status.supabaseSnapshot.currentRecordSyncCompatible, false);
+  assert.equal(status.repository.branchProtected, false);
+
+  for (const mutate of [
+    (candidate) => { candidate.supabaseSnapshot.liveMissingGitMigrations = ["invented.sql"]; },
+    (candidate) => { candidate.supabaseSnapshot.authenticatedProjectionInsertExposed = true; },
+    (candidate) => { candidate.supabaseSnapshot.snapshotChecksFailClosed = false; },
+    (candidate) => { candidate.supabaseSnapshot.currentRecordSyncCompatible = true; },
+    (candidate) => { candidate.repository.branchProtected = true; }
+  ]) {
+    const candidate = loadStatus();
+    mutate(candidate);
+
+    assert.throws(() => validateCanonicalStatusDocument(candidate, loadContext()));
+  }
+});
+
+test("canonical status rejects hardening receipt content drift", () => {
+  const context = loadContext();
+  context.receipt.claimBoundary = "fabricated stronger claim";
+
+  assertFailureCode(
+    () => validateCanonicalStatusDocument(loadStatus(), context),
+    "EXTERNAL_RECEIPT_DIGEST_DRIFT"
+  );
+});
+
+test("canonical status rejects predecessor receipt chain drift", () => {
+  const context = loadContext();
+  context.predecessorReceipt.claimBoundary = "fabricated predecessor claim";
+
+  assertFailureCode(
+    () => validateCanonicalStatusDocument(loadStatus(), context),
+    "EXTERNAL_RECEIPT_CHAIN_DRIFT"
   );
 });
 

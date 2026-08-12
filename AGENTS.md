@@ -186,7 +186,7 @@ The machine-readable current count and evidence grades live in
 `docs/canonical/STATUS.json`; this section must agree with that file and the
 registry on the evaluated Git tree.
 
-- **Merged research baseline:** `3698869087ab95dc2890079d7b7c615a32cfc8c3`; 756/756 exact-SHA tests and remote CI passed, but `master` remains unprotected
+- **Merged research baseline:** PR #31 merge `3698869087ab95dc2890079d7b7c615a32cfc8c3`; PR #32 hardening merge `b6c19292f96a0787fa6e198e8b8179db763390fe` passed 776/776 exact-SHA tests and remote CI, but `master` remains unprotected
 - **Permission level:** `PRICE_CHECK_ONLY`
 - **Models validated:** 0/5 — all five registered models are `research_only`
 - **Priced candidates:** `UNVERIFIED` — the July 23 snapshot was 0; refresh provider state before any current claim
@@ -199,4 +199,4 @@ registry on the evaluated Git tree.
   authorize a bet by construction.
 - **Independent validation:** none performed. No external penetration test, no
   independent statistical review, no third-party code review.
-- **Supabase projection:** v2.1 tables are deployed but synchronization remains disabled pending trusted-writer, snapshot-integrity, retry, mapper, and PostgreSQL runtime proof.
+- **Supabase projection:** the versioned v2.1 hardening migration is deployed and passed installed-catalog plus single-session hosted PostgreSQL checks. Synchronization remains disabled because the 12 retained v2.0 decisions are not compatible parents and true multi-session/PostgREST behavior is not proven.

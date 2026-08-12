@@ -12,11 +12,12 @@ Branch names are labels, not authority. Disposition is based on ancestry, exact 
 
 | Ref or lane | Exact observed state | Disposition | Reason |
 |---|---|---|---|
-| `master` | `3698869087ab95dc2890079d7b7c615a32cfc8c3` | `CANONICAL_RESEARCH_BASELINE_UNPROTECTED` | PR #31 merged with the reviewed tree and green exact-SHA CI. Direct development is forbidden, but GitHub reports the branch is not yet protected. |
+| `master` | `b6c19292f96a0787fa6e198e8b8179db763390fe`, tree `09b55d0…` | `HARDENED_RESEARCH_BASELINE_UNPROTECTED` | PR #32 merged normally with green 776/776 exact-SHA CI. The deployed projection hardening passed catalog and hosted single-session checks, but GitHub reports the branch is not protected. |
 | `reconcile/bear-edge-canonical-v1` | `8f0d6cb7052db8ee3d6b29dc5994100956b09766` | `SUPERSEDED_INTEGRATION_BASELINE` | Green and useful, but diverged from the fuller recovery head: 1 commit ahead and 27 behind. It also lacks the promised canonical documents. |
 | PR #17 / `codex/pitcher-strikeout-complete-data-research` | `5f284eb8cf66050f06601087ef04a267441f1958` | `IMMUTABLE_RECOVERY_BASELINE` | Incorporates `master`, has the fullest recovered tree, and passed 728/728 in GitHub CI. Still draft, research-only, and not a release. |
 | `codex/reconcile-pr17-master` | same `5f284eb8…` | `DUPLICATE_POINTER` | Byte-identical branch head; preserve lineage, then archive after consolidation. |
 | PR #31 / `codex/bear-edge-canonicalize-20260812` | `257ec7d44a0f8a8a4e44bc71b26b14f62e697321`, tree `3eda1f4…` | `MERGED_CANONICALIZATION_HISTORY` | Reviewed and merged normally as `3698869…`; retain as immutable recovery/consolidation lineage. |
+| PR #32 / `codex/p0-shadow-schema-hardening-20260812` | `52380ca495bb8ff2034031c377496e531d560f73`, tree `09b55d0…` | `MERGED_PROJECTION_HARDENING_HISTORY` | Reviewed and merged normally as `b6c1929…`; the versioned migration is installed and the receipt preserves its verification limits. |
 | PR #19 / `codex/fix-unified-mlb-history-integrity` | `169f9acc…`, draft, non-mergeable | `QUARANTINE_RESEARCH` | Preserve history-repair work; do not merge into the canonicalization lane without a narrow reviewed extraction. |
 | PR #29 / `chore/bear-edge-create-state-continuity` | `3e6684e…`, 7 ahead of `reconcile`, CI green | `SELECTIVE_PORT_ONLY` | Continuity assets are useful, but their Supabase-authority wording contradicts current implementation and must be corrected before use. |
 | PR #30 / `data/kalshi-mlb-props-2026-08-06` | `8ffa8d5…`, CI failed | `PRESERVE_EVIDENCE_REDESIGN_SCHEMA` | Keep report/manifest evidence; do not import the undeployed quote migration until inventory, RLS, ingestion, and authority design are resolved. |
@@ -39,7 +40,7 @@ No code is copied across these repository boundaries merely because names overla
 
 ## Consolidation rules
 
-1. New implementation work starts from `3698869…` on a narrow feature branch; never develop directly on `master`.
+1. New implementation work starts from the latest verified `master` descendant of `3698869…` on a narrow feature branch; never develop directly on `master`.
 2. Preserve PR #17 and PR #31 as immutable recovery/consolidation history; do not squash, rebase, or rewrite their ancestry.
 3. Merge Supabase hardening before the Dota proof so normal descendant verification and the live-schema receipt remain ordered.
 4. Every imported branch artifact needs a claim, exact source SHA, scope, targeted tests, and an independent review note.
@@ -69,7 +70,8 @@ MODEL_STATUS: 0 validated
 AUTHORIZATION: RESEARCH_ONLY / PRICE_CHECK_ONLY
 AUTHORIZED_STAKE: $0
 EXECUTION: disabled
-REVIEW: consolidation findings closed; Supabase hardening and branch protection remain open
+PROJECTION_HARDENING: b6c19292f96a0787fa6e198e8b8179db763390fe / 776 PASS / hosted single-session PASS
+REVIEW: consolidation and projection-integrity findings closed; sync compatibility and branch protection remain open
 ```
 
-Use the phrase **merged canonical research baseline**, not **canonical release**. Branch protection and safe Supabase projection are still P0 gates; model validation and operational authority are later gates.
+Use the phrase **hardened merged research baseline**, not **canonical release**. Branch protection remains the repository-administration P0 gate; synchronization compatibility, model validation, and operational authority are separately gated.

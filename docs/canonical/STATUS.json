@@ -1,6 +1,6 @@
 {
   "schemaVersion": "bear-edge.canonical-status.v1",
-  "externalEvidenceAsOf": "2026-08-12T19:56:11.035Z",
+  "externalEvidenceAsOf": "2026-08-12T21:06:21.958Z",
   "claimGrades": [
     "CONFIRMED",
     "PARTIAL",
@@ -8,18 +8,18 @@
     "UNVERIFIED"
   ],
   "externalEvidence": {
-    "snapshotId": "bear-edge.external-audit.2026-08-12.v2",
+    "snapshotId": "bear-edge.external-audit.2026-08-12.v3",
     "observationMode": "DIRECT_CONNECTOR_AND_LOCAL_EXACT_SHA",
-    "receiptPath": "docs/canonical/receipts/p0-baseline-20260812.json",
+    "receiptPath": "docs/canonical/receipts/p0-hardening-deployment-20260812.json",
     "receiptRetention": "NORMALIZED_CONTENT_ADDRESSED_FACTS_RAW_CONNECTOR_PAYLOAD_NOT_RETAINED",
-    "receiptDigest": "adf30318999a99e81f6ace76da23d5941a8e5df250dd3ee05248ddb50204fe46",
+    "receiptDigest": "5a2dcbd99122fa9a4eaa67ac16a3e6c9b66679bb7f3c3cc8a43d4c31630716fb",
     "refreshRequiredBeforeClaimChange": true,
     "machineAuditScope": "LOCAL_INVARIANTS_CANONICAL_BASELINE_ANCESTRY_AND_PINNED_EXTERNAL_RECEIPT"
   },
   "repository": {
     "fullName": "davidmostow1/bear-edge-platform",
     "defaultBranch": "master",
-    "defaultBranchCommit": "3698869087ab95dc2890079d7b7c615a32cfc8c3",
+    "defaultBranchCommit": "b6c19292f96a0787fa6e198e8b8179db763390fe",
     "canonicalBaselineCommit": "3698869087ab95dc2890079d7b7c615a32cfc8c3",
     "canonicalBaselineTree": "3eda1f4fc2e847d491c8ec2615564eddaed23e73",
     "recoveryBaselineCommit": "5f284eb8cf66050f06601087ef04a267441f1958",
@@ -31,6 +31,13 @@
     "commitIdentityMode": "CANONICAL_BASELINE_ANCESTRY_PLUS_RUNTIME_EXACT_SHA",
     "pullRequest": 31,
     "mergeMethod": "MERGE_COMMIT",
+    "projectionHardening": {
+      "pullRequest": 32,
+      "headCommit": "52380ca495bb8ff2034031c377496e531d560f73",
+      "mergeCommit": "b6c19292f96a0787fa6e198e8b8179db763390fe",
+      "tree": "09b55d04f9b4f0bdc13069c5376f8e5e5a2a973f",
+      "mergeMethod": "MERGE_COMMIT"
+    },
     "branchProtected": false,
     "repositoryRulesetCount": 0,
     "grade": "PARTIAL"
@@ -61,6 +68,17 @@
       "grade": "CONFIRMED",
       "remoteRunUrl": "https://github.com/davidmostow1/bear-edge-platform/actions/runs/31633987337",
       "packageSmoke": "PASS_ON_IDENTICAL_TREE_IN_SEPARATE_TEMP_INSTALL"
+    },
+    "projectionHardening": {
+      "commit": "b6c19292f96a0787fa6e198e8b8179db763390fe",
+      "tree": "09b55d04f9b4f0bdc13069c5376f8e5e5a2a973f",
+      "environment": "LOCAL_CLEAN_CHECKOUT_AND_GITHUB_ACTIONS_NODE_20",
+      "command": "npm run verify",
+      "passed": 776,
+      "failed": 0,
+      "grade": "CONFIRMED",
+      "remoteRunUrl": "https://github.com/davidmostow1/bear-edge-platform/actions/runs/31639833629",
+      "packageSmoke": "NOT_SEPARATELY_REPEATED_ON_HARDENED_TREE"
     },
     "meaning": "Passing tests establish implemented software behavior, not predictive validity, calibration, profitability, provider access, or production readiness."
   },
@@ -105,15 +123,16 @@
     "grade": "PARTIAL"
   },
   "supabaseSnapshot": {
-    "observedAt": "2026-08-12T19:56:11.035Z",
+    "observedAt": "2026-08-12T21:06:21.958Z",
     "projectRef": "anxouzruouyraumgjdju",
+    "postgresVersion": "17.6",
     "decisionRecords": 12,
     "settlementRecords": 0,
     "recordAmendments": 0,
     "predictionOutcomes": 0,
     "closingPrices": 0,
     "edgeFunctions": 0,
-    "liveMigrationCount": 17,
+    "liveMigrationCount": 18,
     "gitMigrationCount": 18,
     "currentAuditRecordSchemaVersion": "2.1.0",
     "liveAuditRecordSchemaVersions": [
@@ -125,13 +144,17 @@
       "2.1.0": 0
     },
     "shadowEvidenceMigrationApplied": true,
+    "hardeningMigrationApplied": true,
     "currentRecordSyncCompatible": false,
-    "liveMissingGitMigrations": [
-      "20260812195952_harden_authoritative_projections.sql"
-    ],
-    "authenticatedProjectionInsertExposed": true,
-    "snapshotChecksFailClosed": false,
-    "shadowRetryIdempotencyProven": false,
+    "liveMissingGitMigrations": [],
+    "authenticatedProjectionInsertExposed": false,
+    "snapshotChecksFailClosed": true,
+    "shadowRetryIdempotencyProven": true,
+    "pgliteRuntimeProofPassed": true,
+    "hostedSingleSessionRuntimeProofPassed": true,
+    "hostedMultiSessionConcurrencyProven": false,
+    "hostedPostgrestAuthProven": false,
+    "catalogControlsVerified": true,
     "canonicalParentDecisionRecords": 0,
     "gitIncludesLiveLeanMigration": true,
     "leakedPasswordProtectionWarning": true,
@@ -172,9 +195,7 @@
   },
   "blockingIssues": [
     "CANONICAL_BRANCH_PROTECTION_UNCONFIGURED",
-    "SUPABASE_PROJECTION_INTEGRITY_HARDENING_NOT_DEPLOYED",
     "SUPABASE_V2_1_SYNC_NOT_COMPATIBILITY_PROVEN",
-    "GIT_AND_LIVE_SUPABASE_MIGRATIONS_DIFFER",
     "EXTERNAL_RECEIPT_SOURCE_ATTESTATION_UNAVAILABLE",
     "NO_VALIDATED_MODEL",
     "NO_CALIBRATION_REPORT",

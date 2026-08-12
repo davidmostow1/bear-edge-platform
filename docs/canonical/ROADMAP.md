@@ -8,7 +8,7 @@ SAFETY_INVARIANT: authorization is RESEARCH_ONLY; authorized stake is $0; execut
 
 ## P0 — establish one honest reproducible system
 
-**Current result:** the consolidation/reproducibility portion is complete; two operational controls remain open.
+**Current result:** consolidation/reproducibility and fail-closed projection hardening are complete; the repository-admin branch-protection control remains open.
 
 Completed receipt:
 
@@ -18,14 +18,14 @@ Completed receipt:
 4. Non-authorized decisions require authoritative stake exactly `0`, and permission cannot be promoted beyond `PRICE_CHECK_ONLY`.
 5. A clean exact-SHA checkout passed `npm run verify` with 756/756 tests; GitHub Actions passed on the same merge SHA; the identical tree passed a separate-install package smoke test.
 6. Canonical documents, machine status, and a normalized external receipt are committed to the audit surface.
+7. PR #32 was reviewed and merged normally as `b6c19292f96a0787fa6e198e8b8179db763390fe`, tree `09b55d04f9b4f0bdc13069c5376f8e5e5a2a973f`; its exact tree passed 776/776 locally and in GitHub Actions.
+8. Versioned migration `20260812195952_harden_authoritative_projections` is installed. Live catalog checks and a rollback-only hosted PostgreSQL smoke test confirmed service-only projection writes, fail-closed snapshots, retry/conflict handling, finite-value guards, linear lineage, immutability, and account cascade with counts preserved.
 
 Remaining P0 work, in order:
 
-1. Harden the already-deployed Supabase v2.1 projection with a new migration. Remove authenticated direct evidence insertion, make snapshot checks fail closed, restore conflict-safe retry, map research market families to the canonical remote kind, and add the missing indexes/finite-value checks. Do not rewrite the applied migration.
-2. Exercise the exact hardening SQL against PostgreSQL, deploy it from the reviewed version-controlled migration, refresh the live receipt, and keep synchronization disabled until every compatibility check passes.
-3. Configure branch protection or a repository ruleset for `master`, requiring the CI workflow and pull-request review. The current integration has read access to this state but no administration capability, so this step requires a repository administrator.
+1. Configure branch protection or a repository ruleset for `master`, requiring the CI workflow and pull-request review. The current integration has read access to this state but no administration capability, so this step requires a repository administrator.
 
-P0 exit requires the exact merged baseline receipt **plus** both remaining controls. P0 completion means the software state is reproducible and its projection/governance controls fail closed. It does **not** mean a model predicts well.
+P0 exit requires the exact hardened-baseline receipt plus branch governance. Synchronization compatibility remains independently fail-closed: the 12 retained v2.0 rows cannot parent v2.1 evidence, and true multi-session plus hosted PostgREST/Auth behavior is not proven. P0 completion will mean the software state is reproducible and its projection/governance controls fail closed. It will not mean synchronization is enabled or a model predicts well.
 
 ## P1 — build one real esports prediction vertical slice
 
