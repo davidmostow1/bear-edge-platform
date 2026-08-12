@@ -96,7 +96,13 @@ function urlHost(host) {
 }
 
 function preferredLanAddress() {
-  const interfaces = os.networkInterfaces();
+  let interfaces;
+
+  try {
+    interfaces = os.networkInterfaces();
+  } catch {
+    return "127.0.0.1";
+  }
 
   for (const entries of Object.values(interfaces)) {
     for (const entry of entries ?? []) {

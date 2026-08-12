@@ -19,6 +19,7 @@ const { saveOddsApiKey, upsertEnvValue, validateOddsApiKey } = require("../src/c
 const {
   buildDashboardUrl,
   displayHost,
+  preferredLanAddress,
   parseArgs: parseLaunchArgs
 } = require("../src/cli/launch.js");
 const { parseArgs: parseServeArgs } = require("../src/cli/serve.js");
@@ -205,6 +206,21 @@ test("LAN dashboard bootstrap keeps the operator token in the URL fragment only"
   );
   assert.equal(lanUrl.includes("?"), false);
   assert.equal(localUrl, "http://127.0.0.1:3000/dashboard");
+});
+
+test("LAN address discovery falls back safely when interface enumeration is unavailable", () => {
+  const originalNetworkInterfaces = os.networkInterfaces;
+
+  try {
+    os.networkInterfaces = () => {
+      throw new Error("interface enumeration unavailable");
+    };
+
+    assert.equal(preferredLanAddress(), "127.0.0.1");
+    assert.equal(buildDashboardUrl(3000, "0.0.0.0"), "http://127.0.0.1:3000/dashboard");
+  } finally {
+    os.networkInterfaces = originalNetworkInterfaces;
+  }
 });
 
 test("full launcher run never emits a configured operator token", async (t) => {
