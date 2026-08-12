@@ -642,12 +642,11 @@ function validateAuditRecord(record) {
 
       if (
         (record.verdict !== "BET" || record.permission !== "VERIFIED_BETS_ALLOWED")
-        && typeof record.stake.recommendedStake === "number"
-        && record.stake.recommendedStake > 0
+        && record.stake.recommendedStake !== 0
       ) {
         addIssue(
           "stake.recommendedStake",
-          "must be zero unless verdict is BET and permission is VERIFIED_BETS_ALLOWED."
+          "must equal zero unless verdict is BET and permission is VERIFIED_BETS_ALLOWED."
         );
       }
     }

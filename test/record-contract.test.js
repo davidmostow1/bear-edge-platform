@@ -196,9 +196,24 @@ test("canonical non-BET records zero counterfactual recommended stake", () => {
   assert.ok(
     validateAuditRecord(tampered).issues.some((issue) => (
       issue.path === "stake.recommendedStake"
-      && /must be zero/.test(issue.message)
+      && /must equal zero/.test(issue.message)
     ))
   );
+
+  for (const unauthorizedStake of [null, "0", undefined]) {
+    const invalid = {
+      ...record,
+      stake: { ...record.stake, recommendedStake: unauthorizedStake }
+    };
+
+    assert.ok(
+      validateAuditRecord(invalid).issues.some((issue) => (
+        issue.path === "stake.recommendedStake"
+        && /must equal zero/.test(issue.message)
+      )),
+      `unauthorized recommended stake ${String(unauthorizedStake)} must fail closed`
+    );
+  }
 });
 
 test("validateAuditRecord rejects digest changes, unsupported verdicts, and research-only BET records", () => {

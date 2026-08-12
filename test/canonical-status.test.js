@@ -328,6 +328,33 @@ test("canonical status validates the same aggregate content across logical commi
   }));
 });
 
+test("candidate receipt is branch-independent when ancestry and content are exact", () => {
+  const repositoryState = readGitRepositoryState(ROOT);
+  assert.ok(repositoryState);
+
+  for (const branch of ["master", "codex/dota-source-and-dataset-proof"]) {
+    assert.doesNotThrow(() => validateCanonicalStatusDocument(loadStatus(), {
+      ...loadContext(),
+      repositoryState: {
+        ...repositoryState,
+        branch,
+        headCommit: "e".repeat(40),
+        workingTreeClean: true
+      }
+    }));
+  }
+});
+
+test("canonical status binds the explicitly selected Dota 2 product lane", () => {
+  const status = loadStatus();
+
+  assert.deepEqual(status.nextProductDecision, {
+    selected: "DOTA2_PREMATCH_BO3_SERIES_WINNER",
+    selectedByUser: true,
+    selectedOn: "2026-08-12"
+  });
+});
+
 test("canonical status rejects an extra path in the aggregate baseline diff", () => {
   const repositoryState = readGitRepositoryState(ROOT);
   assert.ok(repositoryState);

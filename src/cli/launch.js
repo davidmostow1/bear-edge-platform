@@ -101,7 +101,7 @@ function preferredLanAddress() {
   try {
     interfaces = os.networkInterfaces();
   } catch {
-    return "127.0.0.1";
+    return null;
   }
 
   for (const entries of Object.values(interfaces)) {
@@ -112,15 +112,31 @@ function preferredLanAddress() {
     }
   }
 
-  return "127.0.0.1";
+  return null;
+}
+
+function resolveLaunchHost(host) {
+  if (host !== "0.0.0.0") {
+    return host;
+  }
+
+  const lanAddress = preferredLanAddress();
+
+  if (!lanAddress) {
+    throw new Error(
+      "LAN mode is unavailable because no external IPv4 address could be verified."
+    );
+  }
+
+  return lanAddress;
 }
 
 function displayHost(host) {
-  return host === "0.0.0.0" ? preferredLanAddress() : host;
+  return resolveLaunchHost(host);
 }
 
 function healthHost(host) {
-  return host === "0.0.0.0" ? preferredLanAddress() : urlHost(host);
+  return urlHost(resolveLaunchHost(host));
 }
 
 function healthCheck(port, host = "127.0.0.1") {
@@ -222,9 +238,12 @@ function openDashboard(port, host = "127.0.0.1", operatorToken = null) {
 }
 
 async function launch(options) {
-  const alreadyRunning = await healthCheck(options.port, options.host);
+  const requestedHost = options.host;
+  const launchHost = resolveLaunchHost(requestedHost);
+  const launchOptions = { ...options, host: launchHost };
+  const alreadyRunning = await healthCheck(options.port, launchHost);
   let startedPid = null;
-  const lanMode = !["127.0.0.1", "localhost", "::1"].includes(options.host);
+  const lanMode = !["127.0.0.1", "localhost", "::1"].includes(launchHost);
   const tokenRequired = true;
   const configuredOperatorToken = String(process.env.BEAR_EDGE_OPERATOR_TOKEN ?? "").trim() || null;
   let operatorToken = configuredOperatorToken;
@@ -236,7 +255,7 @@ async function launch(options) {
   }
 
   if (!alreadyRunning) {
-    if (options.host === "0.0.0.0" && await healthCheck(options.port, "127.0.0.1")) {
+    if (requestedHost === "0.0.0.0" && await healthCheck(options.port, "127.0.0.1")) {
       throw new Error(
         `Port ${options.port} is already used by a local-only Bear Edge server. Stop it or choose another port for LAN mode.`
       );
@@ -246,10 +265,10 @@ async function launch(options) {
       operatorToken = bootstrapAuth.createLaunchToken();
     }
 
-    startedPid = startServer({ ...options, operatorToken });
+    startedPid = startServer({ ...launchOptions, operatorToken });
   }
 
-  const healthy = await waitForHealth(options.port, options.timeoutMs, options.host);
+  const healthy = await waitForHealth(options.port, options.timeoutMs, launchHost);
 
   if (!healthy) {
     throw new Error(
@@ -258,10 +277,10 @@ async function launch(options) {
   }
 
   const url = options.openBrowser
-    ? openDashboard(options.port, options.host, operatorToken)
+    ? openDashboard(options.port, launchHost, operatorToken)
     : buildDashboardUrl(
         options.port,
-        options.host,
+        launchHost,
         configuredOperatorToken ? null : operatorToken
       );
 
@@ -305,6 +324,7 @@ module.exports = {
   openDashboard,
   parseArgs,
   preferredLanAddress,
+  resolveLaunchHost,
   startServer,
   displayHost,
   healthHost,

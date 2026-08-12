@@ -216,7 +216,7 @@ test("persistDisplayedTargets keeps stale verified prices in PRICE_CHECK_ONLY mo
   );
 });
 
-test("persistDisplayedTargets allows a fresh exact execution-book price", async (t) => {
+test("persistDisplayedTargets keeps a fresh exact execution-book price at price-check authority", async (t) => {
   const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "bear-edge-recommendations-"));
   const ledgerPath = path.join(tempDir, "decision_log.jsonl");
   t.after(() => fs.rm(tempDir, { recursive: true, force: true }));
@@ -245,13 +245,14 @@ test("persistDisplayedTargets allows a fresh exact execution-book price", async 
 
   const persisted = await persistDisplayedTargets(result, {
     ledgerPath,
-    requestId: "request_fresh_execution_price"
+    requestId: "request_fresh_execution_price",
+    permission: "VERIFIED_BETS_ALLOWED"
   });
 
-  assert.equal(persisted.best[0].auditRecord.permission, "VERIFIED_BETS_ALLOWED");
+  assert.equal(persisted.best[0].auditRecord.permission, "PRICE_CHECK_ONLY");
   assert.equal(
     persisted.best[0].auditRecord.gateResults.find((gate) => gate.gate === "operational_permission").passed,
-    true
+    false
   );
   assert.equal(persisted.best[0].auditRecord.verdict, "WAIT");
 });

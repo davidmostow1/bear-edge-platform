@@ -57,7 +57,7 @@
       "test/sync-worker.test.js",
       "test/tooling.test.js"
     ],
-    "candidateContentDigest": "ddd91f9ea192e7438dc182cfa2a5c0549b7dd49d2c60614a2afef88a944dc5ac",
+    "candidateContentDigest": "61a8343321c7a572ad82d4fb074d41351d227bc2e84a5d3d3baf1eca379bcedf",
     "grade": "PARTIAL"
   },
   "authorization": {
@@ -81,11 +81,11 @@
       "commitBinding": "EXTERNAL_EXACT_SHA_REQUIRED",
       "environment": "LOCAL_CANDIDATE_CONTENT",
       "verificationNotBefore": "2026-08-12T12:05:00.000Z",
-      "passed": 754,
+      "passed": 756,
       "failed": 0,
       "grade": "CONFIRMED",
       "remoteRunUrl": null,
-      "candidateContentDigest": "ddd91f9ea192e7438dc182cfa2a5c0549b7dd49d2c60614a2afef88a944dc5ac"
+      "candidateContentDigest": "61a8343321c7a572ad82d4fb074d41351d227bc2e84a5d3d3baf1eca379bcedf"
     },
     "meaning": "Passing tests establish implemented software behavior, not predictive validity, calibration, profitability, provider access, or production readiness."
   },
@@ -193,7 +193,8 @@
     "CANONICALIZATION_REQUIRES_EXTERNAL_EXACT_SHA_CI_RECEIPT"
   ],
   "nextProductDecision": {
-    "recommended": "CS2_PREMATCH_BO3_SERIES_WINNER",
-    "alternativesRequireExplicitSelection": true
+    "selected": "DOTA2_PREMATCH_BO3_SERIES_WINNER",
+    "selectedByUser": true,
+    "selectedOn": "2026-08-12"
   }
 }

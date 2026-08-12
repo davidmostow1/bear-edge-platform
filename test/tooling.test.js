@@ -20,7 +20,8 @@ const {
   buildDashboardUrl,
   displayHost,
   preferredLanAddress,
-  parseArgs: parseLaunchArgs
+  parseArgs: parseLaunchArgs,
+  resolveLaunchHost
 } = require("../src/cli/launch.js");
 const { parseArgs: parseServeArgs } = require("../src/cli/serve.js");
 const { parseArgs: parseEvaluateArgs } = require("../src/cli/evaluate.js");
@@ -196,19 +197,37 @@ test("launch CLI parses local app controls", () => {
 });
 
 test("LAN dashboard bootstrap keeps the operator token in the URL fragment only", () => {
+  const originalNetworkInterfaces = os.networkInterfaces;
   const token = "private/operator+token";
-  const lanUrl = buildDashboardUrl(3000, "0.0.0.0", token);
-  const localUrl = buildDashboardUrl(3000, "127.0.0.1");
 
-  assert.equal(
-    lanUrl,
-    `http://${displayHost("0.0.0.0")}:3000/dashboard#operatorToken=private%2Foperator%2Btoken`
-  );
-  assert.equal(lanUrl.includes("?"), false);
-  assert.equal(localUrl, "http://127.0.0.1:3000/dashboard");
+  try {
+    os.networkInterfaces = () => ({
+      en0: [{
+        address: "192.168.1.44",
+        cidr: "192.168.1.44/24",
+        family: "IPv4",
+        internal: false,
+        mac: "00:00:00:00:00:00",
+        netmask: "255.255.255.0"
+      }]
+    });
+    assert.equal(preferredLanAddress(), "192.168.1.44");
+    assert.equal(resolveLaunchHost("0.0.0.0"), "192.168.1.44");
+    const lanUrl = buildDashboardUrl(3000, "0.0.0.0", token);
+    const localUrl = buildDashboardUrl(3000, "127.0.0.1");
+
+    assert.equal(
+      lanUrl,
+      `http://${displayHost("0.0.0.0")}:3000/dashboard#operatorToken=private%2Foperator%2Btoken`
+    );
+    assert.equal(lanUrl.includes("?"), false);
+    assert.equal(localUrl, "http://127.0.0.1:3000/dashboard");
+  } finally {
+    os.networkInterfaces = originalNetworkInterfaces;
+  }
 });
 
-test("LAN address discovery falls back safely when interface enumeration is unavailable", () => {
+test("LAN launch fails closed when interface enumeration is unavailable", () => {
   const originalNetworkInterfaces = os.networkInterfaces;
 
   try {
@@ -216,8 +235,15 @@ test("LAN address discovery falls back safely when interface enumeration is unav
       throw new Error("interface enumeration unavailable");
     };
 
-    assert.equal(preferredLanAddress(), "127.0.0.1");
-    assert.equal(buildDashboardUrl(3000, "0.0.0.0"), "http://127.0.0.1:3000/dashboard");
+    assert.equal(preferredLanAddress(), null);
+    assert.throws(
+      () => resolveLaunchHost("0.0.0.0"),
+      /LAN mode is unavailable/
+    );
+    assert.throws(
+      () => buildDashboardUrl(3000, "0.0.0.0"),
+      /LAN mode is unavailable/
+    );
   } finally {
     os.networkInterfaces = originalNetworkInterfaces;
   }

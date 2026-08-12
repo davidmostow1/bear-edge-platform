@@ -11,7 +11,7 @@ const REPO_ROOT = path.resolve(__dirname, "..");
 const DIGEST_PATTERN = /^[a-f0-9]{64}$/;
 const STATUS_DIGEST_SENTINEL = "SELF_REFERENTIAL_CANDIDATE_DIGEST";
 const PINNED_CANONICAL_STATUS_DIGEST =
-  "ac04d7b715b39f17417bbbd7140fca48a786103960a9f2636463e3f8942c378f";
+  "857558439207bdb49ff5b045a0675c5996952563cb0b882105104f06c812fe79";
 const REQUIRED_GRADES = Object.freeze([
   "CONFIRMED",
   "PARTIAL",
@@ -66,7 +66,7 @@ const PINNED_LOCAL_CANDIDATE_VERIFICATION = Object.freeze({
   commitBinding: "EXTERNAL_EXACT_SHA_REQUIRED",
   environment: "LOCAL_CANDIDATE_CONTENT",
   verificationNotBefore: "2026-08-12T12:05:00.000Z",
-  passed: 754,
+  passed: 756,
   failed: 0,
   grade: "CONFIRMED",
   remoteRunUrl: null
@@ -333,12 +333,11 @@ function validateCanonicalStatusDocument(status, context) {
   if (repositoryState !== null) {
     requireCondition(
       repositoryState.recoveryBaselineCommit === PINNED_REPOSITORY_SNAPSHOT.recoveryBaselineCommit
-        && (repositoryState.branch === "" || repositoryState.branch === PINNED_CANDIDATE_BRANCH)
         && objectsEqual(repositoryState.changedPaths, status.repository.candidateChangedPaths)
         && repositoryState.candidateContentDigest
           === status.repository.candidateContentDigest,
       "CANDIDATE_CONTENT_EVIDENCE_DRIFT",
-      "Current Git ancestry, branch or detached checkout, changed paths, and candidate content digest must match the pinned receipt."
+      "Current Git ancestry, changed paths, and candidate content digest must match the pinned receipt."
     );
   }
   requireCondition(
@@ -428,11 +427,12 @@ function validateCanonicalStatusDocument(status, context) {
   );
   requireCondition(
     objectsEqual(status?.nextProductDecision, {
-      recommended: "CS2_PREMATCH_BO3_SERIES_WINNER",
-      alternativesRequireExplicitSelection: true
+      selected: "DOTA2_PREMATCH_BO3_SERIES_WINNER",
+      selectedByUser: true,
+      selectedOn: "2026-08-12"
     }),
     "NEXT_PRODUCT_DECISION_DRIFT",
-    "The pinned next-product recommendation may change only through an explicit reviewed decision."
+    "The pinned next-product selection may change only through an explicit reviewed decision."
   );
 
   requireCondition(

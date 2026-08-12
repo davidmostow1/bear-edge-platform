@@ -52,6 +52,10 @@ Grades mean:
 
 These are software capabilities. They are not a validated wagering advantage.
 
+## Selected next research slice
+
+On 2026-08-12 the user explicitly selected Dota 2 pre-match best-of-three series winner as the next bounded vertical slice. That decision fixes product scope only. It does not establish provider rights, point-in-time data availability, a trained model, calibrated probabilities, market evidence, or wagering authority. Until source-purpose rights are approved, Dota work is limited to source contracts, immutable evidence mechanics, dataset validation, and synthetic fixtures.
+
 ## What is missing
 
 - A model with immutable implementation identity, training cutoff, passing calibration report, and `validated` registry status.
@@ -70,7 +74,7 @@ These are software capabilities. They are not a validated wagering advantage.
 | Recovery baseline `5f284eb8…` | GitHub Actions, `npm run verify` | 728 passed, 0 failed | Exact committed baseline; software behavior only. |
 | Clean local checkout of the baseline | `npm run verify` | 727 passed, 1 failed | Failure was `os.networkInterfaces()` throwing in this restricted runtime. |
 | Local LAN portability fix | `node --test test/tooling.test.js` | 29 passed, 0 failed | Dirty canonicalization worktree; not a committed SHA. |
-| Canonicalization candidate full suite | `npm run verify` | 754 passed, 0 failed | Local candidate content; verification is declared not before 2026-08-12 12:05 UTC. The receipt binds the aggregate baseline diff even while its logical commits are created. Exact-SHA clean-checkout and remote CI evidence are still required. |
+| Canonicalization candidate full suite | `npm run verify` | 756 passed, 0 failed | Local candidate content; verification is declared not before 2026-08-12 12:05 UTC. The receipt binds the aggregate baseline diff even while its logical commits are created. Exact-SHA clean-checkout and remote CI evidence are still required. |
 | Live Supabase snapshot | catalog, migration, advisor, and aggregate inspection | partial | Runtime schema/row-count snapshot only; not model validation. |
 
 The earlier smaller `reconcile@8f0d6cb…` branch passed 414/414 in GitHub CI. A separate dirty recovery worktree based on that branch passed 415/415 after the same LAN fallback. Those results do not supersede the fuller PR #17 baseline.
