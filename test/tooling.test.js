@@ -523,6 +523,102 @@ test("local env loader reads .env.local without overwriting existing process val
   }
 });
 
+test("loadEnvFiles rejects path traversal with parent directory references", () => {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "bear-edge-security-"));
+
+  assert.throws(
+    () => loadEnvFiles({ rootDir: tempDir, fileNames: ["../.env"] }),
+    (error) => {
+      assert.ok(error instanceof Error);
+      assert.equal(error.message, "Invalid file path");
+      return true;
+    }
+  );
+
+  assert.throws(
+    () => loadEnvFiles({ rootDir: tempDir, fileNames: ["../../etc/passwd"] }),
+    (error) => {
+      assert.ok(error instanceof Error);
+      assert.equal(error.message, "Invalid file path");
+      return true;
+    }
+  );
+});
+
+test("loadEnvFiles rejects path traversal with absolute paths", () => {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "bear-edge-security-"));
+
+  assert.throws(
+    () => loadEnvFiles({ rootDir: tempDir, fileNames: ["/etc/passwd"] }),
+    (error) => {
+      assert.ok(error instanceof Error);
+      assert.equal(error.message, "Invalid file path");
+      return true;
+    }
+  );
+
+  assert.throws(
+    () => loadEnvFiles({ rootDir: tempDir, fileNames: ["/tmp/malicious.env"] }),
+    (error) => {
+      assert.ok(error instanceof Error);
+      assert.equal(error.message, "Invalid file path");
+      return true;
+    }
+  );
+});
+
+test("loadEnvFiles rejects path traversal with mixed relative and parent paths", () => {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "bear-edge-security-"));
+
+  assert.throws(
+    () => loadEnvFiles({ rootDir: tempDir, fileNames: ["subdir/../../.env"] }),
+    (error) => {
+      assert.ok(error instanceof Error);
+      assert.equal(error.message, "Invalid file path");
+      return true;
+    }
+  );
+
+  assert.throws(
+    () => loadEnvFiles({ rootDir: tempDir, fileNames: ["./../../sensitive.env"] }),
+    (error) => {
+      assert.ok(error instanceof Error);
+      assert.equal(error.message, "Invalid file path");
+      return true;
+    }
+  );
+});
+
+test("loadEnvFiles allows safe relative paths within root directory", () => {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "bear-edge-security-"));
+  const subDir = path.join(tempDir, "config");
+  fs.mkdirSync(subDir);
+  
+  fs.writeFileSync(
+    path.join(subDir, "test.env"),
+    "TEST_VAR=safe_value\n"
+  );
+
+  const originalTestVar = process.env.TEST_VAR;
+
+  try {
+    delete process.env.TEST_VAR;
+
+    // Safe relative path within root directory should work
+    const result = loadEnvFiles({ rootDir: tempDir, fileNames: ["config/test.env"] });
+
+    assert.equal(process.env.TEST_VAR, "safe_value");
+    assert.equal(result.loaded.length, 1);
+    assert.deepEqual(result.keys, ["TEST_VAR"]);
+  } finally {
+    if (originalTestVar === undefined) {
+      delete process.env.TEST_VAR;
+    } else {
+      process.env.TEST_VAR = originalTestVar;
+    }
+  }
+});
+
 test("odds API key settings update local env without exposing secrets", async () => {
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "bear-edge-odds-key-"));
   const envPath = path.join(tempDir, ".env.local");
