@@ -8,7 +8,7 @@ A local betting-decision engine with deterministic verdict gates, strict input v
 - Normalizes two-way no-vig market probabilities
 - Shrinks model probability toward the market
 - Computes EV, Kelly, and capped stake sizes
-- Applies PASS / WAIT / BET verdict gates
+- Applies PASS / LEAN / WAIT / BET verdict gates
 - Rejects parlays and correlation-risk setups by default
 - Waits on stale injury data
 - Appends decision logs to `data/logs/decision_log.jsonl`
@@ -48,6 +48,20 @@ A local betting-decision engine with deterministic verdict gates, strict input v
 - Separates research candidates, price checks, evidence waits, passed markets, and qualified persisted BET calls on the Decision Board
 - Requires a process-scoped bearer token for every LAN write while keeping read-only health and audit routes available
 - Keeps optional Statsig controls presentation-only and optional Supabase synchronization secondary to the authoritative local ledger
+
+## Esports zero-BS slice
+
+The esports evaluator covers two-way match-winner decisions for CS2, Dota 2, League of Legends, and VALORANT. It requires game-specific context claims, two independent source families including tier 1, retained source and quote digests, an independent timestamped probability interval, cross-book no-vig consensus, registered shrinkage weight, exact executable target price/size/cost, calibration authority, and bankroll/risk gates. It adds the canonical `LEAN` classification and logs every `PASS`, `LEAN`, `WAIT`, or `BET` result.
+
+No independent game-specific prediction generator or validated esports model currently exists in the repository. The registered esports calculations are `research_only`, so missing evidence is never replaced with a number and the default path cannot produce a qualified esports `BET`.
+
+```bash
+npm run evaluate:esports -- FILLED_CANDIDATE.json \
+  --ledger-path data/logs/esports_decisions.jsonl \
+  --now RETAINED_ISO_UTC
+```
+
+See `docs/ESPORTS_ZERO_BS_OPERATIONS.md`, `src/esports/source-registry.json`, and `examples/esports_match_winner.template.json`. The timestamped 2026-08-12 slate capture is retained at `data/esports/observations/2026-08-12-live-slate.json` with 17 `WAIT`, one `PASS`, zero `LEAN`, zero `BET`, and $0 at risk.
 
 ## Requirements
 

@@ -904,7 +904,7 @@ test("HTTP API exposes release readiness checks", async (t) => {
       (entry) => entry.id === "model-calibration-registry"
     );
     assert.equal(payload.modelCalibration.registryValid, true);
-    assert.equal(payload.modelCalibration.registeredModelCount, 5);
+    assert.equal(payload.modelCalibration.registeredModelCount, 9);
     assert.equal(payload.modelCalibration.validatedModelCount, 0);
     assert.deepEqual(
       payload.modelCalibration.models.map((model) => model.marketFamily).sort(),
@@ -912,8 +912,12 @@ test("HTTP API exposes release readiness checks", async (t) => {
         "batter_hits",
         "batter_runs_scored",
         "batter_total_bases",
+        "cs2_match_winner",
+        "dota2_match_winner",
+        "lol_match_winner",
         "pitcher_strikeouts",
-        "pitcher_strikeouts"
+        "pitcher_strikeouts",
+        "valorant_match_winner"
       ]
     );
     assert.equal(
@@ -2619,7 +2623,8 @@ test("HTTP API settles and amends a canonical validated BET", async () => {
     market: {
       marketFamily: "moneyline",
       marketType: "moneyline",
-      selection: "Verified API moneyline"
+      selection: "Verified API moneyline",
+      side: "Home"
     },
     price: {
       sportsbook: "draftkings",
@@ -2637,7 +2642,9 @@ test("HTTP API settles and amends a canonical validated BET", async () => {
       sourceTime: "2026-07-17T17:58:30.000Z",
       digest: "a".repeat(64),
       freshness: "fresh",
-      verificationStatus: "verified_provider_capture"
+      verificationStatus: "verified_provider_capture",
+      disposition: "included",
+      reasonCodes: []
     }],
     model: {
       modelId: "validated_moneyline",
@@ -2645,6 +2652,8 @@ test("HTTP API settles and amends a canonical validated BET", async () => {
       probabilityMethod: "calibrated_logistic",
       modelStatus: "validated",
       calibrationReportId: "calibration-report-001",
+      calibrationReportDigest: "d".repeat(64),
+      trainingCutoff: "2026-07-16T00:00:00.000Z",
       sampleSize: 500
     },
     probability: {
@@ -2675,7 +2684,7 @@ test("HTTP API settles and amends a canonical validated BET", async () => {
       codeVersion: "test",
       configurationDigest: "b".repeat(64),
       calculationVersion: "test_v1",
-      evidenceCompleteness: "verified",
+      evidenceCompleteness: "complete",
       warnings: []
     }
   }, {

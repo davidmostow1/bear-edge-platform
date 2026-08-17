@@ -945,6 +945,7 @@ function summarizeDecisionLogRecords(records, malformedLines = []) {
     totalEvaluations: hydratedEvaluations.length,
     verdictCounts: {
       BET: hydratedEvaluations.filter((evaluation) => evaluation.verdict === "BET").length,
+      LEAN: hydratedEvaluations.filter((evaluation) => evaluation.verdict === "LEAN").length,
       WAIT: hydratedEvaluations.filter((evaluation) => evaluation.verdict === "WAIT").length,
       PASS: hydratedEvaluations.filter((evaluation) => evaluation.verdict === "PASS").length
     },

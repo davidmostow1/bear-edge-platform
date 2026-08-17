@@ -1,0 +1,1448 @@
+{
+  "schemaVersion": "bear-edge.esports-live-slate.v1",
+  "snapshotId": "esports-live-slate-2026-08-12T060300Z-060703Z",
+  "observationWindow": {
+    "start": "2026-08-12T06:03:00.000Z",
+    "end": "2026-08-12T06:07:03.000Z",
+    "localTimezone": "America/New_York",
+    "localTimezoneAbbreviation": "EDT",
+    "providerUpdatedAt": null
+  },
+  "scope": {
+    "games": [
+      "CS2",
+      "VALORANT",
+      "LOL",
+      "DOTA2"
+    ],
+    "decisionLabels": [
+      "PASS",
+      "WAIT",
+      "LEAN",
+      "BET"
+    ],
+    "moneyAtRisk": 0,
+    "moneyAtRiskUnit": "USD"
+  },
+  "quoteSemantics": {
+    "eventContractCents": "Kalshi, Robinhood, and Polymarket values are recorded as displayed cents on a $1 event contract. They are not converted to sportsbook odds.",
+    "decimalDisplays": "Decimal values are recorded only where the capture explicitly displayed decimal odds.",
+    "executionCaveat": "A displayed quote is not treated as an executable price unless the capture exposed the relevant tradable price and size. Missing bid, ask, size, volume, or update time remains null or omitted.",
+    "globalProviderUpdatedAt": null
+  },
+  "events": [
+    {
+      "eventId": "cs2-ewc-2026-big-aurora-2026-08-12",
+      "game": "CS2",
+      "league": "Esports World Cup 2026",
+      "stage": "opening",
+      "participants": [
+        "BIG",
+        "Aurora"
+      ],
+      "start": {
+        "reported": "2026-08-12 05:00 EDT",
+        "utc": null
+      },
+      "format": "BO1",
+      "venue": "Paris/LAN",
+      "market": {
+        "type": "winner",
+        "scope": "game",
+        "quotes": [
+          {
+            "venue": "Kalshi",
+            "access": "direct",
+            "sourceUrl": "https://kalshi.com/markets/kxcs2game/counterstrike-2-game/kxcs2game-26aug120810aurbig",
+            "prices": [
+              {
+                "selection": "Aurora Yes",
+                "value": 61,
+                "unit": "USD_cents_per_1_USD_event_contract",
+                "raw": "Aurora Yes 61¢"
+              },
+              {
+                "selection": "BIG Yes",
+                "value": 40,
+                "unit": "USD_cents_per_1_USD_event_contract",
+                "raw": "BIG Yes 40¢"
+              }
+            ],
+            "displayFields": [
+              {
+                "name": "page chance",
+                "selection": "Aurora",
+                "value": 60,
+                "unit": "percent",
+                "raw": "page chance 60%"
+              }
+            ],
+            "availableSize": null,
+            "providerUpdatedAt": null
+          },
+          {
+            "venue": "Spinbetter via Tips.GG",
+            "access": "aggregator_attributed",
+            "sourceUrl": "https://tips.gg/matches/counter-strike/12-08-2026/big-vs-aurora-gaming/01-10/odds/",
+            "prices": [
+              {
+                "selection": "Aurora",
+                "value": 1.5,
+                "unit": "decimal_odds_display",
+                "raw": "Aurora 1.50"
+              },
+              {
+                "selection": "BIG",
+                "value": 2.59,
+                "unit": "decimal_odds_display",
+                "raw": "BIG 2.59"
+              }
+            ],
+            "availableSize": null,
+            "providerUpdatedAt": null
+          }
+        ]
+      },
+      "corroborationUrls": [
+        "https://www.hltv.org/matches",
+        "https://esportsworldcup.com/en/competitions/2026/cs2",
+        "https://www.dust2.us/matches/2396562/big-vs-aurora",
+        "https://www.hltv.org/matches/2396562/big-vs-aurora-esports-world-cup-2026"
+      ],
+      "blockers": [
+        "official starters not confirmed",
+        "map/veto not confirmed",
+        "Bear model fair probability not computed"
+      ],
+      "verdict": "WAIT",
+      "verdictReason": "Official starters, map/veto, and model gates are unresolved."
+    },
+    {
+      "eventId": "cs2-ewc-2026-spirit-jijiehao-2026-08-12",
+      "game": "CS2",
+      "league": "Esports World Cup 2026",
+      "stage": "opening",
+      "participants": [
+        "Spirit",
+        "JiJieHao"
+      ],
+      "start": {
+        "reported": "2026-08-12 06:30 EDT",
+        "utc": null
+      },
+      "format": "BO1",
+      "venue": "Paris/LAN",
+      "market": {
+        "type": "winner",
+        "scope": "game",
+        "quotes": [
+          {
+            "venue": "Kalshi",
+            "access": "direct",
+            "sourceUrl": "https://kalshi.com/markets/kxcs2game/counterstrike-2-game/kxcs2game-26aug120700jjhts",
+            "prices": [
+              {
+                "selection": "Spirit Yes",
+                "value": 89,
+                "unit": "USD_cents_per_1_USD_event_contract",
+                "raw": "Spirit 89¢"
+              },
+              {
+                "selection": "JiJieHao Yes",
+                "value": 12,
+                "unit": "USD_cents_per_1_USD_event_contract",
+                "raw": "JJi 12¢"
+              }
+            ],
+            "availableSize": null,
+            "providerUpdatedAt": null
+          },
+          {
+            "venue": "Spinbetter via Tips.GG",
+            "access": "aggregator_attributed",
+            "sourceUrl": "https://tips.gg/matches/counter-strike/12-08-2026/team-spirit-vs-jijiehao/12-00/odds/",
+            "prices": [
+              {
+                "selection": "Spirit",
+                "value": 1.06,
+                "unit": "decimal_odds_display",
+                "raw": "Spirit 1.06"
+              },
+              {
+                "selection": "JiJieHao",
+                "value": 8.7,
+                "unit": "decimal_odds_display",
+                "raw": "JJi 8.70"
+              }
+            ],
+            "availableSize": null,
+            "providerUpdatedAt": null
+          }
+        ]
+      },
+      "corroborationUrls": [
+        "https://www.hltv.org/matches",
+        "https://esportsworldcup.com/en/competitions/2026/cs2",
+        "https://www.dust2.us/matches/2396559/spirit-vs-jijiehao"
+      ],
+      "blockers": [
+        "official starters not confirmed",
+        "map/veto not confirmed",
+        "Bear model fair probability not computed",
+        "price alone is not edge"
+      ],
+      "verdict": "WAIT",
+      "verdictReason": "Map/veto, starter, and model gates are unresolved; price alone is not evidence of edge."
+    },
+    {
+      "eventId": "cs2-ewc-2026-fut-tyloo-2026-08-12",
+      "game": "CS2",
+      "league": "Esports World Cup 2026",
+      "stage": "opening",
+      "participants": [
+        "FUT",
+        "TYLOO"
+      ],
+      "start": {
+        "reported": "2026-08-12 06:30 EDT",
+        "utc": null
+      },
+      "format": "BO1",
+      "venue": "Paris/LAN",
+      "market": {
+        "type": "winner",
+        "scope": "game",
+        "quotes": [
+          {
+            "venue": "Kalshi",
+            "access": "direct",
+            "sourceUrl": "https://kalshi.com/markets/kxcs2game/counterstrike-2-game/kxcs2game-26aug121250tyloofut",
+            "prices": [
+              {
+                "selection": "FUT Yes",
+                "value": 60,
+                "unit": "USD_cents_per_1_USD_event_contract",
+                "raw": "FUT 60¢"
+              },
+              {
+                "selection": "TYLOO Yes",
+                "value": 41,
+                "unit": "USD_cents_per_1_USD_event_contract",
+                "raw": "TYLOO 41¢"
+              }
+            ],
+            "displayFields": [
+              {
+                "name": "page chance",
+                "selection": "FUT",
+                "value": 59,
+                "unit": "percent",
+                "raw": "chance 59%"
+              }
+            ],
+            "availableSize": null,
+            "providerUpdatedAt": null
+          },
+          {
+            "venue": "Tips.GG",
+            "access": "aggregator_unattributed",
+            "sourceUrl": "https://tips.gg/matches/counter-strike/12-08-2026/fut-vs-tyloo/01-10/odds/",
+            "prices": [
+              {
+                "selection": "FUT",
+                "value": 1.6,
+                "unit": "decimal_odds_display",
+                "raw": "FUT 1.60"
+              },
+              {
+                "selection": "TYLOO",
+                "value": 2.34,
+                "unit": "decimal_odds_display",
+                "raw": "TYLOO 2.34"
+              }
+            ],
+            "underlyingBook": null,
+            "executable": false,
+            "availableSize": null,
+            "providerUpdatedAt": null
+          }
+        ]
+      },
+      "corroborationUrls": [
+        "https://www.hltv.org/matches",
+        "https://esportsworldcup.com/en/competitions/2026/cs2",
+        "https://www.dust2.us/matches/2396569/fut-vs-tyloo"
+      ],
+      "blockers": [
+        "official starters not confirmed",
+        "map/veto not confirmed",
+        "second identified executable price not captured",
+        "Bear model fair probability not computed"
+      ],
+      "verdict": "WAIT",
+      "verdictReason": "The second price is aggregator-only with no identified underlying book; starters, map/veto, and model gates are unresolved."
+    },
+    {
+      "eventId": "cs2-ewc-2026-g2-m80-2026-08-12",
+      "game": "CS2",
+      "league": "Esports World Cup 2026",
+      "stage": "opening",
+      "participants": [
+        "G2",
+        "M80"
+      ],
+      "start": {
+        "reported": "2026-08-12 08:00 EDT",
+        "utc": null
+      },
+      "format": "BO1",
+      "venue": "Paris/LAN",
+      "market": {
+        "type": "winner",
+        "scope": "game",
+        "quotes": [
+          {
+            "venue": "Kalshi",
+            "access": "direct",
+            "sourceUrl": "https://kalshi.com/markets/kxcs2game/counterstrike-2-game/kxcs2game-26aug120810m80g2",
+            "prices": [
+              {
+                "selection": "G2 Yes",
+                "value": 69,
+                "unit": "USD_cents_per_1_USD_event_contract",
+                "raw": "G2 69¢"
+              },
+              {
+                "selection": "M80 Yes",
+                "value": 31,
+                "unit": "USD_cents_per_1_USD_event_contract",
+                "raw": "M80 31¢"
+              }
+            ],
+            "availableSize": null,
+            "providerUpdatedAt": null
+          }
+        ]
+      },
+      "corroborationUrls": [
+        "https://www.hltv.org/matches",
+        "https://esportsworldcup.com/en/competitions/2026/cs2",
+        "https://www.dust2.us/matches/2396561/g2-vs-m80"
+      ],
+      "blockers": [
+        "second executable price not captured",
+        "official starters not confirmed",
+        "map/veto not confirmed",
+        "Bear model fair probability not computed"
+      ],
+      "verdict": "WAIT",
+      "verdictReason": "A second executable price, starters, map/veto, and model are unresolved."
+    },
+    {
+      "eventId": "valorant-vct-china-2026-all-gamers-titan-esports-club-2026-08-12",
+      "game": "VALORANT",
+      "league": "VCT China Stage 2",
+      "stage": "Play-ins upper final",
+      "participants": [
+        "All Gamers",
+        "Titan Esports Club"
+      ],
+      "start": {
+        "reported": "2026-08-12 04:00 EDT",
+        "utc": null
+      },
+      "format": "BO3",
+      "venue": null,
+      "market": {
+        "type": "winner",
+        "scope": "series",
+        "quotes": [
+          {
+            "venue": "Kalshi",
+            "access": "direct",
+            "sourceUrl": "https://kalshi.com/markets/kxvalorantgame/valorant-game-winner/kxvalorantgame-26aug120400tecag",
+            "prices": [
+              {
+                "selection": "All Gamers Yes",
+                "value": 66,
+                "unit": "USD_cents_per_1_USD_event_contract",
+                "raw": "AG 66¢"
+              },
+              {
+                "selection": "Titan Esports Club Yes",
+                "value": 35,
+                "unit": "USD_cents_per_1_USD_event_contract",
+                "raw": "TEC 35¢"
+              }
+            ],
+            "availableSize": null,
+            "providerUpdatedAt": null
+          },
+          {
+            "venue": "EGamersWorld",
+            "access": "aggregator_unattributed",
+            "sourceUrl": "https://egamersworld.com/valorant/match/1oVcrl8jCm/all-gamers-vs-titan-esports-club-yAmmoeYxz",
+            "prices": [
+              {
+                "selection": "All Gamers",
+                "value": 1.47,
+                "unit": "decimal_odds_display",
+                "raw": "AG 1.47"
+              },
+              {
+                "selection": "Titan Esports Club",
+                "value": 2.58,
+                "unit": "decimal_odds_display",
+                "raw": "TEC 2.58"
+              }
+            ],
+            "underlyingBook": null,
+            "executable": false,
+            "availableSize": null,
+            "providerUpdatedAt": null
+          }
+        ]
+      },
+      "corroborationUrls": [
+        "https://www.vlr.gg/724633/all-gamers-vs-titan-esports-club-vct-2026-china-stage-2-ubf",
+        "https://www.gosugamers.net/valorant/tournaments/62997-vct-2026-china-stage-2/matches/658532-all-gamers-vs-titan-esports-club"
+      ],
+      "blockers": [
+        "second match-specific starting-five confirmation not captured",
+        "Bear model fair probability not computed"
+      ],
+      "verdict": "WAIT",
+      "verdictReason": "A second match-specific starting-five confirmation and the model output are missing."
+    },
+    {
+      "eventId": "valorant-vct-china-2026-jd-gaming-trace-esports-2026-08-12",
+      "game": "VALORANT",
+      "league": "VCT China Stage 2",
+      "stage": "Play-ins lower final",
+      "participants": [
+        "JD Gaming",
+        "Trace Esports"
+      ],
+      "start": {
+        "reported": "2026-08-12 06:00 EDT",
+        "utc": null
+      },
+      "format": "BO3",
+      "venue": null,
+      "market": {
+        "type": "winner",
+        "scope": "series",
+        "quotes": [
+          {
+            "venue": "Kalshi",
+            "access": "direct",
+            "sourceUrl": "https://kalshi.com/markets/kxvalorantgame/valorant-game-winner/kxvalorantgame-26aug120600tejdg",
+            "prices": [
+              {
+                "selection": "JD Gaming Yes",
+                "value": 57,
+                "unit": "USD_cents_per_1_USD_event_contract",
+                "raw": "JDG 57¢"
+              },
+              {
+                "selection": "Trace Esports Yes",
+                "value": 43,
+                "unit": "USD_cents_per_1_USD_event_contract",
+                "raw": "Trace 43¢"
+              }
+            ],
+            "availableSize": null,
+            "providerUpdatedAt": null
+          },
+          {
+            "venue": "EGamersWorld",
+            "access": "aggregator_unattributed",
+            "sourceUrl": "https://egamersworld.com/valorant/match/1oVcrl8jCm/jd-gaming-vs-trace-esports-HewQURlRm",
+            "prices": [
+              {
+                "selection": "JD Gaming",
+                "value": 1.66,
+                "unit": "decimal_odds_display",
+                "raw": "JDG 1.66"
+              },
+              {
+                "selection": "Trace Esports",
+                "value": 2.22,
+                "unit": "decimal_odds_display",
+                "raw": "Trace 2.22"
+              }
+            ],
+            "underlyingBook": null,
+            "executable": false,
+            "availableSize": null,
+            "providerUpdatedAt": null
+          }
+        ]
+      },
+      "corroborationUrls": [
+        "https://www.vlr.gg/724634/jdg-esports-vs-trace-esports-vct-2026-china-stage-2-lbf",
+        "https://bo3.gg/valorant/matches/jd-gaming-vs-trace-esports-12-08-2026"
+      ],
+      "blockers": [
+        "match-specific starters not confirmed at two sources",
+        "Bear model fair probability not computed"
+      ],
+      "verdict": "WAIT",
+      "verdictReason": "Match-specific starters at two sources and the model output are missing."
+    },
+    {
+      "eventId": "valorant-vct-emea-2026-gentle-mates-eintracht-frankfurt-2026-08-12",
+      "game": "VALORANT",
+      "league": "VCT EMEA Stage 2",
+      "stage": "Play-ins lower round 1",
+      "participants": [
+        "Gentle Mates",
+        "Eintracht Frankfurt"
+      ],
+      "start": {
+        "reported": "2026-08-12 11:00 EDT",
+        "utc": null
+      },
+      "format": "BO3",
+      "venue": null,
+      "market": {
+        "type": "winner",
+        "scope": "series",
+        "quotes": [
+          {
+            "venue": "Kalshi",
+            "access": "direct",
+            "sourceUrl": "https://kalshi.com/markets/kxvalorantgame/valorant-game-winner/kxvalorantgame-26aug121100gmsge",
+            "prices": [
+              {
+                "selection": "Gentle Mates Yes",
+                "value": 69,
+                "unit": "USD_cents_per_1_USD_event_contract",
+                "raw": "M8 69¢"
+              },
+              {
+                "selection": "Eintracht Frankfurt Yes",
+                "value": 31,
+                "unit": "USD_cents_per_1_USD_event_contract",
+                "raw": "SGE 31¢"
+              }
+            ],
+            "availableSize": null,
+            "providerUpdatedAt": null
+          },
+          {
+            "venue": "Robinhood",
+            "access": "direct",
+            "sourceUrl": "https://robinhood.com/us/en/prediction-markets/esports/events/gentle-mates-vs-eintracht-frankfurt-aug-12-2026/",
+            "prices": [
+              {
+                "selection": "Gentle Mates",
+                "value": 69,
+                "unit": "USD_cents_per_1_USD_event_contract",
+                "raw": "M8 69¢"
+              },
+              {
+                "selection": "Eintracht Frankfurt",
+                "value": 31,
+                "unit": "USD_cents_per_1_USD_event_contract",
+                "raw": "SGE 31¢"
+              }
+            ],
+            "orderBook": [
+              {
+                "selection": "Gentle Mates",
+                "bid": 68,
+                "ask": 69,
+                "unit": "USD_cents_per_1_USD_event_contract",
+                "raw": "M8 bid 68¢ ask 69¢"
+              }
+            ],
+            "availableSize": null,
+            "providerUpdatedAt": null
+          }
+        ]
+      },
+      "corroborationUrls": [
+        "https://www.vlr.gg/729674/gentle-mates-vs-eintracht-frankfurt-vct-2026-emea-stage-2-lr1",
+        "https://www.gosugamers.net/valorant/tournaments/63041-vct-2026-emea-stage-2/matches/658264-gentle-mates-vs-eintracht-frankfurt",
+        "https://escorenews.com/en/valorant/vct-2026-emea-stage-2/play-in/gentle-mates-vs-eintracht-frankfurt-637999",
+        "https://bo3.gg/valorant/matches/gentle-mates-vs-eintracht-frankfurt-12-08-2026"
+      ],
+      "evidenceConflicts": [
+        {
+          "claim": "Gentle Mates starting five",
+          "sourceUrl": "https://escorenews.com/en/valorant/vct-2026-emea-stage-2/play-in/gentle-mates-vs-eintracht-frankfurt-637999",
+          "raw": "starxo/H1ber/marteen/Minny/Proxh"
+        },
+        {
+          "claim": "Gentle Mates starting five",
+          "sourceUrl": "https://bo3.gg/valorant/matches/gentle-mates-vs-eintracht-frankfurt-12-08-2026",
+          "raw": "Minny/bipo/marteen/starxo/Proxh"
+        }
+      ],
+      "blockers": [
+        "starting-five sources conflict",
+        "official starting five not announced",
+        "Bear model fair probability not computed"
+      ],
+      "verdict": "WAIT",
+      "verdictReason": "Starting-lineup sources conflict and require an official announcement; model output is missing."
+    },
+    {
+      "eventId": "valorant-vct-emea-2026-team-heretics-navi-2026-08-12",
+      "game": "VALORANT",
+      "league": "VCT EMEA Stage 2",
+      "stage": "Play-ins lower round 1",
+      "participants": [
+        "Team Heretics",
+        "NAVI"
+      ],
+      "start": {
+        "reported": "2026-08-12 14:00 EDT",
+        "utc": null
+      },
+      "format": "BO3",
+      "venue": null,
+      "market": {
+        "type": "winner",
+        "scope": "series",
+        "quotes": [
+          {
+            "venue": "Kalshi",
+            "access": "direct",
+            "sourceUrl": "https://kalshi.com/markets/kxvalorantgame/valorant-game-winner/kxvalorantgame-26aug121400navith",
+            "prices": [
+              {
+                "selection": "Team Heretics Yes",
+                "value": 65,
+                "unit": "USD_cents_per_1_USD_event_contract",
+                "raw": "TH 65¢"
+              },
+              {
+                "selection": "NAVI Yes",
+                "value": 36,
+                "unit": "USD_cents_per_1_USD_event_contract",
+                "raw": "NAVI 36¢"
+              }
+            ],
+            "displayFields": [
+              {
+                "name": "page chance",
+                "selection": "Team Heretics",
+                "value": 64,
+                "unit": "percent",
+                "raw": "chance 64%"
+              }
+            ],
+            "availableSize": null,
+            "providerUpdatedAt": null
+          },
+          {
+            "venue": "VLR odds panel",
+            "access": "aggregator_unattributed",
+            "sourceUrl": "https://www.vlr.gg/729675/team-heretics-vs-natus-vincere-vct-2026-emea-stage-2-lr1",
+            "underlyingBook": null,
+            "priceSets": [
+              {
+                "teamHeretics": 1.49,
+                "navi": 2.52,
+                "unit": "decimal_odds_display",
+                "raw": "TH/NAVI 1.49/2.52"
+              },
+              {
+                "teamHeretics": 1.46,
+                "navi": 2.64,
+                "unit": "decimal_odds_display",
+                "raw": "TH/NAVI 1.46/2.64"
+              },
+              {
+                "teamHeretics": 1.45,
+                "navi": 2.6,
+                "unit": "decimal_odds_display",
+                "raw": "TH/NAVI 1.45/2.60"
+              }
+            ],
+            "executable": false,
+            "availableSize": null,
+            "providerUpdatedAt": null
+          }
+        ]
+      },
+      "corroborationUrls": [
+        "https://www.vlr.gg/729675/team-heretics-vs-natus-vincere-vct-2026-emea-stage-2-lr1",
+        "https://www.thespike.gg/match/team-heretics-natus-vincere/145807"
+      ],
+      "blockers": [
+        "official starters not confirmed",
+        "second exact executable quote not captured",
+        "Bear model fair probability not computed"
+      ],
+      "verdict": "WAIT",
+      "verdictReason": "Official starters, a second exact executable quote, and the model output are missing."
+    },
+    {
+      "eventId": "lol-lck-2026-dn-soopers-nongshim-redforce-2026-08-12",
+      "game": "LOL",
+      "league": "LCK Rounds 3–4",
+      "stage": "Rise Group",
+      "participants": [
+        "DN SOOPers",
+        "Nongshim RedForce"
+      ],
+      "start": {
+        "reported": "2026-08-12 08:00 UTC = 04:00 EDT",
+        "utc": "2026-08-12T08:00:00.000Z"
+      },
+      "format": "BO3",
+      "venue": null,
+      "market": {
+        "type": "winner",
+        "scope": "series",
+        "quotes": [],
+        "observations": [
+          {
+            "venue": "Fanatics Markets",
+            "sourceUrl": "https://fanaticsmarkets.com/sports/esports/lol/dn-soopers-vs-nongshim-redforce",
+            "raw": "Market exists, but search did not expose an exact tradable bid/ask.",
+            "bid": null,
+            "ask": null,
+            "availableSize": null,
+            "providerUpdatedAt": null
+          }
+        ]
+      },
+      "scheduleEvidenceStatus": "Official LoL Esports indexed slate and independent feeds list the event, but the current canonical/localized render is inconsistent.",
+      "corroborationUrls": [
+        "https://lolesports.com/en-US?leagues=lck%2Clcs%2Clec%2Cljl-japan%2Clpl%2Cmsi%2Cpcs%2Cworlds",
+        "https://www.sofascore.com/esports/match/dn-soopers-nongshim-red-force/ocZcsONri",
+        "https://www.gosugamers.net/lol/tournaments/62776-lol-champions-korea-lck-2026/matches/656773-nongshim-redforce-vs-dn-soopers",
+        "https://rft.gg/match/69488-soopers-vs-nongshim-redforce-2026-08-12"
+      ],
+      "blockers": [
+        "exact executable price not captured",
+        "second match-specific starter confirmation not captured",
+        "official lobby not confirmed",
+        "official schedule render is inconsistent",
+        "Bear model fair probability not computed"
+      ],
+      "verdict": "WAIT",
+      "verdictReason": "Price, second starter confirmation, official-lobby reconciliation, and model gates are unresolved."
+    },
+    {
+      "eventId": "lol-lpl-2026-edward-gaming-anyones-legend-2026-08-12",
+      "game": "LOL",
+      "league": "LPL Split 3",
+      "stage": "Week 4",
+      "participants": [
+        "EDward Gaming",
+        "Anyone's Legend"
+      ],
+      "participantAliases": {
+        "Anyone's Legend": "AG.AL"
+      },
+      "start": {
+        "reported": "2026-08-12 09:00 UTC = 05:00 EDT",
+        "utc": "2026-08-12T09:00:00.000Z"
+      },
+      "format": "BO3",
+      "venue": null,
+      "market": {
+        "type": "winner",
+        "scope": "series",
+        "quotes": [
+          {
+            "venue": "Kalshi",
+            "access": "direct",
+            "sourceUrl": "https://kalshi.com/markets/kxlolgame/league-of-legends-game/kxlolgame-26aug120500aledg",
+            "prices": [
+              {
+                "selection": "Anyone's Legend Yes",
+                "value": 90,
+                "unit": "USD_cents_per_1_USD_event_contract",
+                "raw": "AL 90¢"
+              },
+              {
+                "selection": "EDward Gaming Yes",
+                "value": 10,
+                "unit": "USD_cents_per_1_USD_event_contract",
+                "raw": "EDG 10¢"
+              }
+            ],
+            "availableSize": null,
+            "providerUpdatedAt": null
+          },
+          {
+            "venue": "EGamersWorld",
+            "access": "aggregator_unattributed",
+            "sourceUrl": "https://egamersworld.com/lol/match/9x7faexU2/edward-gaming-vs-agal-PJNRyo78t",
+            "prices": [
+              {
+                "selection": "Anyone's Legend",
+                "value": 1.051,
+                "unit": "decimal_odds_display",
+                "raw": "AG.AL 1.051"
+              },
+              {
+                "selection": "EDward Gaming",
+                "value": 7.4,
+                "unit": "decimal_odds_display",
+                "raw": "EDG 7.40"
+              }
+            ],
+            "underlyingBook": null,
+            "executable": false,
+            "availableSize": null,
+            "providerUpdatedAt": null
+          }
+        ]
+      },
+      "scheduleEvidenceStatus": "Official LoL Esports indexed slate and independent feeds list the event, but the current canonical/localized render is inconsistent.",
+      "corroborationUrls": [
+        "https://lolesports.com/en-US?leagues=lck%2Clcs%2Clec%2Cljl-japan%2Clpl%2Cmsi%2Cpcs%2Cworlds",
+        "https://www.sofascore.com/esports/match/anyones-legend-edward-gaming/drWcsyJld",
+        "https://rft.gg/match/69303-edward-gaming-vs-anyone-s-legend-2026-08-12"
+      ],
+      "singleSourceRosterCapture": {
+        "sourceUrl": "https://rft.gg/match/69303-edward-gaming-vs-anyone-s-legend-2026-08-12",
+        "raw": "EDG Zdz/Jiejie/BuLLDoG/Leave/Parukia; AL Breathe/Tarzan/Shanks/Hope/Kael"
+      },
+      "blockers": [
+        "official starting five not confirmed",
+        "official lobby not confirmed",
+        "official schedule render is inconsistent",
+        "Bear model fair probability not computed",
+        "a 90¢ favorite is not a BET by consensus alone"
+      ],
+      "verdict": "WAIT",
+      "verdictReason": "The official five, official-lobby reconciliation, and model output are missing; consensus alone does not establish edge."
+    },
+    {
+      "eventId": "lol-lck-2026-kt-rolster-dplus-kia-2026-08-12",
+      "game": "LOL",
+      "league": "LCK Rounds 3–4",
+      "stage": null,
+      "participants": [
+        "KT Rolster",
+        "Dplus KIA"
+      ],
+      "start": {
+        "reported": "2026-08-12 10:00 UTC = 06:00 EDT",
+        "utc": "2026-08-12T10:00:00.000Z"
+      },
+      "format": "BO3",
+      "venue": null,
+      "market": {
+        "type": "winner",
+        "scope": "series",
+        "quotes": [
+          {
+            "venue": "Kalshi",
+            "access": "direct",
+            "sourceUrl": "https://kalshi.com/markets/kxlolgame/league-of-legends-game/kxlolgame-26aug120600dkkt",
+            "prices": [
+              {
+                "selection": "Dplus KIA Yes",
+                "value": 64,
+                "unit": "USD_cents_per_1_USD_event_contract",
+                "raw": "DK Yes 64¢"
+              },
+              {
+                "selection": "KT Rolster Yes",
+                "value": 37,
+                "unit": "USD_cents_per_1_USD_event_contract",
+                "raw": "KT 37¢"
+              }
+            ],
+            "displayFields": [
+              {
+                "name": "volume",
+                "value": 110231,
+                "unit": "USD_displayed",
+                "raw": "displayed vol $110,231 at later crawl"
+              }
+            ],
+            "availableSize": null,
+            "providerUpdatedAt": null
+          }
+        ],
+        "observations": [
+          {
+            "venue": "Fanatics Markets",
+            "sourceUrl": "https://fanaticsmarkets.com/sports/esports/lol/kt-rolster-vs-dplus-kia",
+            "raw": "Fanatics search display had DK 62%/KT 38% but exact tradable bid/ask was not exposed.",
+            "displayFields": [
+              {
+                "selection": "Dplus KIA",
+                "value": 62,
+                "unit": "percent_display",
+                "raw": "DK 62%"
+              },
+              {
+                "selection": "KT Rolster",
+                "value": 38,
+                "unit": "percent_display",
+                "raw": "KT 38%"
+              }
+            ],
+            "bid": null,
+            "ask": null,
+            "availableSize": null,
+            "providerUpdatedAt": null
+          }
+        ]
+      },
+      "scheduleEvidenceStatus": "Official LoL Esports indexed slate and independent feeds list the event, but the current canonical/localized render is inconsistent.",
+      "corroborationUrls": [
+        "https://lolesports.com/en-US?leagues=lck%2Clcs%2Clec%2Cljl-japan%2Clpl%2Cmsi%2Cpcs%2Cworlds",
+        "https://www.sheepesports.com/en/all/matches/LCK%2F2026%20Season%2FRounds%203-4_Week%2012_2"
+      ],
+      "evidenceConflicts": [
+        {
+          "claim": "KT Rolster roster presentation",
+          "raw": "one feed showed KT PerfecT/Cuzz/Bdd/Aiming/Pollu; another earlier Sheep extraction showed FenRir/Effort"
+        }
+      ],
+      "blockers": [
+        "official starters not confirmed",
+        "roster feeds conflict",
+        "official lobby not confirmed",
+        "official schedule render is inconsistent",
+        "Bear model fair probability not computed"
+      ],
+      "verdict": "WAIT",
+      "verdictReason": "Roster presentations differ; official starters, official-lobby reconciliation, and model output are required."
+    },
+    {
+      "eventId": "lol-lpl-2026-bilibili-gaming-jd-gaming-2026-08-12",
+      "game": "LOL",
+      "league": "LPL Split 3",
+      "stage": "Week 4",
+      "participants": [
+        "Bilibili Gaming",
+        "JD Gaming"
+      ],
+      "start": {
+        "reported": "2026-08-12 11:00 UTC = 07:00 EDT",
+        "utc": "2026-08-12T11:00:00.000Z"
+      },
+      "format": "BO3",
+      "venue": null,
+      "market": {
+        "type": "winner",
+        "scope": "series",
+        "quotes": [
+          {
+            "venue": "Kalshi",
+            "access": "direct",
+            "sourceUrl": "https://kalshi.com/markets/kxlolgame/league-of-legends-game/kxlolgame-26aug120700jdgblg",
+            "prices": [
+              {
+                "selection": "Bilibili Gaming Yes",
+                "value": 78,
+                "unit": "USD_cents_per_1_USD_event_contract",
+                "raw": "BLG 78¢"
+              },
+              {
+                "selection": "JD Gaming Yes",
+                "value": 23,
+                "unit": "USD_cents_per_1_USD_event_contract",
+                "raw": "JDG 23¢"
+              }
+            ],
+            "availableSize": null,
+            "providerUpdatedAt": null
+          },
+          {
+            "venue": "Polymarket",
+            "access": "direct",
+            "sourceUrl": "https://polymarket.com/esports/league-of-legends/lpl/lol-blg-jdg-2026-08-12",
+            "prices": [
+              {
+                "selection": "Bilibili Gaming",
+                "value": 77,
+                "unit": "USD_cents_per_1_USD_event_contract",
+                "raw": "BLG 77¢"
+              },
+              {
+                "selection": "JD Gaming",
+                "value": 24,
+                "unit": "USD_cents_per_1_USD_event_contract",
+                "raw": "JDG 24¢"
+              }
+            ],
+            "availableSize": null,
+            "providerUpdatedAt": null
+          }
+        ]
+      },
+      "scheduleEvidenceStatus": "Official LoL Esports indexed slate and independent feeds list the event, but the current canonical/localized render is inconsistent.",
+      "corroborationUrls": [
+        "https://lolesports.com/en-US?leagues=lck%2Clcs%2Clec%2Cljl-japan%2Clpl%2Cmsi%2Cpcs%2Cworlds",
+        "https://www.sheepesports.com/en/lol/matches/LPL%2F2026%20Season%2FSplit%203_Week%204_2",
+        "https://www.sofascore.com/esports/match/bilibili-gaming-jd-gaming/JIVcslmWc"
+      ],
+      "blockers": [
+        "match-specific starters not confirmed",
+        "official lobby not confirmed",
+        "official schedule render is inconsistent",
+        "Bear model fair probability not computed"
+      ],
+      "verdict": "WAIT",
+      "verdictReason": "Match-specific starters, official-lobby reconciliation, and model output are missing."
+    },
+    {
+      "eventId": "dota2-epl-masters-i-level-up-rune-eaters-2026-08-12",
+      "game": "DOTA2",
+      "league": "EPL Masters I",
+      "stage": "lower/consolation final",
+      "participants": [
+        "Level UP",
+        "Rune Eaters"
+      ],
+      "start": {
+        "reported": "2026-08-12 09:00 UTC = 05:00 EDT",
+        "utc": "2026-08-12T09:00:00.000Z"
+      },
+      "format": "BO3",
+      "venue": null,
+      "market": {
+        "type": "winner",
+        "scope": "series",
+        "quotes": [
+          {
+            "venue": "Polymarket",
+            "access": "direct",
+            "sourceUrl": "https://polymarket.com/event/dota2-lvlup1-re-2026-08-12",
+            "prices": [
+              {
+                "selection": "Rune Eaters",
+                "value": 55,
+                "unit": "USD_cents_per_1_USD_event_contract",
+                "raw": "Rune Eaters 55¢"
+              },
+              {
+                "selection": "Level UP",
+                "value": 45,
+                "unit": "USD_cents_per_1_USD_event_contract",
+                "raw": "Level UP 45¢"
+              }
+            ],
+            "displayFields": [
+              {
+                "name": "volume",
+                "value": null,
+                "unit": "USD_abbreviated_display",
+                "raw": "~$9.2k displayed volume"
+              }
+            ],
+            "availableSize": null,
+            "providerUpdatedAt": null
+          },
+          {
+            "venue": "Escore",
+            "access": "aggregator_unattributed",
+            "sourceUrl": "https://escorenews.com/en/dota-2/epl-masters-i/playoff/lvlup-vs-rune-eaters-656508",
+            "prices": [
+              {
+                "selection": "Level UP",
+                "value": 2.15,
+                "unit": "decimal_odds_display",
+                "raw": "Level UP 2.15"
+              },
+              {
+                "selection": "Rune Eaters",
+                "value": 1.68,
+                "unit": "decimal_odds_display",
+                "raw": "Rune Eaters 1.68"
+              }
+            ],
+            "underlyingBook": null,
+            "executable": false,
+            "availableSize": null,
+            "providerUpdatedAt": null
+          }
+        ]
+      },
+      "corroborationUrls": [
+        "https://escorenews.com/en/dota-2/epl-masters-i/playoff/lvlup-vs-rune-eaters-656508",
+        "https://navi.gg/en/tournaments/epl-masters-i/playoff"
+      ],
+      "blockers": [
+        "second match-specific lineup source not captured",
+        "Bear model fair probability not computed"
+      ],
+      "verdict": "WAIT",
+      "verdictReason": "A second match-specific lineup source and the model output are missing."
+    },
+    {
+      "eventId": "dota2-epl-masters-i-navi-grand-final-2026-08-12",
+      "game": "DOTA2",
+      "league": "EPL Masters I",
+      "stage": "grand final",
+      "participants": [
+        "NAVI",
+        null
+      ],
+      "start": {
+        "reported": "2026-08-12 09:00 EDT",
+        "utc": null
+      },
+      "format": null,
+      "venue": null,
+      "market": {
+        "type": "winner",
+        "scope": "series",
+        "quotes": []
+      },
+      "corroborationUrls": [
+        "https://navi.gg/en/tournaments/epl-masters-i/playoff"
+      ],
+      "blockers": [
+        "opponent unknown",
+        "exact executable price not captured",
+        "match-specific lineups not confirmed",
+        "Bear model fair probability not computed"
+      ],
+      "verdict": "PASS",
+      "verdictReason": "Pass until NAVI's grand-final opponent is known."
+    },
+    {
+      "eventId": "dota2-ti-2026-falcons-lgd-2026-08-13",
+      "game": "DOTA2",
+      "league": "The International 2026",
+      "stage": "Group stage round 1",
+      "participants": [
+        "Falcons",
+        "LGD"
+      ],
+      "start": {
+        "reported": "2026-08-13 02:00 UTC = 2026-08-12 22:00 EDT",
+        "utc": "2026-08-13T02:00:00.000Z"
+      },
+      "format": "BO3",
+      "venue": null,
+      "market": {
+        "type": "winner",
+        "scope": "series",
+        "quotes": [
+          {
+            "venue": "Kalshi",
+            "access": "direct",
+            "sourceUrl": "https://kalshi.com/markets/kxdota2game/dota-2-game/kxdota2game-26aug122200lgdflc",
+            "prices": [
+              {
+                "selection": "Falcons Yes",
+                "value": 84,
+                "unit": "USD_cents_per_1_USD_event_contract",
+                "raw": "Falcons 84¢"
+              },
+              {
+                "selection": "LGD Yes",
+                "value": 18,
+                "unit": "USD_cents_per_1_USD_event_contract",
+                "raw": "LGD 18¢"
+              }
+            ],
+            "availableSize": null,
+            "providerUpdatedAt": null
+          },
+          {
+            "venue": "Spinbetter via Tips.GG",
+            "access": "aggregator_attributed",
+            "sourceUrl": "https://tips.gg/matches/dota2/13-08-2026/team-falcons-vs-lgd-gaming/03-00/odds/",
+            "prices": [
+              {
+                "selection": "Falcons",
+                "value": 1.13,
+                "unit": "decimal_odds_display",
+                "raw": "Falcons 1.13"
+              },
+              {
+                "selection": "LGD",
+                "value": 5.9,
+                "unit": "decimal_odds_display",
+                "raw": "LGD 5.90"
+              }
+            ],
+            "availableSize": null,
+            "providerUpdatedAt": null
+          },
+          {
+            "venue": "Bookmaker.xyz",
+            "access": "direct",
+            "sourceUrl": "https://bookmaker.xyz/esports/dota-2/international-tournaments/the-international/team-falcons-lgd-gaming-1006000000000030533134",
+            "prices": [
+              {
+                "selection": "Falcons",
+                "value": 1.15,
+                "unit": "decimal_odds_display",
+                "raw": "Falcons 1.15"
+              },
+              {
+                "selection": "LGD",
+                "value": 5.04,
+                "unit": "decimal_odds_display",
+                "raw": "LGD 5.04"
+              }
+            ],
+            "additionalRawDisplays": [
+              {
+                "market": "maps 1/2",
+                "raw": "maps 1/2 1.26/3.68",
+                "unit": "decimal_odds_display"
+              }
+            ],
+            "availableSize": null,
+            "providerUpdatedAt": null
+          }
+        ]
+      },
+      "corroborationUrls": [
+        "https://www.gosugamers.net/dota2/tournaments/62969-the-international-2026/matches/658618-team-falcons-vs-lgd-gaming",
+        "https://escorenews.com/en/dota-2/international-2026/group-stage/falcons-vs-lgd-gaming-659062",
+        "https://www.strafe.com/news/read/the-international-2026-format-schedule-fixtures-and-more",
+        "https://liquipedia.net/dota2/The_International/2026/Group_Stage"
+      ],
+      "blockers": [
+        "official starting five not confirmed",
+        "LGD late roster-change report unresolved",
+        "draft state not available pre-match",
+        "patch state not reconciled",
+        "Bear model fair probability not computed"
+      ],
+      "verdict": "WAIT",
+      "verdictReason": "The official five, reported LGD roster change, draft/patch state, and model output are unresolved."
+    },
+    {
+      "eventId": "dota2-ti-2026-og-betboom-team-2026-08-13",
+      "game": "DOTA2",
+      "league": "The International 2026",
+      "stage": "Group stage round 1",
+      "participants": [
+        "OG",
+        "BetBoom Team"
+      ],
+      "start": {
+        "reported": "2026-08-12 22:00 EDT",
+        "utc": null
+      },
+      "format": "BO3",
+      "venue": null,
+      "market": {
+        "type": "winner",
+        "scope": "series",
+        "quotes": [
+          {
+            "venue": "Kalshi",
+            "access": "direct",
+            "sourceUrl": "https://kalshi.com/markets/kxdota2game/dota-2-game/kxdota2game-26aug122200ogbet",
+            "prices": [
+              {
+                "selection": "BetBoom Team Yes",
+                "value": 77,
+                "unit": "USD_cents_per_1_USD_event_contract",
+                "raw": "BetBoom 77¢"
+              },
+              {
+                "selection": "OG Yes",
+                "value": 26,
+                "unit": "USD_cents_per_1_USD_event_contract",
+                "raw": "OG 26¢"
+              }
+            ],
+            "displayFields": [
+              {
+                "name": "page chance",
+                "selection": "BetBoom Team",
+                "value": 74,
+                "unit": "percent",
+                "raw": "chance 74%"
+              }
+            ],
+            "availableSize": null,
+            "providerUpdatedAt": null
+          },
+          {
+            "venue": "Robinhood",
+            "access": "direct",
+            "sourceUrl": "https://robinhood.com/us/en/prediction-markets/esports/events/og-vs-betboom-team-aug-12-2026/",
+            "prices": [
+              {
+                "selection": "BetBoom Team",
+                "value": 78,
+                "unit": "USD_cents_per_1_USD_event_contract",
+                "raw": "BetBoom 78¢"
+              },
+              {
+                "selection": "OG",
+                "value": 26,
+                "unit": "USD_cents_per_1_USD_event_contract",
+                "raw": "OG 26¢"
+              }
+            ],
+            "availableSize": null,
+            "providerUpdatedAt": null
+          }
+        ]
+      },
+      "corroborationUrls": [
+        "https://escorenews.com/en/dota-2/international-2026/group-stage/betboom-vs-og-659064",
+        "https://www.strafe.com/news/read/the-international-2026-format-schedule-fixtures-and-more",
+        "https://liquipedia.net/dota2/The_International/2026/Group_Stage"
+      ],
+      "blockers": [
+        "official starting five not confirmed",
+        "draft state not available pre-match",
+        "Bear model fair probability not computed"
+      ],
+      "verdict": "WAIT",
+      "verdictReason": "The official five, draft state, and model output are missing."
+    },
+    {
+      "eventId": "dota2-ti-2026-iron-wing-nigma-galaxy-2026-08-13",
+      "game": "DOTA2",
+      "league": "The International 2026",
+      "stage": "Group stage round 1",
+      "participants": [
+        "Iron Wing",
+        "Nigma Galaxy"
+      ],
+      "start": {
+        "reported": "2026-08-12 22:00 EDT",
+        "utc": null
+      },
+      "format": "BO3",
+      "venue": null,
+      "market": {
+        "type": "winner",
+        "scope": "series",
+        "quotes": [
+          {
+            "venue": "Robinhood",
+            "access": "direct",
+            "sourceUrl": "https://robinhood.com/us/en/prediction-markets/esports/events/nigma-galaxy-vs-iron-wing-aug-12-2026/",
+            "prices": [
+              {
+                "selection": "Iron Wing",
+                "value": 73,
+                "unit": "USD_cents_per_1_USD_event_contract",
+                "raw": "Iron Wing 73¢"
+              },
+              {
+                "selection": "Nigma Galaxy",
+                "value": 30,
+                "unit": "USD_cents_per_1_USD_event_contract",
+                "raw": "Nigma 30¢"
+              }
+            ],
+            "availableSize": null,
+            "providerUpdatedAt": null
+          }
+        ]
+      },
+      "corroborationUrls": [
+        "https://www.strafe.com/news/read/the-international-2026-format-schedule-fixtures-and-more",
+        "https://liquipedia.net/dota2/The_International/2026/Group_Stage"
+      ],
+      "blockers": [
+        "second executable quote not captured",
+        "official starting five not confirmed",
+        "draft state not available pre-match",
+        "Bear model fair probability not computed"
+      ],
+      "verdict": "WAIT",
+      "verdictReason": "A second executable quote, the official five, draft state, and model output are missing."
+    },
+    {
+      "eventId": "dota2-ti-2026-team-vision-team-resilience-2026-08-13",
+      "game": "DOTA2",
+      "league": "The International 2026",
+      "stage": "Group stage round 1",
+      "participants": [
+        "TEAM VISION",
+        "Team Resilience"
+      ],
+      "start": {
+        "reported": "2026-08-12 22:00 EDT",
+        "utc": null
+      },
+      "format": "BO3",
+      "venue": null,
+      "market": {
+        "type": "winner",
+        "scope": "series",
+        "quotes": [
+          {
+            "venue": "Robinhood",
+            "access": "direct",
+            "sourceUrl": "https://robinhood.com/us/en/prediction-markets/esports/events/team-resilience-vs-team-vision-aug-12-2026/",
+            "prices": [
+              {
+                "selection": "TEAM VISION",
+                "value": 93,
+                "unit": "USD_cents_per_1_USD_event_contract",
+                "raw": "Vision 93¢"
+              },
+              {
+                "selection": "Team Resilience",
+                "value": 9,
+                "unit": "USD_cents_per_1_USD_event_contract",
+                "raw": "Resilience 9¢"
+              }
+            ],
+            "orderBook": [
+              {
+                "selection": "Team Resilience",
+                "bid": 6,
+                "ask": 8,
+                "unit": "USD_cents_per_1_USD_event_contract",
+                "raw": "Resilience bid 6¢/ask 8¢ at one capture"
+              }
+            ],
+            "availableSize": null,
+            "providerUpdatedAt": null
+          }
+        ]
+      },
+      "corroborationUrls": [
+        "https://www.strafe.com/news/read/the-international-2026-format-schedule-fixtures-and-more",
+        "https://liquipedia.net/dota2/The_International/2026/Group_Stage"
+      ],
+      "blockers": [
+        "second executable quote not captured",
+        "official starting five not confirmed",
+        "draft state not available pre-match",
+        "Bear model fair probability not computed",
+        "extreme price is not a BET signal"
+      ],
+      "verdict": "WAIT",
+      "verdictReason": "A second quote, the official five, draft state, and model output are missing; the extreme displayed price is not itself an edge signal."
+    }
+  ],
+  "promotionGate": [
+    "Official five or stand-ins confirmed at two independent sources within 30–60 minutes.",
+    "Exact executable bid/ask and available size captured.",
+    "Bear fair probability computed only from verified timestamped inputs, with uncertainty.",
+    "Edge remains above fees, slippage, and a predeclared threshold.",
+    "Map veto, draft, and rolling clock reconciled."
+  ],
+  "summary": {
+    "rowCount": 18,
+    "verdictCounts": {
+      "PASS": 1,
+      "WAIT": 17,
+      "LEAN": 0,
+      "BET": 0
+    },
+    "gameCounts": {
+      "CS2": 4,
+      "VALORANT": 4,
+      "LOL": 4,
+      "DOTA2": 6
+    },
+    "rowsWithNumericQuotes": 16,
+    "moneyAtRisk": 0,
+    "moneyAtRiskUnit": "USD",
+    "operationalResult": "NO_BET"
+  }
+}

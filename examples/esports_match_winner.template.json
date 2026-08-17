@@ -1,0 +1,224 @@
+{
+  "_templateNotice": "NON_EXECUTABLE_TEMPLATE: replace every REQUIRED_* and null operator field with retained, verified evidence before evaluation. Never invent a value to make a gate pass.",
+  "_supportedMarketFamilies": [
+    "cs2_match_winner",
+    "dota2_match_winner",
+    "lol_match_winner",
+    "valorant_match_winner"
+  ],
+  "_claimChecklistInstruction": "For the selected scope, supply evidence for every common claim, every selected game's series claim, and every claim listed for the selected map or live_map scope.",
+  "_claimChecklist": {
+    "common": [
+      "event.identity",
+      "event.start_time",
+      "event.format",
+      "roster.team_a",
+      "roster.team_b"
+    ],
+    "CS2": {
+      "series": [
+        "context.map_pool"
+      ],
+      "map": [
+        "series.map_veto",
+        "series.map_order"
+      ],
+      "live_map": [
+        "series.map_veto",
+        "series.map_order"
+      ]
+    },
+    "DOTA2": {
+      "series": [
+        "context.patch"
+      ],
+      "map": [
+        "side.team_a",
+        "side.team_b"
+      ],
+      "live_map": [
+        "side.team_a",
+        "side.team_b",
+        "draft.team_a",
+        "draft.team_b"
+      ]
+    },
+    "LOL": {
+      "series": [
+        "context.patch",
+        "roster.starting_lineup.team_a",
+        "roster.starting_lineup.team_b"
+      ],
+      "map": [
+        "side.team_a",
+        "side.team_b"
+      ],
+      "live_map": [
+        "side.team_a",
+        "side.team_b",
+        "draft.team_a",
+        "draft.team_b"
+      ]
+    },
+    "VALORANT": {
+      "series": [
+        "context.patch",
+        "context.map_pool"
+      ],
+      "map": [
+        "series.map_veto",
+        "series.map_order"
+      ],
+      "live_map": [
+        "series.map_veto",
+        "series.map_order",
+        "agents.team_a",
+        "agents.team_b"
+      ]
+    }
+  },
+  "_evidenceInstructions": "Create at least the registered minIndependentSources entries for every applicable claim key. Count distinct approved tier-1/tier-2 independence families, include at least one tier-1 source, retain the underlying artifact, and make all values exactly agree.",
+  "_scalarEvidenceEntryShape": {
+    "claimKey": "REQUIRED_APPLICABLE_CLAIM_KEY",
+    "provider": "REQUIRED_APPROVED_REGISTRY_PROVIDER_ID",
+    "sourceUrl": "REQUIRED_RETAINED_SOURCE_LOCATOR",
+    "capturedAt": "REQUIRED_ISO_UTC",
+    "sourceTime": "REQUIRED_ISO_UTC",
+    "verificationStatus": "REQUIRED_verified_ONLY_AFTER_REVIEW",
+    "parserVersion": null,
+    "digest": null,
+    "rawPayload": {
+      "provider": "REQUIRED_APPROVED_REGISTRY_PROVIDER_ID",
+      "claimKey": "REQUIRED_APPLICABLE_CLAIM_KEY",
+      "sourceUrl": "REQUIRED_RETAINED_SOURCE_LOCATOR",
+      "parserVersion": null,
+      "capturedAt": "REQUIRED_ISO_UTC",
+      "sourceTime": "REQUIRED_ISO_UTC",
+      "verificationStatus": "REQUIRED_verified_ONLY_AFTER_REVIEW",
+      "value": "REQUIRED_EXACT_VERIFIED_VALUE"
+    },
+    "value": "REQUIRED_EXACT_VERIFIED_VALUE"
+  },
+  "_eventIdentityEvidenceValueShape": {
+    "eventId": "REQUIRED_CANONICAL_EVENT_ID",
+    "teamA": "REQUIRED_CANONICAL_TEAM_A",
+    "teamB": "REQUIRED_CANONICAL_TEAM_B"
+  },
+  "clientEventId": null,
+  "observedAt": "REQUIRED_ISO_UTC",
+  "game": "REQUIRED_ONE_OF_CS2_DOTA2_LOL_VALORANT",
+  "event": {
+    "eventId": "REQUIRED_CANONICAL_EVENT_ID",
+    "league": "REQUIRED_VERIFIED_LEAGUE",
+    "startTime": "REQUIRED_ISO_UTC",
+    "teamA": "REQUIRED_CANONICAL_TEAM_A",
+    "teamB": "REQUIRED_CANONICAL_TEAM_B",
+    "format": "REQUIRED_VERIFIED_FORMAT"
+  },
+  "market": {
+    "marketFamily": "REQUIRED_REGISTERED_MARKET_FAMILY",
+    "marketType": "match_winner",
+    "scope": "series",
+    "selection": "REQUIRED_EXACT_SELECTION",
+    "side": "REQUIRED_team_a_OR_team_b",
+    "line": null,
+    "targetOffer": {
+      "bookmaker": "REQUIRED_TARGET_BOOKMAKER",
+      "independenceFamily": "REQUIRED_TARGET_MARKET_INDEPENDENCE_FAMILY",
+      "jurisdiction": "REQUIRED_TARGET_JURISDICTION",
+      "marketId": "REQUIRED_CANONICAL_TARGET_MARKET_ID",
+      "selectionAmericanOdds": null,
+      "oppositeAmericanOdds": null,
+      "capturedAt": "REQUIRED_ISO_UTC",
+      "sourceUrl": "REQUIRED_RETAINED_EXACT_QUOTE_LOCATOR",
+      "rawSnapshotDigest": null,
+      "rawSnapshot": "REQUIRED_EXACT_CANONICAL_SNAPSHOT_OBJECT_MATCHING_ALL_QUOTE_FIELDS",
+      "verificationStatus": "REQUIRED_verified_ONLY_AFTER_REVIEW",
+      "priceType": "american_two_way",
+      "priceStatus": "REQUIRED_open_ONLY_IF_CONFIRMED",
+      "executable": null,
+      "maxExecutableStake": null,
+      "executionCostRate": null,
+      "parserVersion": null
+    },
+    "consensusOffers": [
+      {
+        "bookmaker": "REQUIRED_REFERENCE_BOOKMAKER_A",
+        "independenceFamily": "REQUIRED_REFERENCE_INDEPENDENCE_FAMILY_A",
+        "jurisdiction": "REQUIRED_REFERENCE_JURISDICTION_A",
+        "marketId": "REQUIRED_CANONICAL_REFERENCE_MARKET_ID_A",
+        "selectionAmericanOdds": null,
+        "oppositeAmericanOdds": null,
+        "capturedAt": "REQUIRED_ISO_UTC",
+        "sourceUrl": "REQUIRED_RETAINED_EXACT_QUOTE_LOCATOR_A",
+        "rawSnapshotDigest": null,
+        "rawSnapshot": "REQUIRED_EXACT_CANONICAL_SNAPSHOT_OBJECT_MATCHING_ALL_QUOTE_FIELDS",
+        "verificationStatus": "REQUIRED_verified_ONLY_AFTER_REVIEW",
+        "priceType": "american_two_way",
+        "parserVersion": null
+      },
+      {
+        "bookmaker": "REQUIRED_REFERENCE_BOOKMAKER_B",
+        "independenceFamily": "REQUIRED_REFERENCE_INDEPENDENCE_FAMILY_B",
+        "jurisdiction": "REQUIRED_REFERENCE_JURISDICTION_B",
+        "marketId": "REQUIRED_CANONICAL_REFERENCE_MARKET_ID_B",
+        "selectionAmericanOdds": null,
+        "oppositeAmericanOdds": null,
+        "capturedAt": "REQUIRED_ISO_UTC",
+        "sourceUrl": "REQUIRED_RETAINED_EXACT_QUOTE_LOCATOR_B",
+        "rawSnapshotDigest": null,
+        "rawSnapshot": "REQUIRED_EXACT_CANONICAL_SNAPSHOT_OBJECT_MATCHING_ALL_QUOTE_FIELDS",
+        "verificationStatus": "REQUIRED_verified_ONLY_AFTER_REVIEW",
+        "priceType": "american_two_way",
+        "parserVersion": null
+      }
+    ]
+  },
+  "model": {
+    "modelId": "esports_bear_stack_v1",
+    "modelVersion": "1.0.0",
+    "independentModelId": "REQUIRED_DECLARED_INDEPENDENT_MODEL_ID",
+    "independentModelVersion": "REQUIRED_DECLARED_INDEPENDENT_MODEL_VERSION",
+    "independentImplementationDigest": null,
+    "featureSnapshotDigest": null,
+    "eventId": "REQUIRED_CANONICAL_EVENT_ID",
+    "marketFamily": "REQUIRED_REGISTERED_MARKET_FAMILY",
+    "selection": "REQUIRED_EXACT_SELECTION",
+    "side": "REQUIRED_team_a_OR_team_b",
+    "generatedAt": "REQUIRED_ISO_UTC_NOT_AFTER_TARGET_PRICE_CAPTURE",
+    "predictionDigest": null,
+    "predictionArtifactLocator": "REQUIRED_RETAINED_MODEL_PREDICTION_LOCATOR",
+    "verificationStatus": "REQUIRED_verified_ONLY_AFTER_REVIEW",
+    "pointProbability": null,
+    "lowerProbability": null,
+    "upperProbability": null
+  },
+  "evidence": [],
+  "policy": {
+    "policyVersion": "REQUIRED_PRE_REGISTERED_POLICY_VERSION",
+    "registeredAt": "REQUIRED_ISO_UTC_BEFORE_PREDICTION_AND_PRICE",
+    "policyDigest": null,
+    "bankroll": null,
+    "minIndependentSources": null,
+    "minConsensusBooks": null,
+    "maxEvidenceAgeMinutes": null,
+    "maxModelAgeMinutes": null,
+    "maxPriceAgeMinutes": null,
+    "eventCutoffMinutes": null,
+    "maxConsensusRange": null,
+    "marketWeight": null,
+    "minPriceEdge": null,
+    "minEvRoi": null,
+    "minKellyFraction": null,
+    "kellyMultiplier": null,
+    "maxBankrollFraction": null,
+    "maxStake": null,
+    "minStake": null
+  },
+  "risk": {
+    "tiltLocked": null,
+    "exposureConflict": null,
+    "correlatedPosition": null,
+    "ledgerIntegrityValid": null
+  }
+}
