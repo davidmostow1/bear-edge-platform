@@ -5,7 +5,8 @@
   "main": "src/index.js",
   "type": "commonjs",
   "exports": {
-    ".": "./src/index.js"
+    ".": "./src/index.js",
+    "./esports": "./src/esports/index.js"
   },
   "files": [
     ".env.example",
@@ -18,6 +19,8 @@
     "docs/ELITE_AUDIT_OPERATIONS.md",
     "docs/INTEGRATION_INVENTORY.md",
     "docs/NO_COST_DATA_WORKFLOW.md",
+    "docs/ESPORTS_ZERO_BS_OPERATIONS.md",
+    "docs/ESPORTS_OPERATOR_PROMPT.md",
     "docs/PROBABILITY_UNCERTAINTY_VALIDATION.md",
     "docs/PRODUCTION_READINESS.md",
     "docs/PROFESSIONAL_BETTING_FACTORY.md",
@@ -25,12 +28,15 @@
     "governance/**/*.json",
     "governance/source/**/*.txt",
     "src/**/*.js",
+    "src/esports/source-registry.json",
     "src/native/**/*",
     "src/dashboard/**/*",
     "models/**/*.json",
     "script/**/*.js",
     "supabase/migrations/**/*.sql",
     "examples/**/*.json",
+    "data/esports/observations/**/*.json",
+    "data/esports/verification/**/*.json",
     "data/logs/.gitkeep",
     "tsconfig.json"
   ],
@@ -38,6 +44,7 @@
     "bear-edge-evaluate": "./src/cli/evaluate.js",
     "bear-edge-live-evaluate": "./src/cli/evaluate-live.js",
     "bear-edge-live-watch": "./src/cli/watch-live.js",
+    "bear-edge-esports-evaluate": "./src/cli/evaluate-esports.js",
     "bear-edge-launch": "./src/cli/launch.js",
     "bear-edge-server": "./src/cli/serve.js",
     "bear-edge-compare": "./src/cli/compare.js",
@@ -50,6 +57,7 @@
     "verify": "npm run typecheck && npm test && npm run audit:boundaries && npm run audit:canonical-status",
     "evaluate": "node ./src/cli/evaluate.js",
     "evaluate:live": "node ./src/cli/evaluate-live.js",
+    "evaluate:esports": "node ./src/cli/evaluate-esports.js",
     "launch": "node ./src/cli/launch.js",
     "launch:lan": "node ./src/cli/launch.js --lan",
     "watch:live": "node ./src/cli/watch-live.js",

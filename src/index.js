@@ -81,6 +81,16 @@ const {
   getTwoWayNoVigProbabilities,
   normalizeTwoWayNoVig
 } = require("./odds-math.js");
+const {
+  deriveActionableProbability: deriveEsportsActionableProbability,
+  deriveConsensusProbability: deriveEsportsConsensusProbability,
+  evaluateEsportsCandidate,
+  evaluateEsportsCandidateAndLog,
+  getRequiredClaimKeys: getRequiredEsportsClaimKeys,
+  loadEsportsSourceRegistry,
+  normalizeGame: normalizeEsportsGame,
+  normalizeTwoWayOffer: normalizeEsportsTwoWayOffer
+} = require("./esports/index.js");
 
 /**
  * @typedef {object} ExpectedValueInput
@@ -749,16 +759,24 @@ module.exports = {
   createSettlementRecord,
   evaluateBetDecision,
   EvidenceIntegrityError,
+  evaluateEsportsCandidate,
+  evaluateEsportsCandidateAndLog,
   generateResearchCandidates,
   fetchGamesForWindow,
   fetchMlbGamesForDate,
   fetchNhlGamesForDate,
+  deriveEsportsActionableProbability,
+  deriveEsportsConsensusProbability,
   evaluateLiveTicket,
   evaluateLiveTicketAndLog,
   getDecisionLogDashboard,
   getEvidenceQueue,
   LiveTicketValidationError,
   PREDICTION_OUTCOME_INPUT_SCHEMA,
+  getRequiredEsportsClaimKeys,
+  loadEsportsSourceRegistry,
+  normalizeEsportsGame,
+  normalizeEsportsTwoWayOffer,
   RESEARCH_PACKET_SCHEMA,
   readDecisionLogEntries,
   projectCalibrationLedger,

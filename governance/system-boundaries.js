@@ -482,7 +482,10 @@ function auditRepositoryBoundaries(options = {}) {
       );
       if (
         match[2] === "stake.bankroll"
-        && /(?:validateFinite|requirePositive)\(/.test(sourceLine)
+        && (
+          /(?:validateFinite|requirePositive)\(/.test(sourceLine)
+          || /\[record\.stake\?\.bankroll,/.test(sourceLine)
+        )
       ) {
         continue;
       }

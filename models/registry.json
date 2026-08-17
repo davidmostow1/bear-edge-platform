@@ -191,6 +191,130 @@
       "modelStatus": "research_only",
       "calibrationReportId": null,
       "calibrationReportDigest": null
+    },
+    {
+      "modelId": "esports_bear_stack_v1",
+      "modelVersion": "1.0.0",
+      "marketFamily": "cs2_match_winner",
+      "featureSet": [
+        "independent_lower_probability",
+        "independent_point_probability",
+        "independent_upper_probability",
+        "market_consensus_lower_probability",
+        "market_consensus_point_probability",
+        "market_consensus_upper_probability",
+        "registered_market_weight"
+      ],
+      "dataSources": [
+        "independent_game_specific_projection",
+        "licensed_exact_market_quotes",
+        "verified_event_context"
+      ],
+      "trainingCutoff": null,
+      "calculationImplementation": {
+        "modules": [
+          "src/esports/index.js"
+        ],
+        "probabilityExport": "deriveActionableProbability",
+        "version": "1.0.0",
+        "implementationDigest": null
+      },
+      "modelStatus": "research_only",
+      "calibrationReportId": null,
+      "calibrationReportDigest": null
+    },
+    {
+      "modelId": "esports_bear_stack_v1",
+      "modelVersion": "1.0.0",
+      "marketFamily": "dota2_match_winner",
+      "featureSet": [
+        "independent_lower_probability",
+        "independent_point_probability",
+        "independent_upper_probability",
+        "market_consensus_lower_probability",
+        "market_consensus_point_probability",
+        "market_consensus_upper_probability",
+        "registered_market_weight"
+      ],
+      "dataSources": [
+        "independent_game_specific_projection",
+        "licensed_exact_market_quotes",
+        "verified_event_context"
+      ],
+      "trainingCutoff": null,
+      "calculationImplementation": {
+        "modules": [
+          "src/esports/index.js"
+        ],
+        "probabilityExport": "deriveActionableProbability",
+        "version": "1.0.0",
+        "implementationDigest": null
+      },
+      "modelStatus": "research_only",
+      "calibrationReportId": null,
+      "calibrationReportDigest": null
+    },
+    {
+      "modelId": "esports_bear_stack_v1",
+      "modelVersion": "1.0.0",
+      "marketFamily": "lol_match_winner",
+      "featureSet": [
+        "independent_lower_probability",
+        "independent_point_probability",
+        "independent_upper_probability",
+        "market_consensus_lower_probability",
+        "market_consensus_point_probability",
+        "market_consensus_upper_probability",
+        "registered_market_weight"
+      ],
+      "dataSources": [
+        "independent_game_specific_projection",
+        "licensed_exact_market_quotes",
+        "verified_event_context"
+      ],
+      "trainingCutoff": null,
+      "calculationImplementation": {
+        "modules": [
+          "src/esports/index.js"
+        ],
+        "probabilityExport": "deriveActionableProbability",
+        "version": "1.0.0",
+        "implementationDigest": null
+      },
+      "modelStatus": "research_only",
+      "calibrationReportId": null,
+      "calibrationReportDigest": null
+    },
+    {
+      "modelId": "esports_bear_stack_v1",
+      "modelVersion": "1.0.0",
+      "marketFamily": "valorant_match_winner",
+      "featureSet": [
+        "independent_lower_probability",
+        "independent_point_probability",
+        "independent_upper_probability",
+        "market_consensus_lower_probability",
+        "market_consensus_point_probability",
+        "market_consensus_upper_probability",
+        "registered_market_weight"
+      ],
+      "dataSources": [
+        "independent_game_specific_projection",
+        "licensed_exact_market_quotes",
+        "verified_event_context"
+      ],
+      "trainingCutoff": null,
+      "calculationImplementation": {
+        "modules": [
+          "src/esports/index.js"
+        ],
+        "probabilityExport": "deriveActionableProbability",
+        "version": "1.0.0",
+        "implementationDigest": null
+      },
+      "modelStatus": "research_only",
+      "calibrationReportId": null,
+      "calibrationReportDigest": null
     }
   ]
 }
