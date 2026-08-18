@@ -84,8 +84,8 @@
   },
   "models": {
     "registryPolicyVersion": "1.2.0",
-    "registered": 6,
-    "researchOnly": 6,
+    "registered": 5,
+    "researchOnly": 5,
     "shadow": 0,
     "validated": 0,
     "retired": 0,
