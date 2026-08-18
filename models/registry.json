@@ -191,6 +191,32 @@
       "modelStatus": "research_only",
       "calibrationReportId": null,
       "calibrationReportDigest": null
+    },
+    {
+      "modelId": "SBKP-LOL-FMW-GPR-BT-0.1.0",
+      "modelVersion": "0.1.0",
+      "marketFamily": "full_match_winner",
+      "featureSet": [
+        "best_of",
+        "gpr_a",
+        "gpr_b"
+      ],
+      "dataSources": [
+        "riot_global_power_rankings",
+        "riot_official_schedule"
+      ],
+      "trainingCutoff": null,
+      "calculationImplementation": {
+        "modules": [
+          "src/research/lol-full-match-model.js"
+        ],
+        "probabilityExport": "predictFullMatch",
+        "version": "0.1.0",
+        "implementationDigest": null
+      },
+      "modelStatus": "research_only",
+      "calibrationReportId": null,
+      "calibrationReportDigest": null
     }
   ]
 }
