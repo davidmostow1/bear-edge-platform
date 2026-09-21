@@ -1,0 +1,61 @@
+{
+  "schemaVersion": "bear-edge.esports-build-verification.v1",
+  "capturedAt": "2026-08-12T07:21:59.000Z",
+  "repositoryRevision": "8f0d6cb",
+  "branch": "work/esports-zero-bullshit-v1",
+  "checks": {
+    "typecheck": {
+      "command": "npm run typecheck",
+      "status": "passed"
+    },
+    "focusedIntegritySuite": {
+      "command": "node --test test/esports-engine.test.js test/record-contract.test.js test/model-registry.test.js test/esports-slate-snapshot.test.js",
+      "tests": 116,
+      "passed": 116,
+      "failed": 0,
+      "status": "passed"
+    },
+    "productSuiteExcludingSandboxTooling": {
+      "command": "node --test every test/*.test.js except test/tooling.test.js",
+      "tests": 427,
+      "passed": 427,
+      "failed": 0,
+      "status": "passed"
+    },
+    "completeSuite": {
+      "command": "npm test",
+      "tests": 445,
+      "passed": 444,
+      "failed": 1,
+      "status": "environment_blocked",
+      "failure": {
+        "test": "LAN dashboard bootstrap keeps the operator token in the URL fragment only",
+        "file": "test/tooling.test.js",
+        "cause": "The managed sandbox denies Node's os.networkInterfaces() call: uv_interface_addresses returned Unknown system error 1.",
+        "classification": "pre-existing environment limitation outside the esports implementation"
+      }
+    },
+    "packageDryRun": {
+      "command": "npm pack --dry-run --json",
+      "status": "passed",
+      "entryCount": 130,
+      "requiredEsportsAssetsIncluded": [
+        "data/esports/observations/2026-08-12-live-slate.json",
+        "docs/ESPORTS_ZERO_BS_OPERATIONS.md",
+        "src/esports/source-registry.json"
+      ]
+    },
+    "diffWhitespace": {
+      "command": "git diff --check",
+      "status": "passed"
+    }
+  },
+  "operationalSafetyAssertions": [
+    "No evaluator or CLI path can return BET while trusted esports operational authority is disabled.",
+    "A fully populated caller-forged esports BET fails canonical validation and authoritative ledger append.",
+    "Replay and as-of evaluation are non-actionable and preserve the actual evaluation timestamp.",
+    "Cross-event reference quotes are excluded and persisted as excluded/unverified with their reason codes.",
+    "Quote, evidence, and prediction verification-status changes are bound to retained payload digests.",
+    "Live-map evaluation is unavailable and always fails closed."
+  ]
+}

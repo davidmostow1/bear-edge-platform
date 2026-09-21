@@ -209,8 +209,8 @@ test("repository audit identifies and passes the real checkout", () => {
   assert.equal(result.status, "PASS");
   assert.equal(result.repoRoot, fs.realpathSync(path.resolve(__dirname, "..")));
   assert.match(result.manifestDigest, /^[a-f0-9]{64}$/);
-  assert.equal(result.modelCount, 5);
-  assert.equal(result.researchOnlyModelCount, 5);
+  assert.equal(result.modelCount, 9);
+  assert.equal(result.researchOnlyModelCount, 9);
   assert.equal(result.authorization, "PRICE_CHECK_ONLY");
 });
 

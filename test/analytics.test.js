@@ -241,7 +241,7 @@ test("shadow outcome and closing-price evidence do not inflate decision analytic
   const dashboard = summarizeDecisionLogRecords([target, outcome, close]);
 
   assert.equal(dashboard.summary.totalEvaluations, 1);
-  assert.deepEqual(dashboard.summary.verdictCounts, { BET: 0, WAIT: 1, PASS: 0 });
+  assert.deepEqual(dashboard.summary.verdictCounts, { BET: 0, LEAN: 0, WAIT: 1, PASS: 0 });
   assert.equal(dashboard.evaluations.length, 1);
   assert.equal(dashboard.evaluations[0].id, target.id);
   assert.equal(dashboard.dataQuality.metrics.totalEvaluations, 1);

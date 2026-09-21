@@ -39,9 +39,9 @@ The normalized deployment receipt is retained at `docs/canonical/receipts/p0-har
 |---|---|---|
 | One merged reproducible research baseline exists | `CONFIRMED` | Exact merge/tree, local verification, package smoke, and remote CI receipts exist. |
 | Canonical branch governance is complete | `FAILED` | `master` is not protected and no repository ruleset exists. |
-| A validated Bear Edge model exists | `FAILED` | All five registered models remain `research_only`; 0 calibration reports exist. |
+| A validated Bear Edge model exists | `FAILED` | All nine registered models remain `research_only`; 0 calibration reports exist. |
 | Predictive edge or profitability is demonstrated | `UNVERIFIED` | No qualifying prospective cohort, market comparison, or closing-line validation exists. |
-| An esports probability generator exists | `FAILED` | No committed game-specific generator or trained model exists. |
+| Independent esports probability generation exists | `PARTIAL` | Game-scoped Elo generators now cover pre-match series winners for CS2, Dota 2, LoL, and VALORANT. They deterministically generate content-bound research projections from retained format/context-matched history and fail closed on invalid chronology, digests, or sample size. They are not prospectively calibrated or authorized for BET. |
 | Bet execution is authorized | `FAILED` | Permission is `PRICE_CHECK_ONLY`; authorized stake is `$0`; execution is disabled. |
 | Local audit lifecycle is implemented | `CONFIRMED` | The authoritative local JSONL ledger and outbox are implemented and tested. |
 | Supabase is operational authority | `FAILED` | Supabase remains a remote projection; cutover is incomplete. |

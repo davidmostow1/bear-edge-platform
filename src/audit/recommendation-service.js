@@ -153,7 +153,7 @@ function createDisplayedTargetRecord(result, target, context = {}) {
   const createdAt = result.fetchedAt ?? context.createdAt ?? new Date().toISOString();
   const model = resolveModel(target);
   const permission = resolvePermission(result, target, context);
-  const nestedVerdict = ["PASS", "WAIT", "BET"].includes(target.evaluation?.verdict)
+  const nestedVerdict = ["PASS", "LEAN", "WAIT", "BET"].includes(target.evaluation?.verdict)
     ? target.evaluation.verdict
     : "WAIT";
   const reasons = [...(target.evaluation?.reasons ?? target.notes ?? [])];

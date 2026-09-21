@@ -1796,6 +1796,26 @@ test("tracked registry keeps all existing MLB Poisson models research-only", () 
   );
 });
 
+test("tracked registry exposes esports Bear-stack calculations as research-only", () => {
+  const loaded = loadModelRegistry();
+  const esportsModels = loaded.models.filter(
+    (model) => model.modelId === "esports_bear_stack_v1"
+  );
+
+  assert.deepEqual(
+    esportsModels.map((model) => model.marketFamily).sort(),
+    [
+      "cs2_match_winner",
+      "dota2_match_winner",
+      "lol_match_winner",
+      "valorant_match_winner"
+    ]
+  );
+  assert.equal(esportsModels.every((model) => model.modelStatus === "research_only"), true);
+  assert.equal(esportsModels.every((model) => model.calibrationReportId === null), true);
+  assert.equal(esportsModels.every((model) => model.calibrationReportDigest === null), true);
+});
+
 test("portable package includes the model and operations assets", () => {
   const packageJson = JSON.parse(fs.readFileSync(
     path.join(__dirname, "..", "package.json"),
@@ -1805,5 +1825,10 @@ test("portable package includes the model and operations assets", () => {
   assert.ok(packageJson.files.includes("models/**/*.json"));
   assert.ok(packageJson.files.includes(".env.example"));
   assert.ok(packageJson.files.includes("docs/ELITE_AUDIT_OPERATIONS.md"));
+  assert.ok(packageJson.files.includes("docs/ESPORTS_ZERO_BS_OPERATIONS.md"));
+  assert.ok(packageJson.files.includes("docs/ESPORTS_OPERATOR_PROMPT.md"));
+  assert.ok(packageJson.files.includes("src/esports/source-registry.json"));
+  assert.ok(packageJson.files.includes("data/esports/observations/**/*.json"));
+  assert.ok(packageJson.files.includes("data/esports/verification/**/*.json"));
   assert.ok(packageJson.files.includes("supabase/migrations/**/*.sql"));
 });

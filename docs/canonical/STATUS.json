@@ -84,8 +84,8 @@
   },
   "models": {
     "registryPolicyVersion": "1.2.0",
-    "registered": 5,
-    "researchOnly": 5,
+    "registered": 9,
+    "researchOnly": 9,
     "shadow": 0,
     "validated": 0,
     "retired": 0,
@@ -94,15 +94,22 @@
     "predictiveEdgeGrade": "UNVERIFIED"
   },
   "esports": {
-    "sourceContractImplemented": false,
+    "sourceContractImplemented": true,
     "syntheticDatasetProofImplemented": false,
     "realCorpusAuthorized": false,
-    "independentProbabilityGeneratorImplemented": false,
+    "independentProbabilityGeneratorImplemented": true,
+    "independentProbabilityGeneratorScope": "CS2_DOTA2_LOL_VALORANT_PREMATCH_SERIES_WINNER",
+    "independentProbabilityGeneratorModels": [
+      "cs2_elo_series_v1@1.0.0",
+      "dota_elo_series_v1@1.0.0",
+      "lol_elo_series_v1@1.0.0",
+      "valorant_elo_series_v1@1.0.0"
+    ],
     "historicalPointInTimeDatasetReady": false,
     "prospectiveSettledCohortSize": 0,
     "operationalBetAuthorityImplemented": false,
-    "uncommittedEvaluatorDisposition": "QUARANTINED_NOT_IMPORTED",
-    "grade": "FAILED"
+    "uncommittedEvaluatorDisposition": "IMPORTED_ON_INTEGRATION_BRANCH_NOT_MERGED",
+    "grade": "PARTIAL"
   },
   "authority": {
     "current": {
@@ -201,7 +208,6 @@
     "NO_CALIBRATION_REPORT",
     "NO_PROSPECTIVE_SETTLED_COHORT",
     "NO_PROVEN_PREDICTIVE_EDGE",
-    "NO_ESPORTS_PROBABILITY_GENERATOR",
     "NO_ESPORTS_HISTORICAL_PIPELINE",
     "SOURCE_RIGHTS_AND_LINEAGE_UNRESOLVED",
     "SUPABASE_AUTHORITY_CUTOVER_NOT_IMPLEMENTED"

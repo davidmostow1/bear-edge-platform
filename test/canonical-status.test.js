@@ -63,7 +63,7 @@ test("canonical status audit agrees with registry, migrations, authorization, an
   const packageJson = JSON.parse(fs.readFileSync(path.join(ROOT, "package.json"), "utf8"));
 
   assert.equal(result.status, "PASS");
-  assert.equal(result.modelCount, 5);
+  assert.equal(result.modelCount, 9);
   assert.equal(result.validatedModelCount, 0);
   assert.equal(result.authorizedStakeUsd, 0);
   assert.equal(result.executionEnabled, false);
@@ -169,9 +169,9 @@ test("canonical status audit rejects model-count drift", () => {
   );
 });
 
-test("canonical status audit rejects an invented esports model capability", () => {
+test("canonical status audit rejects drift in the four-game generator capability", () => {
   const status = loadStatus();
-  status.esports.independentProbabilityGeneratorImplemented = true;
+  status.esports.independentProbabilityGeneratorScope = "ALL_ESPORTS";
 
   assertFailureCode(
     () => validateCanonicalStatusDocument(status, loadContext()),
@@ -202,8 +202,8 @@ test("canonical status audit rejects safety wording removed from a required docu
 test("canonical status audit binds the standing reviewer model count", () => {
   const context = loadContext();
   context.documents["AGENTS.md"] = context.documents["AGENTS.md"].replace(
-    "**Models validated:** 0/5",
-    "**Models validated:** 0/4"
+    "**Models validated:** 0/9",
+    "**Models validated:** 0/8"
   );
 
   assertFailureCode(

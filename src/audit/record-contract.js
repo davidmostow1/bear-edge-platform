@@ -5,7 +5,7 @@ const { getSettlementEconomicsIssue } = require("./settlement-economics.js");
 
 const AUDIT_RECORD_SCHEMA_VERSION = "2.1.0";
 const SUPPORTED_AUDIT_RECORD_SCHEMA_VERSIONS = Object.freeze(["2.0.0", AUDIT_RECORD_SCHEMA_VERSION]);
-const EVALUATION_VERDICTS = Object.freeze(["PASS", "WAIT", "BET"]);
+const EVALUATION_VERDICTS = Object.freeze(["PASS", "LEAN", "WAIT", "BET"]);
 const OPERATIONAL_PERMISSIONS = Object.freeze(["WAIT", "PRICE_CHECK_ONLY", "VERIFIED_BETS_ALLOWED"]);
 const MODEL_STATUSES = Object.freeze(["research_only", "shadow", "validated", "retired"]);
 const SETTLEMENT_OUTCOMES = Object.freeze(["pending", "win", "loss", "push", "void"]);
@@ -21,6 +21,13 @@ const RECORD_TYPES = Object.freeze([
 ]);
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const DIGEST_PATTERN = /^[a-f0-9]{64}$/;
+const ESPORTS_BET_MARKET_FAMILIES = new Set([
+  "cs2_match_winner",
+  "dota2_match_winner",
+  "lol_match_winner",
+  "valorant_match_winner"
+]);
+const ESPORTS_BET_SPORTS = new Set(["CS2", "DOTA2", "DOTA 2", "LOL", "VALORANT"]);
 
 const AUDIT_RECORD_SCHEMA = Object.freeze({
   $schema: "https://json-schema.org/draft/2020-12/schema",
@@ -128,6 +135,8 @@ function createEvaluationRecord(input, context = {}) {
     market: objectWithFields(input.market, [
       "marketFamily",
       "marketType",
+      "scope",
+      "settlementRuleDigest",
       "participantId",
       "participantName",
       "selection",
@@ -136,10 +145,16 @@ function createEvaluationRecord(input, context = {}) {
     ]),
     price: objectWithFields(input.price, [
       "sportsbook",
+      "marketId",
+      "jurisdiction",
       "marketOdds",
       "oppositeOdds",
       "priceCapturedAt",
-      "priceSourceTime"
+      "priceSourceTime",
+      "priceStatus",
+      "maxExecutableStake",
+      "executionCostRate",
+      "rawSnapshotDigest"
     ]),
     sources: Array.isArray(input.sources)
       ? input.sources.map((source) => objectWithFields(source, [
@@ -151,7 +166,18 @@ function createEvaluationRecord(input, context = {}) {
           "sourceTime",
           "digest",
           "freshness",
-          "verificationStatus"
+          "verificationStatus",
+          "eventId",
+          "marketFamily",
+          "marketType",
+          "scope",
+          "selection",
+          "oppositeSelection",
+          "side",
+          "line",
+          "settlementRuleDigest",
+          "disposition",
+          "reasonCodes"
         ]))
       : [],
     model: objectWithFields(input.model, [
@@ -160,14 +186,31 @@ function createEvaluationRecord(input, context = {}) {
       "probabilityMethod",
       "modelStatus",
       "calibrationReportId",
+      "calibrationReportDigest",
       "trainingCutoff",
-      "sampleSize"
+      "sampleSize",
+      "calculationImplementationDigest",
+      "independentModelId",
+      "independentModelVersion",
+      "independentImplementationDigest",
+      "featureSnapshotDigest",
+      "predictionDigest",
+      "predictionGeneratedAt",
+      "predictionArtifactLocator"
     ]),
     probability: objectWithFields(input.probability, [
       "rawModelProbability",
+      "rawModelLowerProbability",
+      "rawModelUpperProbability",
       "adjustedProbability",
+      "adjustedLowerProbability",
+      "adjustedUpperProbability",
       "marketImpliedProbability",
-      "marketNoVigProbability"
+      "marketNoVigProbability",
+      "marketLowerProbability",
+      "marketUpperProbability",
+      "marketWeight",
+      "modelWeight"
     ]),
     edge: objectWithFields(input.edge, ["fairEdge", "priceEdge", "expectedValueRoi", "kellyFraction"]),
     stake: objectWithFields(input.stake, ["recommendedStake", "bankroll", "stakePolicyVersion"]),
@@ -181,6 +224,10 @@ function createEvaluationRecord(input, context = {}) {
       "configurationDigest",
       "calculationVersion",
       "evidenceCompleteness",
+      "evaluationMode",
+      "asOf",
+      "sourceRegistryDigest",
+      "policyDigest",
       "warnings"
     ])
   };
@@ -565,6 +612,19 @@ function validateAuditRecord(record) {
           if (source.digest !== null && !DIGEST_PATTERN.test(source.digest ?? "")) {
             addIssue(`${path}.digest`, "must be a 64-character lowercase SHA-256 digest or null.");
           }
+          if (source.line !== null && source.line !== undefined) {
+            validateFinite(source.line, `${path}.line`);
+          }
+          if (
+            source.settlementRuleDigest !== null
+            && source.settlementRuleDigest !== undefined
+            && !DIGEST_PATTERN.test(source.settlementRuleDigest ?? "")
+          ) {
+            addIssue(`${path}.settlementRuleDigest`, "must be a 64-character lowercase SHA-256 digest or null.");
+          }
+          if (source.reasonCodes !== null && !Array.isArray(source.reasonCodes)) {
+            addIssue(`${path}.reasonCodes`, "must be an array or null.");
+          }
         }
       });
     }
@@ -616,15 +676,42 @@ function validateAuditRecord(record) {
       validateIsoTimestamp(record.model.trainingCutoff, "model.trainingCutoff");
       validateFinite(record.model.sampleSize, "model.sampleSize", { min: 0 });
 
+      if (
+        record.model.calibrationReportDigest !== undefined
+        && record.model.calibrationReportDigest !== null
+        && !DIGEST_PATTERN.test(record.model.calibrationReportDigest ?? "")
+      ) {
+        addIssue(
+          "model.calibrationReportDigest",
+          "must be a 64-character lowercase SHA-256 digest or null."
+        );
+      }
+
       if (record.verdict === "BET" && record.model.modelStatus !== "validated") {
         addIssue("model.modelStatus", "must be validated for a BET verdict.");
       }
-
       if (
         record.verdict === "BET"
         && (typeof record.model.calibrationReportId !== "string" || !record.model.calibrationReportId.trim())
       ) {
         addIssue("model.calibrationReportId", "must identify the verified calibration report for a BET verdict.");
+      }
+      for (const field of [
+        "calculationImplementationDigest",
+        "independentImplementationDigest",
+        "featureSnapshotDigest",
+        "predictionDigest"
+      ]) {
+        if (
+          record.model[field] !== undefined
+          && record.model[field] !== null
+          && !DIGEST_PATTERN.test(record.model[field] ?? "")
+        ) {
+          addIssue(`model.${field}`, "must be a 64-character lowercase SHA-256 digest or null.");
+        }
+      }
+      if (record.model.predictionGeneratedAt !== undefined && record.model.predictionGeneratedAt !== null) {
+        validateIsoTimestamp(record.model.predictionGeneratedAt, "model.predictionGeneratedAt");
       }
     }
 
@@ -636,6 +723,20 @@ function validateAuditRecord(record) {
         "marketNoVigProbability"
       ]) {
         validateFinite(record.probability[field], `probability.${field}`, { min: 0, max: 1 });
+      }
+      for (const field of [
+        "rawModelLowerProbability",
+        "rawModelUpperProbability",
+        "adjustedLowerProbability",
+        "adjustedUpperProbability",
+        "marketLowerProbability",
+        "marketUpperProbability",
+        "marketWeight",
+        "modelWeight"
+      ]) {
+        if (record.probability[field] !== undefined) {
+          validateFinite(record.probability[field], `probability.${field}`, { min: 0, max: 1 });
+        }
       }
     }
 
@@ -668,6 +769,105 @@ function validateAuditRecord(record) {
 
       if (!Array.isArray(record.audit.warnings)) {
         addIssue("audit.warnings", "must be an array.");
+      }
+      if (record.audit.asOf !== undefined && record.audit.asOf !== null) {
+        validateIsoTimestamp(record.audit.asOf, "audit.asOf", false);
+      }
+      for (const field of ["sourceRegistryDigest", "policyDigest"]) {
+        if (
+          record.audit[field] !== undefined
+          && record.audit[field] !== null
+          && !DIGEST_PATTERN.test(record.audit[field] ?? "")
+        ) {
+          addIssue(`audit.${field}`, "must be a 64-character lowercase SHA-256 digest or null.");
+        }
+      }
+    }
+
+    const normalizedBetSport = typeof record.event?.sport === "string"
+      ? record.event.sport.trim().toUpperCase()
+      : "";
+    const isEsportsBet = ESPORTS_BET_SPORTS.has(normalizedBetSport)
+      || ESPORTS_BET_MARKET_FAMILIES.has(record.market?.marketFamily)
+      || record.model?.modelId === "esports_bear_stack_v1";
+
+    if (record.verdict === "BET" && isEsportsBet) {
+      const requireNonEmpty = (value, path) => {
+        if (typeof value !== "string" || !value.trim()) {
+          addIssue(path, "must be a non-empty string for BET.");
+        }
+      };
+      if (record.permission !== "VERIFIED_BETS_ALLOWED") {
+        addIssue("permission", "must be VERIFIED_BETS_ALLOWED for BET.");
+      }
+      addIssue(
+        "verdict",
+        "esports BET records are disabled until authenticated operational authority is implemented."
+      );
+      if (record.audit?.evidenceCompleteness !== "complete") {
+        addIssue("audit.evidenceCompleteness", "must be complete for BET.");
+      }
+      for (const [value, path] of [
+        [record.event?.eventId, "event.eventId"],
+        [record.event?.sport, "event.sport"],
+        [record.market?.marketFamily, "market.marketFamily"],
+        [record.market?.marketType, "market.marketType"],
+        [record.market?.selection, "market.selection"],
+        [record.market?.side, "market.side"],
+        [record.price?.sportsbook, "price.sportsbook"],
+        [record.model?.modelId, "model.modelId"],
+        [record.model?.modelVersion, "model.modelVersion"],
+        [record.model?.calibrationReportId, "model.calibrationReportId"]
+      ]) {
+        requireNonEmpty(value, path);
+      }
+      if (!DIGEST_PATTERN.test(record.model?.calibrationReportDigest ?? "")) {
+        addIssue("model.calibrationReportDigest", "must be a SHA-256 digest for BET.");
+      }
+      validateIsoTimestamp(record.model?.trainingCutoff, "model.trainingCutoff", false);
+      validateIsoTimestamp(record.price?.priceCapturedAt, "price.priceCapturedAt", false);
+      validateIsoTimestamp(record.price?.priceSourceTime, "price.priceSourceTime", false);
+      if (
+        record.model?.calculationImplementationDigest !== undefined
+        && record.model?.calculationImplementationDigest !== null
+        && !DIGEST_PATTERN.test(record.model.calculationImplementationDigest ?? "")
+      ) {
+        addIssue("model.calculationImplementationDigest", "must be a SHA-256 digest for BET when present.");
+      }
+      for (const [value, path, options] of [
+        [record.price?.marketOdds, "price.marketOdds", {}],
+        [record.price?.oppositeOdds, "price.oppositeOdds", {}],
+        [record.probability?.rawModelProbability, "probability.rawModelProbability", { min: 0, max: 1 }],
+        [record.probability?.adjustedProbability, "probability.adjustedProbability", { min: 0, max: 1 }],
+        [record.probability?.marketImpliedProbability, "probability.marketImpliedProbability", { min: 0, max: 1 }],
+        [record.probability?.marketNoVigProbability, "probability.marketNoVigProbability", { min: 0, max: 1 }],
+        [record.edge?.fairEdge, "edge.fairEdge", {}],
+        [record.edge?.priceEdge, "edge.priceEdge", {}],
+        [record.edge?.expectedValueRoi, "edge.expectedValueRoi", {}],
+        [record.edge?.kellyFraction, "edge.kellyFraction", { min: 0, max: 1 }],
+        [record.stake?.recommendedStake, "stake.recommendedStake", { min: Number.MIN_VALUE }],
+        [record.stake?.bankroll, "stake.bankroll", { min: Number.MIN_VALUE }]
+      ]) {
+        validateFinite(value, path, { ...options, nullable: false });
+      }
+      if (!Array.isArray(record.sources) || record.sources.length === 0) {
+        addIssue("sources", "must contain retained evidence for BET.");
+      }
+      if (Array.isArray(record.sources) && record.sources.some((source) => (
+        !DIGEST_PATTERN.test(source?.digest ?? "")
+        || !["verified", "verified_provider_capture"].includes(source?.verificationStatus)
+        || source?.freshness !== "fresh"
+        || source?.disposition === "excluded"
+      ))) {
+        addIssue("sources", "every BET source must be fresh, verified, and digest-bound.");
+      }
+      if (Array.isArray(record.riskFlags) && record.riskFlags.some((flag) => flag?.severity === "high")) {
+        addIssue("riskFlags", "must not contain high-severity risk for BET.");
+      }
+      if (Array.isArray(record.gateResults) && record.gateResults.some((gate) => (
+        gate?.status === "fail" || gate?.passed === false
+      ))) {
+        addIssue("gateResults", "must not contain a failed gate for BET.");
       }
     }
 

@@ -1,5 +1,8 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
+const fs = require("node:fs/promises");
+const os = require("node:os");
+const path = require("node:path");
 
 const {
   canonicalStringify,
@@ -12,6 +15,9 @@ const {
   createSettlementAuditRecord,
   validateAuditRecord
 } = require("../src/audit/record-contract.js");
+const {
+  appendAuthoritativeRecord
+} = require("../src/audit/authoritative-ledger.js");
 
 const VALID_EVALUATION_INPUT = {
   origin: {
@@ -112,6 +118,12 @@ const EVALUATION_CONTEXT = {
 
 function validBetInput() {
   const input = structuredClone(VALID_EVALUATION_INPUT);
+  input.sources = input.sources.map((source) => ({
+    ...source,
+    verificationStatus: "verified",
+    disposition: "included",
+    reasonCodes: []
+  }));
   input.sources.push({
     provider: "the_odds_api",
     sourceType: "sportsbook_price",
@@ -121,7 +133,9 @@ function validBetInput() {
     sourceTime: "2026-07-16T17:44:30.000Z",
     digest: "c".repeat(64),
     freshness: "fresh",
-    verificationStatus: "verified_provider_capture"
+    verificationStatus: "verified_provider_capture",
+    disposition: "included",
+    reasonCodes: []
   });
   input.model = {
     ...input.model,
@@ -130,6 +144,7 @@ function validBetInput() {
     probabilityMethod: "calibrated_logistic",
     modelStatus: "validated",
     calibrationReportId: "calibration-report-001",
+    calibrationReportDigest: "d".repeat(64),
     sampleSize: 500
   };
   input.stake = {
@@ -145,7 +160,7 @@ function validBetInput() {
   };
   input.audit = {
     ...input.audit,
-    evidenceCompleteness: "verified"
+    evidenceCompleteness: "complete"
   };
   return input;
 }
@@ -292,6 +307,136 @@ test("a canonical BET requires complete price, provenance, gate, model, and stak
   assert.ok(validation.issues.some((issue) => issue.path === "stake.recommendedStake"));
 });
 
+test("canonical BET validation rejects forged authority even with a recomputed record digest", () => {
+  const base = createEvaluationRecord(VALID_EVALUATION_INPUT, EVALUATION_CONTEXT);
+  const forged = {
+    ...base,
+    event: {
+      ...base.event,
+      sport: "CS2"
+    },
+    model: {
+      ...base.model,
+      modelStatus: "validated",
+      calibrationReportId: "forged-report",
+      calibrationReportDigest: "c".repeat(64)
+    },
+    verdict: "BET",
+    permission: "WAIT",
+    audit: {
+      ...base.audit,
+      evidenceCompleteness: "blocked"
+    }
+  };
+  delete forged.contentDigest;
+  forged.contentDigest = contentDigest(forged);
+
+  const paths = validateAuditRecord(forged).issues.map((issue) => issue.path);
+  assert.ok(paths.includes("permission"));
+  assert.ok(paths.includes("audit.evidenceCompleteness"));
+  assert.ok(paths.includes("riskFlags"));
+  assert.ok(paths.includes("gateResults"));
+  assert.ok(paths.includes("stake.recommendedStake"));
+});
+
+test("a fully populated caller-forged esports BET is rejected by validation and ledger append", async () => {
+  const base = createEvaluationRecord(VALID_EVALUATION_INPUT, EVALUATION_CONTEXT);
+  const forged = {
+    ...base,
+    event: {
+      ...base.event,
+      sport: "CS2",
+      league: "Fake League",
+      eventId: "fake-event-1"
+    },
+    market: {
+      ...base.market,
+      marketFamily: "cs2_match_winner",
+      marketType: "match_winner",
+      selection: "Fake Team A",
+      side: "team_a"
+    },
+    price: {
+      ...base.price,
+      sportsbook: "fake-book",
+      marketOdds: 110,
+      oppositeOdds: -130,
+      priceCapturedAt: "2026-07-16T17:45:00.000Z",
+      priceSourceTime: "2026-07-16T17:44:00.000Z"
+    },
+    sources: [{
+      ...base.sources[0],
+      digest: "d".repeat(64),
+      freshness: "fresh",
+      verificationStatus: "verified",
+      disposition: "included",
+      reasonCodes: []
+    }],
+    model: {
+      ...base.model,
+      modelId: "esports_bear_stack_v1",
+      modelStatus: "validated",
+      calibrationReportId: "fake-calibration",
+      calibrationReportDigest: "c".repeat(64),
+      calculationImplementationDigest: "e".repeat(64)
+    },
+    probability: {
+      ...base.probability,
+      rawModelProbability: 0.6,
+      adjustedProbability: 0.58,
+      marketImpliedProbability: 0.476,
+      marketNoVigProbability: 0.5
+    },
+    edge: {
+      fairEdge: 0.08,
+      priceEdge: 0.104,
+      expectedValueRoi: 0.218,
+      kellyFraction: 0.1
+    },
+    stake: {
+      recommendedStake: 25,
+      bankroll: 1000,
+      stakePolicyVersion: "fake-policy"
+    },
+    verdict: "BET",
+    permission: "VERIFIED_BETS_ALLOWED",
+    reasons: ["Caller assertion only."],
+    riskFlags: [],
+    gateResults: [],
+    audit: {
+      ...base.audit,
+      evidenceCompleteness: "complete"
+    }
+  };
+  delete forged.contentDigest;
+  forged.contentDigest = contentDigest(forged);
+
+  const validation = validateAuditRecord(forged);
+  assert.equal(validation.valid, false);
+  assert.ok(validation.issues.some((issue) => (
+    issue.path === "verdict" && issue.message.includes("authenticated operational authority")
+  )));
+
+  const tempDirectory = await fs.mkdtemp(path.join(os.tmpdir(), "bear-edge-forged-esports-"));
+  await assert.rejects(
+    appendAuthoritativeRecord(forged, {
+      ledgerPath: path.join(tempDirectory, "ledger.jsonl"),
+      outboxPath: path.join(tempDirectory, "outbox.jsonl")
+    }),
+    (error) => error instanceof Error
+      && /** @type {any} */ (error).code === "LEDGER_INVALID_RECORD"
+  );
+});
+
+test("historical schema-2 records remain valid without the newly retained calibration digest", () => {
+  const historical = createEvaluationRecord(VALID_EVALUATION_INPUT, EVALUATION_CONTEXT);
+  delete historical.model.calibrationReportDigest;
+  delete historical.contentDigest;
+  historical.contentDigest = contentDigest(historical);
+
+  assert.deepEqual(validateAuditRecord(historical), { valid: true, issues: [] });
+});
+
 test("validateAuditRecord rejects missing groups, malformed UUIDs, invalid timestamps, and probability bounds", () => {
   const valid = createEvaluationRecord(VALID_EVALUATION_INPUT, EVALUATION_CONTEXT);
   const invalid = {
@@ -417,6 +562,6 @@ test("the public API and schema registry expose the canonical audit contract", (
   assert.equal(publicApi.createAmendmentRecord, createAmendmentRecord);
   assert.equal(publicApi.validateAuditRecord, validateAuditRecord);
   assert.equal(schemas.AUDIT_RECORD_SCHEMA.title, "Bear Edge Authoritative Audit Record");
-  assert.deepEqual(schemas.AUDIT_RECORD_SCHEMA.properties.verdict.enum, ["PASS", "WAIT", "BET"]);
+  assert.deepEqual(schemas.AUDIT_RECORD_SCHEMA.properties.verdict.enum, ["PASS", "LEAN", "WAIT", "BET"]);
   assert.equal(schemas.SETTLEMENT_INPUT_SCHEMA.properties.closingLineEvidence.type, "object");
 });

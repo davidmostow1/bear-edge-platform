@@ -9,7 +9,7 @@ const { contentDigest } = require("../src/audit/canonical-json.js");
 const REPO_ROOT = path.resolve(__dirname, "..");
 const DIGEST_PATTERN = /^[a-f0-9]{64}$/;
 const PINNED_CANONICAL_STATUS_DIGEST =
-  "4edd897e101907d22dd2d59b1f2eacd7b09a6c362c85e1fabc954b47f2365c8b";
+  "b5f06dbda954a0e823eccaf5104f9e594f42174f4ce07b01de3e79f77bd878f8";
 const REQUIRED_GRADES = Object.freeze([
   "CONFIRMED",
   "PARTIAL",
@@ -32,7 +32,6 @@ const REQUIRED_PERSISTENT_BLOCKERS = Object.freeze([
   "NO_CALIBRATION_REPORT",
   "NO_PROSPECTIVE_SETTLED_COHORT",
   "NO_PROVEN_PREDICTIVE_EDGE",
-  "NO_ESPORTS_PROBABILITY_GENERATOR",
   "NO_ESPORTS_HISTORICAL_PIPELINE",
   "SOURCE_RIGHTS_AND_LINEAGE_UNRESOLVED",
   "SUPABASE_AUTHORITY_CUTOVER_NOT_IMPLEMENTED"
@@ -410,17 +409,25 @@ function validateCanonicalStatusDocument(status, context) {
   );
 
   requireCondition(
-    status?.esports?.sourceContractImplemented === false
+    status?.esports?.sourceContractImplemented === true
       && status.esports.syntheticDatasetProofImplemented === false
       && status.esports.realCorpusAuthorized === false
-      && status.esports.independentProbabilityGeneratorImplemented === false
+      && status.esports.independentProbabilityGeneratorImplemented === true
+      && status.esports.independentProbabilityGeneratorScope
+        === "CS2_DOTA2_LOL_VALORANT_PREMATCH_SERIES_WINNER"
+      && objectsEqual(status.esports.independentProbabilityGeneratorModels, [
+        "cs2_elo_series_v1@1.0.0",
+        "dota_elo_series_v1@1.0.0",
+        "lol_elo_series_v1@1.0.0",
+        "valorant_elo_series_v1@1.0.0"
+      ])
       && status.esports.historicalPointInTimeDatasetReady === false
       && status.esports.prospectiveSettledCohortSize === 0
       && status.esports.operationalBetAuthorityImplemented === false
-      && status.esports.uncommittedEvaluatorDisposition === "QUARANTINED_NOT_IMPORTED"
-      && status.esports.grade === "FAILED",
+      && status.esports.uncommittedEvaluatorDisposition === "IMPORTED_ON_INTEGRATION_BRANCH_NOT_MERGED"
+      && status.esports.grade === "PARTIAL",
     "ESPORTS_STATUS_OVERCLAIMED",
-    "Canonical status must not claim an implemented or authorized esports model."
+    "Canonical status must describe the four game-scoped independent generators without inventing predictive validation or wagering authority."
   );
 
   requireCondition(
