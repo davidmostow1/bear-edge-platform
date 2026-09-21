@@ -1,0 +1,63 @@
+{
+  "schemaVersion": "1.0.0",
+  "authorization": "RESEARCH_ONLY",
+  "validatedModels": 0,
+  "authorizedStake": 0,
+  "ownership": {
+    "modelOwner": "Sweet Bear",
+    "bearEdgeBoundary": "Content-addressed research outputs only; no direct Bear Edge registry or ledger writes."
+  },
+  "models": [
+    {
+      "modelId": "sweet_bear_pitcher_outing_mc_v1",
+      "implementationStatus": "IMPLEMENTED_UNVALIDATED",
+      "supportedMarkets": [
+        "pitcher_strikeouts",
+        "pitcher_outs",
+        "pitcher_hits_allowed",
+        "pitcher_walks",
+        "pitcher_earned_runs",
+        "alternate_lines"
+      ]
+    },
+    {
+      "modelId": "sweet_bear_batter_game_mc_v1",
+      "implementationStatus": "IMPLEMENTED_UNVALIDATED",
+      "supportedMarkets": [
+        "batter_hits",
+        "batter_total_bases",
+        "batter_home_runs",
+        "batter_strikeouts",
+        "batter_walks",
+        "batter_singles",
+        "batter_doubles",
+        "batter_triples",
+        "batter_runs",
+        "batter_rbis",
+        "alternate_lines"
+      ]
+    },
+    {
+      "modelId": "sweet_bear_joint_game_score_mc_v1",
+      "implementationStatus": "IMPLEMENTED_UNVALIDATED",
+      "supportedMarkets": [
+        "game_moneyline",
+        "game_run_line",
+        "game_total",
+        "team_totals",
+        "first_five_moneyline",
+        "first_five_run_line",
+        "first_five_total",
+        "alternate_lines"
+      ]
+    }
+  ],
+  "historyLibrary": {
+    "defaultSeasons": [2024, 2025],
+    "source": "MLB Stats API",
+    "format": "JSONL plus immutable gzipped source feeds",
+    "builder": "src/cli/mlb-history-build.js",
+    "workflow": ".github/workflows/mlb-history-library.yml"
+  },
+  "promotionRule": "No model may be marked validated or authorize stakes until prospective, point-in-time evaluation passes a predeclared calibration and market-comparison gate."
+}

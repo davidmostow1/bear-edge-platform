@@ -1,0 +1,87 @@
+{
+  "schemaVersion": "1.0.0",
+  "gameId": "example-away-home",
+  "eventStartAt": "2026-07-30T23:05:00Z",
+  "seed": "sweet-bear-example-v1",
+  "simulations": {
+    "pitcher": 5000,
+    "batter": 5000,
+    "game": 12000
+  },
+  "away": {
+    "team": "AWY",
+    "offense": {
+      "runsPerGame": 4.45,
+      "plateAppearancesPerGame": 38.2
+    },
+    "starter": {
+      "playerId": "AWY-SP",
+      "name": "Away Starter",
+      "throwSide": "R",
+      "kRate": 0.265,
+      "walkRate": 0.075,
+      "hitRate": 0.235,
+      "hrRate": 0.028,
+      "pitchLimit": 96,
+      "expectedBattersFaced": 24,
+      "expectedInnings": 5.7,
+      "runsAllowedPerNine": 3.9
+    },
+    "bullpen": {
+      "kRate": 0.24,
+      "walkRate": 0.09,
+      "hitRate": 0.24,
+      "hrRate": 0.032,
+      "runsAllowedPerNine": 4.3
+    },
+    "lineup": [
+      { "playerId": "A1", "name": "Away Batter 1", "battingOrder": 1, "batSide": "L", "kRate": 0.19, "walkRate": 0.1, "hitRate": 0.27, "hrRate": 0.026 },
+      { "playerId": "A2", "name": "Away Batter 2", "battingOrder": 2, "batSide": "R", "kRate": 0.2, "walkRate": 0.09, "hitRate": 0.268, "hrRate": 0.034 },
+      { "playerId": "A3", "name": "Away Batter 3", "battingOrder": 3, "batSide": "L", "kRate": 0.215, "walkRate": 0.1, "hitRate": 0.262, "hrRate": 0.045 },
+      { "playerId": "A4", "name": "Away Batter 4", "battingOrder": 4, "batSide": "R", "kRate": 0.235, "walkRate": 0.09, "hitRate": 0.258, "hrRate": 0.052 },
+      { "playerId": "A5", "name": "Away Batter 5", "battingOrder": 5, "batSide": "R", "kRate": 0.23, "walkRate": 0.08, "hitRate": 0.252, "hrRate": 0.039 },
+      { "playerId": "A6", "name": "Away Batter 6", "battingOrder": 6, "batSide": "L", "kRate": 0.245, "walkRate": 0.075, "hitRate": 0.248, "hrRate": 0.034 },
+      { "playerId": "A7", "name": "Away Batter 7", "battingOrder": 7, "batSide": "R", "kRate": 0.255, "walkRate": 0.07, "hitRate": 0.244, "hrRate": 0.03 },
+      { "playerId": "A8", "name": "Away Batter 8", "battingOrder": 8, "batSide": "L", "kRate": 0.265, "walkRate": 0.07, "hitRate": 0.238, "hrRate": 0.026 },
+      { "playerId": "A9", "name": "Away Batter 9", "battingOrder": 9, "batSide": "R", "kRate": 0.27, "walkRate": 0.065, "hitRate": 0.235, "hrRate": 0.022 }
+    ]
+  },
+  "home": {
+    "team": "HME",
+    "offense": {
+      "runsPerGame": 4.65,
+      "plateAppearancesPerGame": 38.7
+    },
+    "starter": {
+      "playerId": "HME-SP",
+      "name": "Home Starter",
+      "throwSide": "L",
+      "kRate": 0.245,
+      "walkRate": 0.08,
+      "hitRate": 0.24,
+      "hrRate": 0.03,
+      "pitchLimit": 94,
+      "expectedBattersFaced": 23,
+      "expectedInnings": 5.5,
+      "runsAllowedPerNine": 4.1
+    },
+    "bullpen": {
+      "kRate": 0.235,
+      "walkRate": 0.085,
+      "hitRate": 0.245,
+      "hrRate": 0.033,
+      "runsAllowedPerNine": 4.4
+    },
+    "lineup": [
+      { "playerId": "H1", "name": "Home Batter 1", "battingOrder": 1, "batSide": "L", "kRate": 0.185, "walkRate": 0.105, "hitRate": 0.275, "hrRate": 0.028 },
+      { "playerId": "H2", "name": "Home Batter 2", "battingOrder": 2, "batSide": "R", "kRate": 0.195, "walkRate": 0.095, "hitRate": 0.27, "hrRate": 0.036 },
+      { "playerId": "H3", "name": "Home Batter 3", "battingOrder": 3, "batSide": "L", "kRate": 0.21, "walkRate": 0.1, "hitRate": 0.265, "hrRate": 0.048 },
+      { "playerId": "H4", "name": "Home Batter 4", "battingOrder": 4, "batSide": "R", "kRate": 0.225, "walkRate": 0.09, "hitRate": 0.26, "hrRate": 0.055 },
+      { "playerId": "H5", "name": "Home Batter 5", "battingOrder": 5, "batSide": "R", "kRate": 0.235, "walkRate": 0.08, "hitRate": 0.255, "hrRate": 0.042 },
+      { "playerId": "H6", "name": "Home Batter 6", "battingOrder": 6, "batSide": "L", "kRate": 0.245, "walkRate": 0.08, "hitRate": 0.25, "hrRate": 0.036 },
+      { "playerId": "H7", "name": "Home Batter 7", "battingOrder": 7, "batSide": "R", "kRate": 0.25, "walkRate": 0.075, "hitRate": 0.246, "hrRate": 0.032 },
+      { "playerId": "H8", "name": "Home Batter 8", "battingOrder": 8, "batSide": "L", "kRate": 0.26, "walkRate": 0.07, "hitRate": 0.24, "hrRate": 0.027 },
+      { "playerId": "H9", "name": "Home Batter 9", "battingOrder": 9, "batSide": "R", "kRate": 0.27, "walkRate": 0.065, "hitRate": 0.235, "hrRate": 0.023 }
+    ]
+  }
+}
