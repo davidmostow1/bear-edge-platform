@@ -1,0 +1,28 @@
+name: Canonical Archive Integrity
+
+on:
+  pull_request:
+    paths:
+      - "docs/canonical-betting-archive/2026-07-31/**"
+      - ".github/workflows/canonical-archive-integrity.yml"
+  push:
+    branches:
+      - "archive/canonical-betting-state-2026-07-31"
+    paths:
+      - "docs/canonical-betting-archive/2026-07-31/**"
+      - ".github/workflows/canonical-archive-integrity.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out full history
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Validate canonical archive
+        run: python3 docs/canonical-betting-archive/2026-07-31/validate_archive.py

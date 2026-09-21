@@ -1,0 +1,76 @@
+{
+  "schema_version": "1.0.0",
+  "captured_date": "2026-07-31",
+  "repository": {
+    "full_name": "davidmostow1/bear-edge-platform",
+    "visibility": "private",
+    "default_branch": "master",
+    "master_sha": "e428eae1ebe2b44fbfdd6c3ba2d589405e7f96ef",
+    "archive_branch": "archive/canonical-betting-state-2026-07-31"
+  },
+  "airtable": {
+    "primary_base_id": "appa3DhF3tG8zAiLZ",
+    "primary_base_name": "Sweet Bear Betting Intelligence",
+    "record_counts": {
+      "EVENTS": 10,
+      "RECOMMENDATIONS": 15,
+      "ACTUAL WAGERS": 9,
+      "LINE SNAPSHOTS": 0,
+      "ANALYTICS INPUTS": 0,
+      "RESULTS AND SETTLEMENTS": 14,
+      "MODEL VERSIONS": 0,
+      "CALIBRATION RUNS": 0,
+      "BANKROLL LEDGER": 0,
+      "AUDIT LOG": 3
+    },
+    "observed_model_labels": [
+      "KBO-LIVE-POISSON-v0.2",
+      "kbo-live-poisson-v0.1-shadow",
+      "Sweet Bear algorithm; exact version unresolved"
+    ],
+    "execution_surface": "DraftKings Predictions",
+    "secondary_base": {
+      "id": "appjqkTKjr1I4H2U1",
+      "name": "sweet bear ",
+      "state": "generic unused Table 1"
+    }
+  },
+  "supabase": {
+    "project_id": "anxouzruouyraumgjdju",
+    "status": "ACTIVE_HEALTHY",
+    "region": "us-east-1",
+    "tables": {
+      "public.profiles": {"rows": 0, "rls_enabled": true},
+      "public.record_amendments": {"rows": 0, "rls_enabled": true},
+      "public.settlement_records": {"rows": 0, "rls_enabled": true},
+      "public.user_app_state": {"rows": 0, "rls_enabled": true},
+      "public.decision_records": {"rows": 0, "rls_enabled": true}
+    }
+  },
+  "statsig": {
+    "gates": [
+      {"id": "bear_edge_shadow_model", "enabled": false},
+      {"id": "bear_edge_provenance_ui", "enabled": false}
+    ],
+    "dynamic_configs": 0,
+    "experiments": 0
+  },
+  "drive_prospective_ledger": {
+    "decisions": 25,
+    "snapshots": 75,
+    "outcomes": 12,
+    "calibration_rows": 0
+  },
+  "unified_mlb_v1_history": {
+    "games": 4858,
+    "plate_appearances": 341183,
+    "batters": 787,
+    "pitchers": 1108,
+    "validation_result": "failed 1000-batter gate",
+    "independent_official_pa_total": 365375,
+    "pa_shortfall": 24192,
+    "likely_root_cause": "25000-row Baseball Savant truncation in weekly pitch-level chunks"
+  },
+  "operational_authority": "RESEARCH_ONLY_OR_PRICE_CHECK_ONLY",
+  "profitability_claim_authorized": false
+}
