@@ -1,0 +1,83 @@
+name: Bootstrap Sweet Bear Unified MLB Machine
+
+on:
+  push:
+    branches:
+      - codex/sweet-bear-unified-mlb-machine-v1
+
+permissions:
+  contents: write
+
+concurrency:
+  group: sweet-bear-unified-mlb-machine-bootstrap
+  cancel-in-progress: false
+
+jobs:
+  build-verify-and-publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+
+    steps:
+      - name: Check out bootstrap commit
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Use Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Expand direct source files
+        run: |
+          cat .sweet-bear-bootstrap/chunk-* > /tmp/sweet-bear-mlb-machine.tar.gz.b64
+          base64 --decode /tmp/sweet-bear-mlb-machine.tar.gz.b64 > /tmp/sweet-bear-mlb-machine.tar.gz
+          tar -xzf /tmp/sweet-bear-mlb-machine.tar.gz -C .
+          rm -f /tmp/sweet-bear-mlb-machine.tar.gz.b64 /tmp/sweet-bear-mlb-machine.tar.gz
+
+      - name: Verify the complete prediction machine
+        working-directory: sweet-bear-mlb-machine
+        run: npm run verify
+
+      - name: Restore raw 2024-2025 source cache
+        uses: actions/cache@v4
+        with:
+          path: sweet-bear-mlb-machine/data/history/mlb-2024-2025/raw
+          key: sweet-bear-statcast-2024-2025-v1
+
+      - name: Build the actual 2024-2025 MLB history library
+        working-directory: sweet-bear-mlb-machine
+        run: >-
+          npm run history:sync --
+          --seasons 2024,2025
+          --chunk-days 7
+          --out data/history/mlb-2024-2025
+
+      - name: Validate history integrity and minimum coverage
+        working-directory: sweet-bear-mlb-machine
+        run: |
+          npm run history:validate -- --manifest data/history/mlb-2024-2025/manifest.json
+          node --input-type=module <<'NODE'
+          import { readFile } from 'node:fs/promises';
+          const library = JSON.parse(await readFile('data/history/mlb-2024-2025/profiles.json', 'utf8'));
+          const failures = [];
+          if (library.authorization !== 'RESEARCH_ONLY') failures.push('authorization must remain RESEARCH_ONLY');
+          if (JSON.stringify(library.seasons) !== JSON.stringify([2024, 2025])) failures.push('seasons must be 2024 and 2025');
+          if (JSON.stringify(library.gameTypes) !== JSON.stringify(['R'])) failures.push('gameTypes must be regular season only');
+          if (library.summary.games < 4500) failures.push(`expected at least 4500 games, received ${library.summary.games}`);
+          if (library.summary.plateAppearances < 300000) failures.push(`expected at least 300000 plate appearances, received ${library.summary.plateAppearances}`);
+          if (library.summary.batters < 1000) failures.push(`expected at least 1000 batters, received ${library.summary.batters}`);
+          if (library.summary.pitchers < 1000) failures.push(`expected at least 1000 pitchers, received ${library.summary.pitchers}`);
+          if (failures.length) throw new Error(failures.join('; '));
+          console.log(JSON.stringify(library.summary, null, 2));
+          NODE
+
+      - name: Replace bootstrap with reviewed direct source
+        run: |
+          rm -f .github/workflows/sweet-bear-mlb-bootstrap.yml
+          rm -rf .sweet-bear-bootstrap
+          git config user.name "sweet-bear-build-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add -A
+          git commit -m "feat(sweet-bear): add unified MLB prediction machine and 2024-2025 history"
+          git push origin "HEAD:${GITHUB_REF_NAME}"
