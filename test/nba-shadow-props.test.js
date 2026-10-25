@@ -21,4 +21,21 @@ test('missing settlement contract fails closed',()=>assert.throws(()=>validateMa
 test('first-half requires actual first-half paths',()=>assert.throws(()=>evaluateShadowPaths({market:{...market('player_points','over',10.5),period:'first_half',overtimeIncluded:false},paths,provenance:prov}),/missing first_half/));
 test('game full-time moneyline requires valid overtime rule',()=>assert.throws(()=>validateMarket({...market('moneyline','home'),overtimeIncluded:false}),/including-OT/));
 test('tie in full-time moneyline cannot invent result',()=>assert.throws(()=>evaluateShadowPaths({market:market('moneyline','home'),paths,provenance:prov}),/tied/));
-test('no conversion from simulation to real-money BET or stake',()=>{const x=evaluateShadowPaths({market:market('player_assists','over',10.5),paths,provenance:{...prov,sampleOrigin:'frozen_model'}});assert.equal(x.executionEnabled,false);assert.equal(x.modelStatus,'research_only');assert.equal(x.rawSimulationWinProbability,2/3)});
+test('no conversion from simulation to real-money BET or stake',()=>{const x=evaluateShadowPaths({market:market('player_assists','over',10.5),paths:paths.map(path=>({...path,eventId:'NBA-TEST-1',overtimeIncluded:true})),provenance:{...prov,sampleOrigin:'frozen_model',implementationDigest:'a'.repeat(64),featureSnapshotDigest:'b'.repeat(64)}});assert.equal(x.executionEnabled,false);assert.equal(x.modelStatus,'research_only');assert.equal(x.rawSimulationWinProbability,2/3)});
+
+test('rejects February 31 instead of silently normalizing it to March',()=>assert.throws(()=>evaluateShadowPaths({market:market('player_points','over',20.5),paths,provenance:{...prov,featureAvailableAt:'2026-02-31T10:00:00Z'}}),/real calendar date/));
+test('rejects inherited player stat fields, rather than treating prototype as data',()=>{
+  const data=Object.create({points:30});
+  assert.throws(()=>evaluateShadowPaths({market:market('player_points','over',20.5),paths:[{players:{a:data}}],provenance:prov}),/points/);
+});
+test('rejects prototype-only player identities',()=>assert.throws(()=>evaluateShadowPaths({market:{...market('player_points','over',20.5),playerId:'__proto__'},paths:[{players:{}}],provenance:prov}),/missing simulated player/));
+test('rejects inherited game scores',()=>assert.throws(()=>evaluateShadowPaths({market:market('game_total','over',220),paths:[{game:Object.create({homePoints:120,awayPoints:110})}],provenance:prov}),/homePoints/));
+test('rejects a self-declared frozen model without implementation and features digests',()=>assert.throws(()=>evaluateShadowPaths({market:market('player_points','over',20.5),paths,provenance:{...prov,sampleOrigin:'frozen_model'}}),/implementationDigest/));
+test('rejects simulation paths for a different event',()=>assert.throws(()=>evaluateShadowPaths({market:market('player_points','over',20.5),paths:paths.map(path=>({...path,eventId:'other-event',overtimeIncluded:true})),provenance:{...prov,sampleOrigin:'frozen_model',implementationDigest:'a'.repeat(64),featureSnapshotDigest:'b'.repeat(64)}}),/eventId mismatch/));
+test('rejects frozen model overtime-rule mismatches',()=>assert.throws(()=>evaluateShadowPaths({market:market('player_points','over',20.5),paths:paths.map(path=>({...path,eventId:'NBA-TEST-1',overtimeIncluded:false})),provenance:{...prov,sampleOrigin:'frozen_model',implementationDigest:'a'.repeat(64),featureSnapshotDigest:'b'.repeat(64)}}),/overtime inclusion/));
+test('same paths produce coherent monotone over ladder',()=>{
+  const a=evaluateShadowPaths({market:market('player_points','over',19.5),paths,provenance:prov});
+  const b=evaluateShadowPaths({market:market('player_points','over',25.5),paths,provenance:prov});
+  assert.ok(a.rawSimulationWinProbability>=b.rawSimulationWinProbability);
+  assert.equal(a.authorizedStakeUsd,0);
+});
