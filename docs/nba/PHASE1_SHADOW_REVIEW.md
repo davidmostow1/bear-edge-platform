@@ -22,6 +22,7 @@ The `contractRuleId` input is an asserted reference, *not* authenticated settlem
 ## Prerequisites before model design
 
 1. Confirm an approved and documented source-purpose license for NBA historical stats, play-by-play, lineups, and retained injury/availability snapshots. Public URL accessibility is not evidence of permissible commercial or betting-model reuse.
+   **Verified legal gate:** NBA.com Terms of Use, section 9 (https://www.nba.com/termsofuse), restrict use of NBA Statistics in gambling activity, fantasy/commercial products, and regularly updated databases without appropriate permission. Do NOT build a betting-model training dataset from NBA.com or its publicly accessible endpoints on the assumption that accessibility grants usage rights. Obtain express NBA permission or a separately licensed data supplier with documented rights for this purpose.
 2. Establish pregame `availableAt` timestamps for each actual fact, not merely a timestamp assigned when historical data was downloaded. Record source lineage and content digests.
 3. Obtain and test exact price and settlement contracts for the *execution* platform. DraftKings Predictions and DraftKings Sportsbook are not the same quote class.
 4. Verify current Supabase migration state, local journal identities and synchronization compatibility once database health is proven. No data backfill or authority cutover in this branch.
