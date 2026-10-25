@@ -29,8 +29,21 @@ function requireCount(value, name) {
   return value;
 }
 function requireIso(value, name) {
-  assert(typeof value === 'string' && /(?:Z|[+-]\d\d:\d\d)$/.test(value) && Number.isFinite(Date.parse(value)), `${name} must have an explicit timezone`);
-  return Date.parse(value);
+  // Date.parse silently normalizes impossible dates (e.g. February 31).
+  const parts = typeof value === 'string'
+    ? /^(\d{4})-(\d{2})-(\d{2})T([01]\d|2[0-3]):([0-5]\d):([0-5]\d)(?:\.\d{1,3})?(Z|[+-](?:0\d|1[0-4]):[0-5]\d)$/.exec(value)
+    : null;
+  assert(parts, `${name} must be a valid explicit-timezone ISO datetime`);
+  const year = Number(parts[1]);
+  const month = Number(parts[2]);
+  const day = Number(parts[3]);
+  const calendarDate = new Date(Date.UTC(year, month - 1, day));
+  assert(calendarDate.getUTCFullYear() === year &&
+    calendarDate.getUTCMonth() === month - 1 &&
+    calendarDate.getUTCDate() === day, `${name} must be a real calendar date`);
+  const timestamp = Date.parse(value);
+  assert(Number.isFinite(timestamp), `${name} must have a valid timestamp`);
+  return timestamp;
 }
 function validateMarket(market) {
   assert(market && typeof market === 'object', 'market required');
@@ -60,25 +73,27 @@ function selectStats(path, market) {
   const root = market.period === 'full_game' ? path : path.periods?.[market.period];
   assert(root && typeof root === 'object', `missing ${market.period} simulation segment`);
   if (Object.hasOwn(PLAYER_STATS, market.marketType) || SPECIAL_PLAYER_MARKETS.includes(market.marketType)) {
-    const stats = root.players?.[market.playerId];
+    assert(root.players && Object.hasOwn(root.players, market.playerId), `missing simulated player ${market.playerId}`);
+    const stats = root.players[market.playerId];
     assert(stats && typeof stats === 'object', `missing simulated player ${market.playerId}`);
     return stats;
   }
-  assert(root.game && typeof root.game === 'object', 'missing simulated game scores');
+  assert(root.game && Object.hasOwn(root, 'game') && typeof root.game === 'object', 'missing simulated game scores');
   return root.game;
 }
 function resolveValue(path, market) {
   const stats = selectStats(path, market);
   if (Object.hasOwn(PLAYER_STATS, market.marketType)) {
-    return PLAYER_STATS[market.marketType].reduce((total, key) => total + requireCount(stats[key], key), 0);
+    return PLAYER_STATS[market.marketType].reduce((total, key) =>
+      total + requireCount(Object.hasOwn(stats, key) ? stats[key] : undefined, key), 0);
   }
   if (SPECIAL_PLAYER_MARKETS.includes(market.marketType)) {
     const doubles = ['points', 'rebounds', 'assists', 'steals', 'blocks']
-      .filter(key => requireCount(stats[key], key) >= 10).length;
+      .filter(key => requireCount(Object.hasOwn(stats, key) ? stats[key] : undefined, key) >= 10).length;
     return doubles >= (market.marketType === 'player_double_double' ? 2 : 3) ? 1 : 0;
   }
-  const home = requireCount(stats.homePoints, 'homePoints');
-  const away = requireCount(stats.awayPoints, 'awayPoints');
+  const home = requireCount(Object.hasOwn(stats, 'homePoints') ? stats.homePoints : undefined, 'homePoints');
+  const away = requireCount(Object.hasOwn(stats, 'awayPoints') ? stats.awayPoints : undefined, 'awayPoints');
   if (market.marketType === 'game_total') return home + away;
   if (market.marketType === 'team_total') return market.team === 'home' ? home : away;
   return market.side === 'home' ? home - away : away - home;
@@ -113,6 +128,20 @@ function evaluateShadowPaths({market, paths, provenance}) {
   assert(typeof provenance.modelId === 'string' && provenance.modelId.trim(), 'modelId required');
   assert(['synthetic_fixture','frozen_model'].includes(provenance.sampleOrigin), 'sampleOrigin required');
   assert(Array.isArray(paths) && paths.length > 0 && paths.length <= 100000, '1..100000 paired simulation paths required');
+  if (provenance.sampleOrigin === 'frozen_model') {
+    // Caller-supplied digests are required for traceability, not authenticated here.
+    for (const field of ['implementationDigest', 'featureSnapshotDigest']) {
+      assert(typeof provenance[field] === 'string' && /^[a-f0-9]{64}$/i.test(provenance[field]),
+        `frozen_model requires ${field} SHA-256`);
+    }
+    for (const path of paths) {
+      assert(path && path.eventId === market.eventId, 'frozen_model simulation eventId mismatch');
+      assert(path.overtimeIncluded === market.overtimeIncluded, 'frozen_model overtime inclusion is missing or mismatched');
+      if (market.period !== 'full_game') {
+        assert(path.periods?.[market.period]?.period === market.period, 'frozen_model period tag missing or mismatched');
+      }
+    }
+  }
   const counts = {win:0, loss:0, push:0};
   for (const path of paths) counts[grade(resolveValue(path, market), market)]++;
   const n = paths.length;
